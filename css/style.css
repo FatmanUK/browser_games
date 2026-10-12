@@ -1,0 +1,58 @@
+:root {
+  color-scheme: light dark;
+  --gap: 1rem;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+}
+
+header {
+  padding: var(--gap);
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+main {
+  padding: var(--gap);
+}
+
+#game-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--gap);
+}
+
+.game-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: var(--gap);
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.game-card h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.game-card p {
+  margin: 0;
+  opacity: 0.8;
+  font-size: 0.9rem;
+}
+
+#back-button {
+  font: inherit;
+  cursor: pointer;
+  margin-bottom: var(--gap);
+}

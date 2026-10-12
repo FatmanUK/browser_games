@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Browser Games</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <header>
+    <h1>Browser Games</h1>
+  </header>
+
+  <main>
+    <section id="game-select">
+      <p id="empty-state" hidden>No games yet — see games/README.md to add one.</p>
+      <div id="game-grid"></div>
+    </section>
+
+    <section id="game-view" hidden>
+      <button id="back-button" type="button">&larr; Back to games</button>
+      <div id="game-container"></div>
+    </section>
+  </main>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
