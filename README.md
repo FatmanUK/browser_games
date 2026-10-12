@@ -5,14 +5,16 @@ build step.
 
 ## Running locally
 
-ES module imports require `http(s)`, not `file://`. Serve the directory with
-any static server, e.g.:
+ES module imports require `http(s)`, not `file://`, so the site must be
+served rather than opened directly.
 
 ```bash
-python3 -m http.server 8000
+make run           # serves at http://localhost:8000/
+make run PORT=9000 # or any other port
 ```
 
-Then open http://localhost:8000/.
+`make` with no target (or `make help`) lists available workflows. `run`
+wraps `python3 -m http.server` — there's no other build step.
 
 ## Adding a game
 
