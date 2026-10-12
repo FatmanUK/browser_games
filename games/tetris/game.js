@@ -1,9 +1,14 @@
 // Tetris-style falling block game.
 
+import { createChrome, createStat } from '../_shared/chrome.js'
+import { loadNumber, saveNumber } from '../_shared/storage.js'
+
 const COLS = 10
 const ROWS = 20
-const CELL = 24
+const CELL = 18
 const TICK_MS = 600
+const PREVIEW = CELL * 4
+const BEST_KEY = 'bg-blockfall-best'
 
 const SHAPES = {
 	I: { size: 4, cells: [[0, 1], [1, 1], [2, 1], [3, 1]] },
@@ -23,6 +28,21 @@ const COLORS = {
 
 const KEYS = Object.keys(SHAPES)
 
+function shuffledBag() {
+	const bag = KEYS.slice()
+	for (let i = bag.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1))
+		;[bag[i], bag[j]] = [bag[j], bag[i]]
+	}
+	return bag
+}
+
+function takeNext(queue) {
+	const key = queue.shift()
+	if (queue.length === 0) queue.push(...shuffledBag())
+	return key
+}
+
 function emptyBoard() {
 	return Array.from(
 		{ length: ROWS }, () => Array(COLS).fill(null))
@@ -30,10 +50,6 @@ function emptyBoard() {
 
 function rotateCells(cells, size) {
 	return cells.map(([x, y]) => [size - 1 - y, x])
-}
-
-function randomKey() {
-	return KEYS[Math.floor(Math.random() * KEYS.length)]
 }
 
 function spawn(key) {
@@ -99,40 +115,77 @@ function pieceCells(piece) {
 	}))
 }
 
+function drawCell(ctx, x, y, color) {
+	const px = x * CELL
+	const py = y * CELL
+	ctx.fillStyle = color
+	ctx.fillRect(px + 1, py + 1, CELL - 2, CELL - 2)
+	ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'
+	ctx.fillRect(px + 1, py + 1, CELL - 2, 2)
+	ctx.fillStyle = 'rgba(0, 0, 0, 0.25)'
+	ctx.fillRect(px + 1, py + CELL - 3, CELL - 2, 2)
+}
+
 function drawCells(ctx, cells) {
 	for (const { x, y, key } of cells) {
 		if (y < 0) continue
-		ctx.fillStyle = COLORS[key]
-		ctx.fillRect(
-			x * CELL + 1, y * CELL + 1,
-			CELL - 2, CELL - 2)
+		drawCell(ctx, x, y, COLORS[key])
 	}
 }
 
-function drawScore(ctx, score) {
-	ctx.fillStyle = '#eee'
-	ctx.font = '14px system-ui, sans-serif'
-	ctx.fillText(`Score: ${score}`, 6, 16)
+function drawGridLines(ctx) {
+	ctx.strokeStyle = 'rgba(255, 255, 255, 0.06)'
+	ctx.lineWidth = 1
+	for (let x = 1; x < COLS; x++) {
+		ctx.beginPath()
+		ctx.moveTo(x * CELL + 0.5, 0)
+		ctx.lineTo(x * CELL + 0.5, ROWS * CELL)
+		ctx.stroke()
+	}
+	for (let y = 1; y < ROWS; y++) {
+		ctx.beginPath()
+		ctx.moveTo(0, y * CELL + 0.5)
+		ctx.lineTo(COLS * CELL, y * CELL + 0.5)
+		ctx.stroke()
+	}
 }
 
 function drawGameOver(ctx) {
 	ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
 	ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL)
 	ctx.fillStyle = '#fff'
-	ctx.font = '20px system-ui, sans-serif'
+	ctx.font = '16px system-ui, sans-serif'
 	ctx.textAlign = 'center'
 	ctx.fillText(
 		'Game Over', COLS * CELL / 2, ROWS * CELL / 2)
 	ctx.textAlign = 'left'
 }
 
-function draw(ctx, board, piece, score, over) {
-	ctx.fillStyle = '#111'
+function draw(ctx, board, piece, over) {
+	ctx.fillStyle = '#14141c'
 	ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL)
+	drawGridLines(ctx)
 	drawCells(ctx, boardCells(board))
 	if (piece) drawCells(ctx, pieceCells(piece))
-	drawScore(ctx, score)
 	if (over) drawGameOver(ctx)
+}
+
+function drawPreviewCell(ctx, x, y, color) {
+	ctx.fillStyle = color
+	ctx.fillRect(
+		x * CELL + 1, y * CELL + 1, CELL - 2, CELL - 2)
+}
+
+function drawPreview(ctx, key) {
+	ctx.fillStyle = '#14141c'
+	ctx.fillRect(0, 0, PREVIEW, PREVIEW)
+	if (!key) return
+	const shape = SHAPES[key]
+	const offset = (4 - shape.size) / 2
+	for (const [cx, cy] of shape.cells) {
+		drawPreviewCell(
+			ctx, offset + cx, offset + cy, COLORS[key])
+	}
 }
 
 function tryMove(state, dx, dy) {
@@ -156,7 +209,7 @@ function tryRotate(state) {
 function lockPiece(state) {
 	merge(state.board, state.piece)
 	state.score += clearLines(state.board) * 100
-	state.piece = spawn(randomKey())
+	state.piece = spawn(takeNext(state.queue))
 	const p = state.piece
 	if (!fits(state.board, p.cells, p.x, p.y)) {
 		state.over = true
@@ -193,29 +246,59 @@ function dropTick(state) {
 	if (!tryMove(state, 0, 1)) lockPiece(state)
 }
 
-function createCanvas() {
-	const canvas = document.createElement('canvas')
-	canvas.width = COLS * CELL
-	canvas.height = ROWS * CELL
-	canvas.tabIndex = 0
-	return canvas
-}
-
 function createState() {
+	const queue = shuffledBag()
 	return {
 		board: emptyBoard(),
-		piece: spawn(randomKey()),
+		piece: spawn(takeNext(queue)),
+		queue,
 		score: 0,
 		over: false,
 	}
 }
 
-function wire(canvas, ctx, state) {
-	const render = () => draw(
-		ctx, state.board, state.piece,
-		state.score, state.over)
+function createCanvas(width, height) {
+	const canvas = document.createElement('canvas')
+	canvas.width = width
+	canvas.height = height
+	canvas.tabIndex = 0
+	return canvas
+}
 
-	const onKeyDown = (e) => {
+function appendPreview(side, preview) {
+	const label = document.createElement('p')
+	label.className = 'game-stat'
+	label.textContent = 'Next'
+	side.appendChild(label)
+	side.appendChild(preview)
+}
+
+function createRuntime(ctx, previewCtx, stats, best) {
+	let state = null
+	let timer = null
+
+	function render() {
+		draw(ctx, state.board, state.piece, state.over)
+		drawPreview(previewCtx, state.queue[0])
+		stats.setScore(state.score)
+		if (state.score > best.value) {
+			best.value = state.score
+			saveNumber(BEST_KEY, best.value)
+		}
+		stats.setBest(best.value)
+	}
+
+	function start() {
+		state = createState()
+		clearInterval(timer)
+		timer = setInterval(() => {
+			dropTick(state)
+			render()
+		}, TICK_MS)
+		render()
+	}
+
+	function onKeyDown(e) {
 		if (state.over) return
 		if (handleKey(state, e.key)) {
 			e.preventDefault()
@@ -223,19 +306,11 @@ function wire(canvas, ctx, state) {
 		}
 	}
 
-	canvas.addEventListener('keydown', onKeyDown)
-	canvas.focus()
-	render()
-
-	const timer = setInterval(() => {
-		dropTick(state)
-		render()
-	}, TICK_MS)
-
-	return () => {
+	function stop() {
 		clearInterval(timer)
-		canvas.removeEventListener('keydown', onKeyDown)
 	}
+
+	return { start, onKeyDown, stop }
 }
 
 export default {
@@ -245,12 +320,37 @@ export default {
 		'A Tetris-style falling block game. Arrow keys ' +
 		'to move/rotate, space to hard-drop.',
 
-	init(container) {
-		const canvas = createCanvas()
-		container.appendChild(canvas)
-		const ctx = canvas.getContext('2d')
-		const state = createState()
-		this._cleanup = wire(canvas, ctx, state)
+	init(container, controls) {
+		const canvas = createCanvas(COLS * CELL, ROWS * CELL)
+		const preview = createCanvas(PREVIEW, PREVIEW)
+		let runtime = null
+
+		const { main, side } = createChrome(container, {
+			title: this.title,
+			onBack: controls.back,
+			onNewGame: () => runtime.start(),
+		})
+		main.appendChild(canvas)
+		appendPreview(side, preview)
+		const stats = {
+			setScore: createStat(side, 'Score'),
+			setBest: createStat(side, 'Best'),
+		}
+
+		const best = { value: loadNumber(BEST_KEY, 0) }
+		runtime = createRuntime(
+			canvas.getContext('2d'),
+			preview.getContext('2d'), stats, best)
+
+		canvas.addEventListener('keydown', runtime.onKeyDown)
+		canvas.focus()
+		runtime.start()
+
+		this._cleanup = () => {
+			runtime.stop()
+			canvas.removeEventListener(
+				'keydown', runtime.onKeyDown)
+		}
 	},
 
 	destroy() {

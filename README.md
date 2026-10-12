@@ -18,12 +18,19 @@ wraps `python3 -m http.server` — there's no other build step.
 
 ## Games
 
-- **Blockfall** — a Tetris-style falling block game. Arrow keys to
-  move/rotate, space to hard-drop.
-- **Maze Muncher** — a Pac-Man-style maze chase. Arrow keys to move, eat
-  every dot while avoiding the ghosts.
-- **Oval Dash** — a top-down racer. Arrow keys / WASD to drive laps
-  around the oval track.
+Each game keeps a high score / best time in `localStorage` (per game,
+per browser) and has its own "New game" button next to its title.
+
+- **Blockfall** — a Tetris-style falling block game with a 7-bag
+  randomizer and a next-piece preview. Arrow keys to move/rotate,
+  space to hard-drop.
+- **Maze Muncher** — a Pac-Man-style maze chase with 3 lives and a
+  start countdown. Arrow keys to move, eat every dot while avoiding
+  the ghosts.
+- **Dash** — a top-down racer around an oval track bounded by trees,
+  with obstacles (tyres, barrels, trees, water) blocking the infield
+  shortcut and oil slicks / sand traps on the track itself. Arrow
+  keys / WASD to drive; the lap counter never decreases.
 
 ## Adding a game
 
@@ -37,8 +44,11 @@ css/style.css           styling
 js/app.js               launcher logic: render grid, mount/unmount
 js/registry.js          the list of registered games
 games/<slug>/game.js    one module per game (the game contract)
+games/_shared/          chrome.js (title/buttons sidebar) and
+                        storage.js (localStorage high scores),
+                        used by all three games but not required
 games/tetris/           Blockfall
 games/pacman/           Maze Muncher
-games/racer/            Oval Dash
+games/racer/            Dash
 games/_template/        copy-paste starting point for a new game
 ```

@@ -51,8 +51,36 @@ main {
   font-size: 0.9rem;
 }
 
-#back-button {
+.game-chrome {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gap);
+  flex-wrap: wrap;
+}
+
+.game-main canvas {
+  display: block;
+}
+
+.game-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 10rem;
+}
+
+.game-side h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.game-side-button {
   font: inherit;
   cursor: pointer;
-  margin-bottom: var(--gap);
+  text-align: left;
+}
+
+.game-stat {
+  margin: 0;
+  font-size: 0.9rem;
 }
