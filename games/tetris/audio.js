@@ -19,6 +19,11 @@ function playTone(ctx, freq, duration, type, volume) {
 	osc.stop(ctx.currentTime + duration)
 }
 
+// Background music needs more work before it's worth keeping on
+// (it was intrusive) — parked behind this flag for now. The loop
+// below is otherwise ready to go once that's revisited.
+const MUSIC_ENABLED = false
+
 const MELODY = [
 	523, 659, 784, 659, 523, 392, 440, 523,
 	494, 587, 740, 587, 494, 392, 440, 494,
@@ -62,7 +67,7 @@ function setEnabled(state, value) {
 	state.enabled = value
 	if (value) {
 		ensureContext(state)
-		state.music.start()
+		if (MUSIC_ENABLED) state.music.start()
 	} else if (state.music) {
 		state.music.stop()
 	}
