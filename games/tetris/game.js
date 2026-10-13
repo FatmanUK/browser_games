@@ -2,7 +2,7 @@
 
 import { createChrome, createStat } from '../_shared/chrome.js'
 import { loadNumber, saveNumber } from '../_shared/storage.js'
-import { createAudio } from './audio.js'
+import { setupSound } from './audio.js'
 
 const COLS = 10
 const ROWS = 20
@@ -289,20 +289,6 @@ function appendPreview(side, preview) {
 	side.appendChild(preview)
 }
 
-function createSoundToggle(side, audio) {
-	const btn = document.createElement('button')
-	btn.type = 'button'
-	btn.className = 'game-side-button'
-	const label = () =>
-		`Sound: ${audio.isEnabled() ? 'On' : 'Off'}`
-	btn.textContent = label()
-	btn.addEventListener('click', () => {
-		audio.setEnabled(!audio.isEnabled())
-		btn.textContent = label()
-	})
-	side.appendChild(btn)
-}
-
 function checkGameOverSound(state, audio, wasOver) {
 	if (state.over && !wasOver.value) audio.gameOver()
 	wasOver.value = state.over
@@ -386,8 +372,7 @@ export default {
 			setScore: createStat(side, 'Score'),
 			setBest: createStat(side, 'Best'),
 		}
-		const audio = createAudio()
-		createSoundToggle(side, audio)
+		const audio = setupSound(side)
 
 		const best = { value: loadNumber(BEST_KEY, 0) }
 		runtime = createRuntime(

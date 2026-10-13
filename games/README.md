@@ -38,6 +38,24 @@ games should too, for a consistent look:
 - `games/_shared/storage.js` — `loadNumber(key, fallback)` /
   `saveNumber(key, value)` wrap `localStorage` (with try/catch) for
   persisting a high score or best time across visits.
+- `games/_shared/audio.js` — if your game wants sound:
+  `createAudio(melody, noteMs)` gives you `tone(freq, duration,
+  type, volume)` and `toneSequence(notes, type, volume, gapMs)`
+  for one-off SFX, plus independent `isSoundOn`/`setSoundOn` and
+  `isMusicOn`/`setMusicOn` state (Sound defaults on, Music off —
+  keep it that way, music is the more intrusive one to default
+  on). Call `audio.stop()` from your `destroy()`. It also stops
+  itself on `pagehide` as a safety net, so a stray tab closed
+  without going through `destroy()` can't leave audio running.
+  `createAudioToggles(side, audio)` adds the "Sound"/"Music"
+  buttons to your sidebar. `melody` is just an array of
+  frequencies (or `null` for a rest) looped at `noteMs` per note —
+  write your own per game; everything here synthesizes tones, so
+  there's nothing to source/license, but swap in real tracks or
+  sampled SFX later by changing what `tone()`/`toneSequence()` are
+  called with (see `games/tetris/audio.js` for a worked example —
+  keep your game's own sound choices in a same-shaped file rather
+  than in `game.js` itself).
 
 ## Steps
 
