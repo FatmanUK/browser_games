@@ -28,7 +28,10 @@ per browser) and has its own "New game" button next to its title.
   Audio, no sound files.
 - **Maze Muncher** — a Pac-Man-style maze chase with 3 lives and a
   start countdown. Arrow keys to move, eat every dot while avoiding
-  the ghosts.
+  the ghosts. Clearing a maze advances to the next level (3 maze
+  layouts, cycling with ghosts getting faster/more numerous each
+  time) rather than ending the game. Has its own "Sound"/"Music"
+  toggles.
 - **Dash** — a top-down racer around an oval track bounded by trees,
   with obstacles (tyres, barrels, trees, water) blocking the infield
   shortcut and oil slicks / sand traps on the track itself. Arrow
@@ -52,7 +55,7 @@ games/_shared/          chrome.js (title/buttons sidebar),
                         — used by the bundled games, optional
 games/tetris/           Blockfall (+ audio.js: its own melody/
                         SFX built on games/_shared/audio.js)
-games/pacman/           Maze Muncher
+games/pacman/           Maze Muncher (+ audio.js, same pattern)
 games/racer/            Dash
 games/_template/        copy-paste starting point for a new game
 ```

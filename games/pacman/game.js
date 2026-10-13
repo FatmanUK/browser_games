@@ -2,70 +2,84 @@
 
 import { createChrome, createStat } from '../_shared/chrome.js'
 import { loadNumber, saveNumber } from '../_shared/storage.js'
-
-const MAZE = [
-	'###################',
-	'#.................#',
-	'#.##.#.##.##.#.##.#',
-	'#.................#',
-	'#.##.#.##.##.#.##.#',
-	'#.................#',
-	'#.##.#.##.##.#.##.#',
-	'#.................#',
-	'#.##.#.##.##.#.##.#',
-	'#.................#',
-	'#.##.#.##.##.#.##.#',
-	'#.................#',
-	'###################',
-]
+import { setupSound } from './audio.js'
 
 const CELL = 22
 const TICK_MS = 160
 const TICKS_PER_SEC = Math.round(1000 / TICK_MS)
-const GHOST_EVERY = 2
+const LEVEL_COMPLETE_TICKS = TICKS_PER_SEC * 2
 const LIVES_START = 3
-const COLS = MAZE[0].length
-const ROWS = MAZE.length
+const COLS = 19
+const ROWS = 13
 const BEST_KEY = 'bg-mazemuncher-best'
 const START = { x: 1, y: 1 }
 
-const GHOST_HOMES = [
+// Every level reuses the same open-row / wall-row skeleton (rows
+// 1,3,5,7,9,11 fully open; rows 2,4,6,8,10 walled except at the
+// listed connector columns). Column 1 is always a connector, so
+// every level is guaranteed fully connected regardless of the
+// rest of the set — only the connector columns change the look
+// and the navigation difficulty between levels.
+const LEVEL_CONNECTORS = [
+	[1, 4, 6, 9, 12, 14, 17],
+	[1, 9, 17],
+	[1, 3, 8, 10, 15, 17],
+]
+
+function buildWallRow(connectorCols) {
+	let row = '#'
+	for (let x = 1; x < COLS - 1; x++) {
+		row += connectorCols.includes(x) ? '.' : '#'
+	}
+	return row + '#'
+}
+
+function buildMaze(connectorCols) {
+	const openRow = '#' + '.'.repeat(COLS - 2) + '#'
+	const wallRow = buildWallRow(connectorCols)
+	const border = '#'.repeat(COLS)
+	const rows = [border]
+	for (let i = 0; i < 5; i++) rows.push(openRow, wallRow)
+	rows.push(openRow, border)
+	return rows
+}
+
+const LEVEL_MAZES = LEVEL_CONNECTORS.map(buildMaze)
+
+function mazeForLevel(level) {
+	return LEVEL_MAZES[(level - 1) % LEVEL_MAZES.length]
+}
+
+// All on fully-open rows (1, 5, 11), so these stay valid homes
+// no matter which level's connector set is active.
+const GHOST_HOME_POOL = [
 	{ x: COLS - 2, y: 1, dir: [0, 1], color: '#f06292' },
 	{ x: 1, y: ROWS - 2, dir: [0, -1], color: '#4fc3f7' },
 	{
-		x: Math.floor(COLS / 2), y: Math.floor(ROWS / 2),
+		x: Math.floor(COLS / 2), y: 5,
 		dir: [1, 0], color: '#ffb74d',
+	},
+	{
+		x: COLS - 2, y: ROWS - 2,
+		dir: [-1, 0], color: '#ba68c8',
+	},
+	{
+		x: Math.floor(COLS / 2), y: 1,
+		dir: [0, 1], color: '#aed581',
 	},
 ]
 
-const DIRS = {
-	ArrowLeft: [-1, 0],
-	ArrowRight: [1, 0],
-	ArrowUp: [0, -1],
-	ArrowDown: [0, 1],
+function ghostCountForLevel(level) {
+	return Math.min(5, 3 + Math.floor((level - 1) / 2))
 }
 
-function isWall(x, y) {
-	if (x < 0 || y < 0 || x >= COLS || y >= ROWS) {
-		return true
-	}
-	return MAZE[y][x] === '#'
+function ghostEveryForLevel(level) {
+	return Math.max(1, 2 - Math.floor((level - 1) / 2))
 }
 
-function initialPellets() {
-	const pellets = new Set()
-	for (let y = 0; y < ROWS; y++) {
-		for (let x = 0; x < COLS; x++) {
-			if (MAZE[y][x] === '.') {
-				pellets.add(`${x},${y}`)
-			}
-		}
-	}
-	return pellets
-}
-
-function makeGhosts() {
-	return GHOST_HOMES.map((home) => ({
+function makeGhosts(level) {
+	const count = ghostCountForLevel(level)
+	return GHOST_HOME_POOL.slice(0, count).map((home) => ({
 		x: home.x,
 		y: home.y,
 		dir: home.dir,
@@ -74,21 +88,50 @@ function makeGhosts() {
 	}))
 }
 
+const DIRS = {
+	ArrowLeft: [-1, 0],
+	ArrowRight: [1, 0],
+	ArrowUp: [0, -1],
+	ArrowDown: [0, 1],
+}
+
+function isWall(maze, x, y) {
+	if (x < 0 || y < 0 || x >= COLS || y >= ROWS) {
+		return true
+	}
+	return maze[y][x] === '#'
+}
+
+function initialPellets(maze) {
+	const pellets = new Set()
+	for (let y = 0; y < ROWS; y++) {
+		for (let x = 0; x < COLS; x++) {
+			if (maze[y][x] === '.') {
+				pellets.add(`${x},${y}`)
+			}
+		}
+	}
+	return pellets
+}
+
 function createState() {
+	const maze = mazeForLevel(1)
 	return {
+		maze,
+		level: 1,
 		player: {
 			x: START.x, y: START.y,
 			dir: [0, 0], next: [0, 0],
 		},
-		ghosts: makeGhosts(),
-		pellets: initialPellets(),
+		ghosts: makeGhosts(1),
+		pellets: initialPellets(maze),
 		score: 0,
 		lives: LIVES_START,
 		phase: 'countdown',
 		countdown: 3,
 		countdownTicks: TICKS_PER_SEC,
+		levelCompleteTicks: 0,
 		tickCount: 0,
-		won: false,
 	}
 }
 
@@ -104,42 +147,51 @@ function resetPositions(state) {
 	}
 }
 
-function tryDir(entity, dir) {
+function beginCountdown(state, audio) {
+	state.phase = 'countdown'
+	state.countdown = 3
+	state.countdownTicks = TICKS_PER_SEC
+	audio.countdownBeep()
+}
+
+function tryDir(maze, entity, dir) {
 	const x = entity.x + dir[0]
 	const y = entity.y + dir[1]
-	if (isWall(x, y)) return false
+	if (isWall(maze, x, y)) return false
 	entity.x = x
 	entity.y = y
 	return true
 }
 
-function eatPellet(state) {
+function eatPellet(state, audio) {
 	const key = `${state.player.x},${state.player.y}`
 	if (!state.pellets.delete(key)) return
 	state.score += 10
+	audio.eat()
 	if (state.pellets.size === 0) {
-		state.phase = 'over'
-		state.won = true
+		state.phase = 'levelComplete'
+		state.levelCompleteTicks = LEVEL_COMPLETE_TICKS
+		audio.levelComplete()
 	}
 }
 
-function stepPlayer(state) {
+function stepPlayer(state, audio) {
 	const p = state.player
-	if (tryDir(p, p.next)) {
+	if (tryDir(state.maze, p, p.next)) {
 		p.dir = p.next
 	} else {
-		tryDir(p, p.dir)
+		tryDir(state.maze, p, p.dir)
 	}
-	eatPellet(state)
+	eatPellet(state, audio)
 }
 
-function ghostMoves(ghost) {
+function ghostMoves(maze, ghost) {
 	return Object.values(DIRS).filter((d) => {
 		const x = ghost.x + d[0]
 		const y = ghost.y + d[1]
 		const reverse = d[0] === -ghost.dir[0] &&
 			d[1] === -ghost.dir[1]
-		return !isWall(x, y) && !reverse
+		return !isWall(maze, x, y) && !reverse
 	})
 }
 
@@ -157,8 +209,8 @@ function bestMove(moves, ghost, player) {
 	return best
 }
 
-function chooseGhostDir(ghost, player) {
-	const moves = ghostMoves(ghost)
+function chooseGhostDir(maze, ghost, player) {
+	const moves = ghostMoves(maze, ghost)
 	if (moves.length === 0) {
 		return [-ghost.dir[0], -ghost.dir[1]]
 	}
@@ -171,48 +223,72 @@ function chooseGhostDir(ghost, player) {
 
 function stepGhosts(state) {
 	for (const ghost of state.ghosts) {
-		ghost.dir = chooseGhostDir(ghost, state.player)
-		tryDir(ghost, ghost.dir)
+		ghost.dir = chooseGhostDir(
+			state.maze, ghost, state.player)
+		tryDir(state.maze, ghost, ghost.dir)
 	}
 }
 
-function checkCaught(state) {
+function checkCaught(state, audio) {
 	const p = state.player
 	const hit = state.ghosts.some(
 		(g) => g.x === p.x && g.y === p.y)
 	if (!hit) return
+	audio.hit()
 	state.lives--
 	if (state.lives <= 0) {
 		state.phase = 'over'
-		state.won = false
+		audio.gameOver()
 		return
 	}
 	resetPositions(state)
-	state.phase = 'countdown'
-	state.countdown = 3
-	state.countdownTicks = TICKS_PER_SEC
+	beginCountdown(state, audio)
 }
 
-function tickCountdown(state) {
+function tickCountdown(state, audio) {
 	state.countdownTicks--
 	if (state.countdownTicks > 0) return
-	state.countdown--
 	state.countdownTicks = TICKS_PER_SEC
-	if (state.countdown <= 0) state.phase = 'playing'
+	state.countdown--
+	if (state.countdown <= 0) {
+		state.phase = 'playing'
+		audio.go()
+	} else {
+		audio.countdownBeep()
+	}
 }
 
-function tick(state) {
+function advanceLevel(state, audio) {
+	state.level++
+	state.maze = mazeForLevel(state.level)
+	state.pellets = initialPellets(state.maze)
+	state.ghosts = makeGhosts(state.level)
+	resetPositions(state)
+	beginCountdown(state, audio)
+}
+
+function tickLevelComplete(state, audio) {
+	state.levelCompleteTicks--
+	if (state.levelCompleteTicks <= 0) {
+		advanceLevel(state, audio)
+	}
+}
+
+function tick(state, audio) {
 	if (state.phase === 'countdown') {
-		tickCountdown(state)
+		tickCountdown(state, audio)
+		return
+	}
+	if (state.phase === 'levelComplete') {
+		tickLevelComplete(state, audio)
 		return
 	}
 	if (state.phase !== 'playing') return
 	state.tickCount++
-	stepPlayer(state)
-	if (state.tickCount % GHOST_EVERY === 0) {
-		stepGhosts(state)
-	}
-	checkCaught(state)
+	stepPlayer(state, audio)
+	const every = ghostEveryForLevel(state.level)
+	if (state.tickCount % every === 0) stepGhosts(state)
+	checkCaught(state, audio)
 }
 
 function drawWallCell(ctx, x, y) {
@@ -226,10 +302,10 @@ function drawWallCell(ctx, x, y) {
 	ctx.fillRect(px + 1, py + CELL - 3, CELL - 2, 2)
 }
 
-function drawMaze(ctx) {
+function drawMaze(ctx, maze) {
 	for (let y = 0; y < ROWS; y++) {
 		for (let x = 0; x < COLS; x++) {
-			if (MAZE[y][x] === '#') {
+			if (maze[y][x] === '#') {
 				drawWallCell(ctx, x, y)
 			}
 		}
@@ -330,21 +406,26 @@ function drawCountdown(ctx, n) {
 	drawBanner(ctx, n > 0 ? String(n) : 'Go!')
 }
 
+function drawOverlay(ctx, state) {
+	if (state.phase === 'countdown') {
+		drawCountdown(ctx, state.countdown)
+	} else if (state.phase === 'levelComplete') {
+		drawBanner(ctx, `Level ${state.level} clear!`)
+	} else if (state.phase === 'over') {
+		drawBanner(ctx, 'Game Over')
+	}
+}
+
 function draw(ctx, state) {
 	ctx.fillStyle = '#000'
 	ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL)
-	drawMaze(ctx)
+	drawMaze(ctx, state.maze)
 	drawPellets(ctx, state.pellets)
 	drawPlayer(ctx, state.player)
 	for (const ghost of state.ghosts) {
 		drawGhost(ctx, ghost)
 	}
-	if (state.phase === 'countdown') {
-		drawCountdown(ctx, state.countdown)
-	}
-	if (state.phase === 'over') {
-		drawBanner(ctx, state.won ? 'You win!' : 'Game Over')
-	}
+	drawOverlay(ctx, state)
 }
 
 function createCanvas() {
@@ -355,23 +436,25 @@ function createCanvas() {
 	return canvas
 }
 
-function createRuntime(ctx, stats, best) {
-	let state = null
-
-	function render() {
-		draw(ctx, state)
-		stats.setScore(state.score)
-		stats.setLives(state.lives)
-		if (state.score > best.value) {
-			best.value = state.score
-			saveNumber(BEST_KEY, best.value)
-		}
-		stats.setBest(best.value)
+function render(ctx, stats, best, state) {
+	draw(ctx, state)
+	stats.setScore(state.score)
+	stats.setLives(state.lives)
+	stats.setLevel(state.level)
+	if (state.score > best.value) {
+		best.value = state.score
+		saveNumber(BEST_KEY, best.value)
 	}
+	stats.setBest(best.value)
+}
+
+function createRuntime(ctx, stats, best, audio) {
+	let state = null
+	const redraw = () => render(ctx, stats, best, state)
 
 	function start() {
 		state = createState()
-		render()
+		redraw()
 	}
 
 	function onKeyDown(e) {
@@ -382,14 +465,17 @@ function createRuntime(ctx, stats, best) {
 	}
 
 	const timer = setInterval(() => {
-		tick(state)
-		render()
+		tick(state, audio)
+		redraw()
 	}, TICK_MS)
 
 	return {
 		start,
 		onKeyDown,
-		stop: () => clearInterval(timer),
+		stop: () => {
+			clearInterval(timer)
+			audio.stop()
+		},
 	}
 }
 
@@ -397,8 +483,9 @@ export default {
 	id: 'pacman',
 	title: 'Maze Muncher',
 	description:
-		'A Pac-Man-style maze chase. Arrow keys to move, ' +
-		'eat every dot while avoiding the ghosts.',
+		'A Pac-Man-style maze chase across multiple ' +
+		'levels. Arrow keys to move, eat every dot ' +
+		'while avoiding the ghosts.',
 
 	init(container, controls) {
 		const canvas = createCanvas()
@@ -414,12 +501,14 @@ export default {
 		const stats = {
 			setScore: createStat(side, 'Score'),
 			setLives: createStat(side, 'Lives'),
+			setLevel: createStat(side, 'Level'),
 			setBest: createStat(side, 'Best'),
 		}
+		const audio = setupSound(side)
 
 		const best = { value: loadNumber(BEST_KEY, 0) }
 		runtime = createRuntime(
-			canvas.getContext('2d'), stats, best)
+			canvas.getContext('2d'), stats, best, audio)
 
 		canvas.addEventListener('keydown', runtime.onKeyDown)
 		canvas.focus()
