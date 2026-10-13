@@ -2,6 +2,7 @@
 
 import { createChrome, createStat } from '../_shared/chrome.js'
 import { loadNumber, saveNumber } from '../_shared/storage.js'
+import { createAudio } from './audio.js'
 
 const COLS = 10
 const ROWS = 20
@@ -208,42 +209,57 @@ function tryRotate(state) {
 
 function lockPiece(state) {
 	merge(state.board, state.piece)
-	state.score += clearLines(state.board) * 100
+	const cleared = clearLines(state.board)
+	state.score += cleared * 100
 	state.piece = spawn(takeNext(state.queue))
 	const p = state.piece
 	if (!fits(state.board, p.cells, p.x, p.y)) {
 		state.over = true
 	}
+	return cleared
 }
 
 function hardDrop(state) {
 	while (tryMove(state, 0, 1)) {
 		/* keep falling */
 	}
-	lockPiece(state)
+	return lockPiece(state)
 }
 
-function handleKey(state, key) {
+function tryMoveSound(state, dx, dy, audio) {
+	const moved = tryMove(state, dx, dy)
+	if (moved) audio.move()
+	return moved
+}
+
+function handleKey(state, key, audio) {
 	switch (key) {
 		case 'ArrowLeft':
-			return tryMove(state, -1, 0)
+			return tryMoveSound(state, -1, 0, audio)
 		case 'ArrowRight':
-			return tryMove(state, 1, 0)
+			return tryMoveSound(state, 1, 0, audio)
 		case 'ArrowDown':
-			return tryMove(state, 0, 1)
-		case 'ArrowUp':
-			return tryRotate(state)
-		case ' ':
-			hardDrop(state)
+			return tryMoveSound(state, 0, 1, audio)
+		case 'ArrowUp': {
+			const rotated = tryRotate(state)
+			if (rotated) audio.rotate()
+			return rotated
+		}
+		case ' ': {
+			audio.hardDrop()
+			const cleared = hardDrop(state)
+			if (cleared > 0) audio.lineClear(cleared)
 			return true
+		}
 		default:
 			return false
 	}
 }
 
 function dropTick(state) {
-	if (state.over) return
-	if (!tryMove(state, 0, 1)) lockPiece(state)
+	if (state.over) return null
+	if (tryMove(state, 0, 1)) return null
+	return lockPiece(state)
 }
 
 function createState() {
@@ -273,41 +289,75 @@ function appendPreview(side, preview) {
 	side.appendChild(preview)
 }
 
-function createRuntime(ctx, previewCtx, stats, best) {
+function createSoundToggle(side, audio) {
+	const btn = document.createElement('button')
+	btn.type = 'button'
+	btn.className = 'game-side-button'
+	const label = () =>
+		`Sound: ${audio.isEnabled() ? 'On' : 'Off'}`
+	btn.textContent = label()
+	btn.addEventListener('click', () => {
+		audio.setEnabled(!audio.isEnabled())
+		btn.textContent = label()
+	})
+	side.appendChild(btn)
+}
+
+function checkGameOverSound(state, audio, wasOver) {
+	if (state.over && !wasOver.value) audio.gameOver()
+	wasOver.value = state.over
+}
+
+function playLockSound(cleared, audio) {
+	if (cleared === null) return
+	if (cleared > 0) audio.lineClear(cleared)
+	else audio.lock()
+}
+
+function render(ctx, previewCtx, stats, best, state) {
+	draw(ctx, state.board, state.piece, state.over)
+	drawPreview(previewCtx, state.queue[0])
+	stats.setScore(state.score)
+	if (state.score > best.value) {
+		best.value = state.score
+		saveNumber(BEST_KEY, best.value)
+	}
+	stats.setBest(best.value)
+}
+
+function createRuntime(ctx, previewCtx, stats, best, audio) {
 	let state = null
 	let timer = null
+	const wasOver = { value: false }
+	const redraw = () =>
+		render(ctx, previewCtx, stats, best, state)
 
-	function render() {
-		draw(ctx, state.board, state.piece, state.over)
-		drawPreview(previewCtx, state.queue[0])
-		stats.setScore(state.score)
-		if (state.score > best.value) {
-			best.value = state.score
-			saveNumber(BEST_KEY, best.value)
-		}
-		stats.setBest(best.value)
+	function onTick() {
+		playLockSound(dropTick(state), audio)
+		checkGameOverSound(state, audio, wasOver)
+		redraw()
 	}
 
 	function start() {
 		state = createState()
+		wasOver.value = false
 		clearInterval(timer)
-		timer = setInterval(() => {
-			dropTick(state)
-			render()
-		}, TICK_MS)
-		render()
+		timer = setInterval(onTick, TICK_MS)
+		redraw()
 	}
 
 	function onKeyDown(e) {
 		if (state.over) return
-		if (handleKey(state, e.key)) {
+		if (handleKey(state, e.key, audio)) {
 			e.preventDefault()
-			render()
+			checkGameOverSound(state, audio, wasOver)
+			redraw()
 		}
 	}
 
 	function stop() {
 		clearInterval(timer)
+		audio.stop()
 	}
 
 	return { start, onKeyDown, stop }
@@ -336,11 +386,13 @@ export default {
 			setScore: createStat(side, 'Score'),
 			setBest: createStat(side, 'Best'),
 		}
+		const audio = createAudio()
+		createSoundToggle(side, audio)
 
 		const best = { value: loadNumber(BEST_KEY, 0) }
 		runtime = createRuntime(
 			canvas.getContext('2d'),
-			preview.getContext('2d'), stats, best)
+			preview.getContext('2d'), stats, best, audio)
 
 		canvas.addEventListener('keydown', runtime.onKeyDown)
 		canvas.focus()

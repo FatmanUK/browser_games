@@ -23,7 +23,8 @@ per browser) and has its own "New game" button next to its title.
 
 - **Blockfall** — a Tetris-style falling block game with a 7-bag
   randomizer and a next-piece preview. Arrow keys to move/rotate,
-  space to hard-drop.
+  space to hard-drop. Has a "Sound" toggle for synthesized music
+  and SFX (Web Audio, no sound files) — off by default.
 - **Maze Muncher** — a Pac-Man-style maze chase with 3 lives and a
   start countdown. Arrow keys to move, eat every dot while avoiding
   the ghosts.
@@ -47,7 +48,8 @@ games/<slug>/game.js    one module per game (the game contract)
 games/_shared/          chrome.js (title/buttons sidebar) and
                         storage.js (localStorage high scores),
                         used by all three games but not required
-games/tetris/           Blockfall
+games/tetris/           Blockfall (+ audio.js: synthesized
+                        music/SFX, Web Audio only)
 games/pacman/           Maze Muncher
 games/racer/            Dash
 games/_template/        copy-paste starting point for a new game
