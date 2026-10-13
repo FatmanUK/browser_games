@@ -39,6 +39,7 @@ export function setupSound(side) {
 			audio.toneSequence(
 				[[220, 0.3], [165, 0.3], [110, 0.4]],
 				'triangle', 0.1, 150),
+		unlock: audio.unlock,
 		stop: audio.stop,
 	}
 }

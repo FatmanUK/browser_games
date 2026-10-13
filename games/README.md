@@ -55,7 +55,17 @@ games should too, for a consistent look:
   sampled SFX later by changing what `tone()`/`toneSequence()` are
   called with (see `games/tetris/audio.js` for a worked example —
   keep your game's own sound choices in a same-shaped file rather
-  than in `game.js` itself).
+  than in `game.js` itself). **Important:** call `audio.unlock()`
+  synchronously from your real keydown (or other input) handler —
+  not from inside a timer callback. Browsers only allow the
+  AudioContext to actually start inside a trusted gesture's own
+  call stack; if every `tone()` call happens inside your game's
+  tick loop (as in a game whose player input only sets a flag
+  that a `setInterval` reads later), the context can end up
+  created-but-silently-suspended with no error at all. Also
+  remember to re-export `unlock` (and anything else you need) from
+  your own `setupSound()` wrapper — it isn't on `createAudio()`'s
+  return value by accident, it has to be forwarded explicitly.
 
 ## Steps
 

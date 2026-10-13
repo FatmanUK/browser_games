@@ -230,6 +230,11 @@ function stepGhosts(state) {
 }
 
 function checkCaught(state, audio) {
+	// stepPlayer (called earlier this tick) may have just
+	// eaten the last pellet and moved to 'levelComplete' —
+	// don't let a same-tick catch undo a level the player
+	// already cleared.
+	if (state.phase !== 'playing') return
 	const p = state.player
 	const hit = state.ghosts.some(
 		(g) => g.x === p.x && g.y === p.y)
@@ -458,6 +463,7 @@ function createRuntime(ctx, stats, best, audio) {
 	}
 
 	function onKeyDown(e) {
+		audio.unlock()
 		const dir = DIRS[e.key]
 		if (!dir) return
 		state.player.next = dir

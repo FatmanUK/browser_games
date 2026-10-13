@@ -1,11 +1,17 @@
 // Shared Web Audio engine for any game that wants sound. Each
 // game supplies its own melody and sound-effect frequencies —
 // this only handles AudioContext lifecycle, the autoplay-gesture
-// requirement, and independent Sound/Music on/off state. Nothing
-// plays and no AudioContext is created until a tone is actually
-// triggered or Music is turned on, so context creation always
-// happens inside a real user gesture (a keypress, a toggle
-// click), never on page load.
+// requirement, and independent Sound/Music on/off state.
+//
+// Browsers only let an AudioContext start/resume inside a real,
+// trusted user gesture's own call stack (a click or keydown
+// handler) — never from a setTimeout/setInterval callback, even
+// one that was indirectly caused by a keypress. If every one of
+// a game's tone()/toneSequence() calls happens inside its tick
+// loop (timer-driven), the context can end up created-but-silent
+// with no error at all. Call `unlock()` synchronously from the
+// game's own keydown (or other input) handler — not from inside
+// a timer callback — to guarantee the context actually starts.
 //
 // Swap in real tracks/samples later by replacing what tone()/
 // toneSequence() are called with per game — this engine itself
@@ -113,12 +119,19 @@ export function createAudio(melody, noteMs = 220) {
 
 	return {
 		isSoundOn: () => state.soundOn,
-		setSoundOn: (value) => { state.soundOn = value },
+		setSoundOn(value) {
+			state.soundOn = value
+			if (value) ensureContext(state)
+		},
 		isMusicOn: () => state.musicOn,
 		setMusicOn(value) {
 			state.musicOn = value
 			applyMusicState(state)
 		},
+		// Call from a real input event handler (keydown,
+		// click) to start the AudioContext inside that
+		// gesture — see the file header.
+		unlock: () => ensureContext(state),
 		tone: (freq, duration, type, volume) =>
 			playSfx(state, freq, duration, type, volume),
 		toneSequence: (notes, type, volume, gapMs) =>

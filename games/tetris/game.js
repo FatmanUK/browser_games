@@ -333,6 +333,7 @@ function createRuntime(ctx, previewCtx, stats, best, audio) {
 	}
 
 	function onKeyDown(e) {
+		audio.unlock()
 		if (state.over) return
 		if (handleKey(state, e.key, audio)) {
 			e.preventDefault()
