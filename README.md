@@ -1,5 +1,8 @@
 # Browser Games
 
+[![build](https://github.com/FatmanUK/browser_games/actions/workflows/build.yml/badge.svg)](https://github.com/FatmanUK/browser_games/actions/workflows/build.yml)
+[![push](https://github.com/FatmanUK/browser_games/actions/workflows/push.yml/badge.svg)](https://github.com/FatmanUK/browser_games/actions/workflows/push.yml)
+
 A minimal, extensible launcher for web-based games. Plain HTML/CSS/JS, no
 build step.
 
@@ -19,6 +22,21 @@ sends `Cache-Control: no-store` — plain `http.server` sends no cache
 header at all, and browsers can still cache ES module imports across
 requests (even across a server restart on the same port), hiding
 fresh edits until a hard refresh. No other build step exists.
+
+## Container
+
+A `Containerfile` packages the site behind the same
+`tools/dev_server.py` used for local dev (podman; `make help` shows
+the full list):
+
+```bash
+make pod-build # build the image
+make pod-run   # build, then run it at http://localhost:8000/
+make pod-push  # push to ghcr.io/fatmanuk/browser_games (used by CI)
+```
+
+`.github/workflows/build.yml` builds the image on every push/PR;
+`push.yml` also pushes it to GHCR on pushes to `mother`.
 
 ## Games
 
@@ -48,7 +66,9 @@ See [games/README.md](games/README.md).
 ## Project layout
 
 ```
-index.html             launcher page (game-select grid + viewport)
+Containerfile           image for the container (make pod-build)
+tools/dev_server.py     static server: local dev and the container
+index.html              launcher page (game-select grid + viewport)
 css/style.css           styling
 js/app.js               launcher logic: render grid, mount/unmount
 js/registry.js          the list of registered games
