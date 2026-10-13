@@ -14,4 +14,4 @@ help:
 	@echo "        (override: make run PORT=9000)"
 
 run:
-	python3 -m http.server $(PORT)
+	python3 tools/dev_server.py $(PORT)

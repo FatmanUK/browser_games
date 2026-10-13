@@ -14,7 +14,11 @@ make run PORT=9000 # or any other port
 ```
 
 `make` with no target (or `make help`) lists available workflows. `run`
-wraps `python3 -m http.server` — there's no other build step.
+wraps `tools/dev_server.py`, a thin wrapper around `http.server` that
+sends `Cache-Control: no-store` — plain `http.server` sends no cache
+header at all, and browsers can still cache ES module imports across
+requests (even across a server restart on the same port), hiding
+fresh edits until a hard refresh. No other build step exists.
 
 ## Games
 
