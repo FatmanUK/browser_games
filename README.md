@@ -54,10 +54,14 @@ per browser) and has its own "New game" button next to its title.
   layouts, cycling with ghosts getting faster/more numerous each
   time) rather than ending the game. Has its own "Sound"/"Music"
   toggles.
-- **Dash** — a top-down racer around an oval track bounded by trees,
-  with obstacles (tyres, barrels, trees, water) blocking the infield
-  shortcut and oil slicks / sand traps on the track itself. Arrow
-  keys / WASD to drive; the lap counter never decreases.
+- **Dash** — a top-down racer around an oval track bounded by a
+  thick treeline, with obstacles scattered round the infield
+  (tyres/barrels/trees, each with its own bounce weight) and water
+  hazards that drag rather than block. Oil slicks sit on the track
+  surface (reduced grip and steering); sand traps sit off-track in
+  the verge, so you only hit one by running wide. Arrow keys / WASD
+  to drive; the lap counter never decreases. Has its own
+  "Sound"/"Music" toggles.
 
 ## Adding a game
 
@@ -80,6 +84,6 @@ games/_shared/          chrome.js (title/buttons sidebar),
 games/tetris/           Blockfall (+ audio.js: its own melody/
                         SFX built on games/_shared/audio.js)
 games/pacman/           Maze Muncher (+ audio.js, same pattern)
-games/racer/            Dash
+games/racer/            Dash (+ audio.js, same pattern)
 games/_template/        copy-paste starting point for a new game
 ```

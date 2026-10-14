@@ -2,10 +2,11 @@
 
 import { createChrome, createStat } from '../_shared/chrome.js'
 import { loadNumber, saveNumber } from '../_shared/storage.js'
+import { setupSound } from './audio.js'
 
-const WIDTH = 580
-const HEIGHT = 420
-const CENTER = { x: 290, y: 210 }
+const WIDTH = 640
+const HEIGHT = 500
+const CENTER = { x: 320, y: 250 }
 const OUTER = { a: 220, b: 150 }
 const INNER = { a: 120, b: 70 }
 const BOUND = { a: 256, b: 186 }
@@ -19,7 +20,6 @@ const OFF_TRACK_DRAG = 2.2
 const TURN_RATE = 2.6
 const CAR_LENGTH = 16
 const CAR_WIDTH = 9
-const TREE_COUNT = 28
 const BEST_KEY = 'bg-dash-bestlap'
 
 const KEY_DIRS = {
@@ -29,42 +29,68 @@ const KEY_DIRS = {
 	ArrowRight: 'right', d: 'right', D: 'right',
 }
 
-function trackPoint(aMid, bMid, angleDeg) {
-	const rad = (angleDeg * Math.PI) / 180
-	return {
-		x: CENTER.x + aMid * Math.cos(rad),
-		y: CENTER.y + bMid * Math.sin(rad),
-	}
+function deg(d) {
+	return (d * Math.PI) / 180
 }
 
-const MID_OBSTACLES = [
-	{ x: CENTER.x, y: CENTER.y - 55, r: 16, type: 'tree' },
-	{ x: CENTER.x + 70, y: CENTER.y, r: 13, type: 'tyre' },
-	{
-		x: CENTER.x, y: CENTER.y + 55, r: 20,
-		type: 'water',
-	},
-	{
-		x: CENTER.x - 70, y: CENTER.y, r: 13,
-		type: 'barrel',
-	},
+// Hard obstacles scattered round the infield — each type has
+// its own size and bounce "weight" so a hit feels different:
+// trees barely give, barrels knock you back a bit, tyres are
+// light and bouncy. Verified off-script to not overlap each
+// other and to sit well inside INNER.
+const HARD_OBSTACLES = [
+	{ x: 380, y: 250, r: 9, type: 'tyre', damping: 0.75 },
+	{ x: 320, y: 285, r: 11, type: 'barrel', damping: 0.4 },
+	{ x: 255.5, y: 287.6, r: 14, type: 'tree', damping: 0.15 },
+	{ x: 260, y: 250, r: 10, type: 'tyre', damping: 0.75 },
+	{ x: 320, y: 215, r: 12, type: 'barrel', damping: 0.4 },
+	{ x: 384.5, y: 212.4, r: 15, type: 'tree', damping: 0.15 },
 ]
 
-const ZONE_A = (INNER.a + OUTER.a) / 2
-const ZONE_B = (INNER.b + OUTER.b) / 2
-
-const TRACK_ZONES = [
-	{ ...trackPoint(ZONE_A, ZONE_B, 45), r: 22, type: 'oil' },
-	{
-		...trackPoint(ZONE_A, ZONE_B, 135), r: 24,
-		type: 'sand',
-	},
-	{ ...trackPoint(ZONE_A, ZONE_B, 225), r: 22, type: 'oil' },
-	{
-		...trackPoint(ZONE_A, ZONE_B, 315), r: 24,
-		type: 'sand',
-	},
+// Water isn't a hard collision — driving through a pond just
+// drags you down hard, it doesn't stop you dead.
+const WATER_HAZARDS = [
+	{ x: 384.5, y: 287.6, r: 18 },
+	{ x: 255.5, y: 212.4, r: 16 },
 ]
+
+// Oil: on the track surface, full radial band at these angles
+// (so any line through the wedge hits it, not just one exact
+// radius). Sand: off-track in the verge between OUTER and
+// BOUND — only hit by running wide, not by driving the track.
+const OIL_WEDGES = [
+	{ angle: deg(60), spread: deg(14) },
+	{ angle: deg(240), spread: deg(14) },
+]
+const SAND_WEDGES = [
+	{ angle: deg(150), spread: deg(18) },
+	{ angle: deg(330), spread: deg(18) },
+]
+
+function buildTreeLine() {
+	const layers = [
+		{ count: 26, offset: -10, r: 9 },
+		{ count: 32, offset: 6, r: 11 },
+		{ count: 28, offset: 22, r: 10 },
+		{ count: 22, offset: 38, r: 12 },
+	]
+	const trees = []
+	for (const layer of layers) {
+		const a = BOUND.a + layer.offset
+		const b = BOUND.b + layer.offset
+		for (let i = 0; i < layer.count; i++) {
+			const angle = (i / layer.count) * Math.PI * 2
+			trees.push({
+				x: CENTER.x + Math.cos(angle) * a,
+				y: CENTER.y + Math.sin(angle) * b,
+				r: layer.r + ((i % 3) - 1) * 1.5,
+			})
+		}
+	}
+	return trees
+}
+
+const TREE_LINE = buildTreeLine()
 
 function createState() {
 	return {
@@ -76,6 +102,8 @@ function createState() {
 		elapsed: 0,
 		lapsShown: 0,
 		lastLapAt: 0,
+		terrain: null,
+		wasColliding: false,
 		keys: new Set(),
 	}
 }
@@ -92,21 +120,6 @@ function onTrack(x, y) {
 	return outerNorm <= 1 && innerNorm >= 1
 }
 
-function zoneAt(x, y) {
-	for (const zone of TRACK_ZONES) {
-		const dist = Math.hypot(x - zone.x, y - zone.y)
-		if (dist <= zone.r) return zone.type
-	}
-	return null
-}
-
-function zoneEffect(x, y) {
-	const zone = zoneAt(x, y)
-	if (zone === 'oil') return { drag: 0.3, turn: 0.4 }
-	if (zone === 'sand') return { drag: 2.5, turn: 1 }
-	return { drag: 1, turn: 1 }
-}
-
 function angleDelta(a, b) {
 	let d = b - a
 	while (d > Math.PI) d -= Math.PI * 2
@@ -114,21 +127,74 @@ function angleDelta(a, b) {
 	return d
 }
 
-function applyControls(state, dt) {
+function angleOf(x, y) {
+	return Math.atan2(y - CENTER.y, x - CENTER.x)
+}
+
+function inWedge(angle, wedges) {
+	return wedges.some(
+		(w) => Math.abs(angleDelta(w.angle, angle)) <=
+			w.spread)
+}
+
+function waterAt(x, y) {
+	return WATER_HAZARDS.some(
+		(w) => Math.hypot(x - w.x, y - w.y) <= w.r)
+}
+
+function terrainAt(x, y) {
+	if (onTrack(x, y) && inWedge(angleOf(x, y), OIL_WEDGES)) {
+		return 'oil'
+	}
+	const outerNorm = ellipseNorm(
+		x, y, CENTER.x, CENTER.y, OUTER.a, OUTER.b)
+	const boundNorm = ellipseNorm(
+		x, y, CENTER.x, CENTER.y, BOUND.a, BOUND.b)
+	const inVerge = outerNorm > 1 && boundNorm <= 1
+	if (inVerge && inWedge(angleOf(x, y), SAND_WEDGES)) {
+		return 'sand'
+	}
+	if (waterAt(x, y)) return 'water'
+	return null
+}
+
+function dragFor(state, terrain) {
+	if (terrain === 'oil') return 0.1
+	if (terrain === 'sand') return 1.8
+	if (terrain === 'water') return 2.5
+	return onTrack(state.x, state.y) ?
+		FRICTION : FRICTION * OFF_TRACK_DRAG
+}
+
+function turnMultiplier(terrain) {
+	if (terrain === 'oil') return 0.3
+	if (terrain === 'sand') return 0.8
+	if (terrain === 'water') return 0.6
+	return 1
+}
+
+function applyControls(state, dt, terrain) {
 	if (state.keys.has('accel')) state.speed += ACCEL * dt
 	if (state.keys.has('brake')) state.speed -= BRAKE * dt
 
-	const base = onTrack(state.x, state.y) ?
-		FRICTION : FRICTION * OFF_TRACK_DRAG
-	const effect = zoneEffect(state.x, state.y)
-	state.speed -= state.speed * base * effect.drag * dt
+	const drag = dragFor(state, terrain)
+	state.speed -= state.speed * drag * dt
 	state.speed = Math.min(
 		MAX_SPEED, Math.max(MAX_REVERSE, state.speed))
 
-	const turn = TURN_RATE * dt * effect.turn *
+	const turn = TURN_RATE * dt * turnMultiplier(terrain) *
 		Math.sign(state.speed || 1)
 	if (state.keys.has('left')) state.angle -= turn
 	if (state.keys.has('right')) state.angle += turn
+	if (terrain === 'oil') {
+		state.angle += (Math.random() - 0.5) * 3 * dt
+	}
+}
+
+function bounceOff(state, normalAngle, damping) {
+	const tangent = normalAngle + Math.PI / 2
+	state.angle = 2 * tangent - state.angle
+	state.speed *= damping
 }
 
 function resolveObstacle(state, obstacle) {
@@ -136,39 +202,58 @@ function resolveObstacle(state, obstacle) {
 	const dy = state.y - obstacle.y
 	const dist = Math.hypot(dx, dy)
 	const minDist = obstacle.r + CAR_LENGTH / 2
-	if (dist >= minDist || dist === 0) return
-	state.x = obstacle.x + (dx / dist) * minDist
-	state.y = obstacle.y + (dy / dist) * minDist
-	state.speed *= -0.3
+	if (dist >= minDist || dist === 0) return false
+	const normalAngle = Math.atan2(dy, dx)
+	state.x = obstacle.x + Math.cos(normalAngle) * minDist
+	state.y = obstacle.y + Math.sin(normalAngle) * minDist
+	bounceOff(state, normalAngle, obstacle.damping)
+	return true
 }
 
 function resolveObstacles(state) {
-	for (const obstacle of MID_OBSTACLES) {
-		resolveObstacle(state, obstacle)
+	let hit = false
+	for (const obstacle of HARD_OBSTACLES) {
+		if (resolveObstacle(state, obstacle)) hit = true
 	}
+	return hit
 }
 
 function clampToBound(state) {
 	const norm = ellipseNorm(
 		state.x, state.y, CENTER.x, CENTER.y,
 		BOUND.a, BOUND.b)
-	if (norm <= 1) return
-	const angle = Math.atan2(
-		state.y - CENTER.y, state.x - CENTER.x)
-	state.x = CENTER.x + Math.cos(angle) * BOUND.a
-	state.y = CENTER.y + Math.sin(angle) * BOUND.b
-	state.speed *= -0.3
+	if (norm <= 1) return false
+	const normalAngle = angleOf(state.x, state.y)
+	state.x = CENTER.x + Math.cos(normalAngle) * BOUND.a
+	state.y = CENTER.y + Math.sin(normalAngle) * BOUND.b
+	bounceOff(state, normalAngle, 0.5)
+	return true
 }
 
-function integrate(state, dt) {
-	const prevAngle = Math.atan2(
-		state.y - CENTER.y, state.x - CENTER.x)
+function playTerrainSound(terrain, audio) {
+	if (terrain === 'oil') audio.skid()
+	else if (terrain === 'sand') audio.slow()
+	else if (terrain === 'water') audio.splash()
+}
+
+function integrate(state, dt, audio) {
+	const prevAngle = angleOf(state.x, state.y)
 	state.x += Math.cos(state.angle) * state.speed * dt
 	state.y += Math.sin(state.angle) * state.speed * dt
-	resolveObstacles(state)
-	clampToBound(state)
-	const angle = Math.atan2(
-		state.y - CENTER.y, state.x - CENTER.x)
+
+	const hitObstacle = resolveObstacles(state)
+	const hitBound = clampToBound(state)
+	const collided = hitObstacle || hitBound
+	if (collided && !state.wasColliding) audio.bump()
+	state.wasColliding = collided
+
+	const newTerrain = terrainAt(state.x, state.y)
+	if (newTerrain !== state.terrain) {
+		playTerrainSound(newTerrain, audio)
+	}
+	state.terrain = newTerrain
+
+	const angle = angleOf(state.x, state.y)
 	state.totalAngle += angleDelta(prevAngle, angle)
 }
 
@@ -180,19 +265,23 @@ function laps(state) {
 function recordLap(state, best) {
 	const lapTime = state.elapsed - state.lastLapAt
 	state.lastLapAt = state.elapsed
-	if (best.value === 0 || lapTime < best.value) {
+	const isBest = best.value === 0 || lapTime < best.value
+	if (isBest) {
 		best.value = lapTime
 		saveNumber(BEST_KEY, best.value)
 	}
+	return isBest
 }
 
-function update(state, dt, best) {
-	applyControls(state, dt)
-	integrate(state, dt)
+function update(state, dt, best, audio) {
+	const terrain = terrainAt(state.x, state.y)
+	applyControls(state, dt, terrain)
+	integrate(state, dt, audio)
 	state.elapsed += dt
 	const current = laps(state)
 	if (current > state.lapsShown) {
-		recordLap(state, best)
+		const isBest = recordLap(state, best)
+		audio[isBest ? 'bestLap' : 'lap']()
 		state.lapsShown = current
 	}
 }
@@ -241,12 +330,9 @@ function drawTree(ctx, x, y, r) {
 	ctx.fill()
 }
 
-function drawTreeRing(ctx) {
-	for (let i = 0; i < TREE_COUNT; i++) {
-		const angle = (i / TREE_COUNT) * Math.PI * 2
-		const x = CENTER.x + Math.cos(angle) * BOUND.a
-		const y = CENTER.y + Math.sin(angle) * BOUND.b
-		drawTree(ctx, x, y, 10)
+function drawTreeLine(ctx) {
+	for (const tree of TREE_LINE) {
+		drawTree(ctx, tree.x, tree.y, tree.r)
 	}
 }
 
@@ -280,33 +366,60 @@ function drawWater(ctx, x, y, r) {
 	ctx.stroke()
 }
 
-function drawObstacle(ctx, obstacle) {
+function drawHardObstacle(ctx, obstacle) {
 	const { x, y, r, type } = obstacle
 	if (type === 'tyre') drawTyre(ctx, x, y, r)
 	else if (type === 'barrel') drawBarrel(ctx, x, y, r)
-	else if (type === 'tree') drawTree(ctx, x, y, r)
-	else drawWater(ctx, x, y, r)
+	else drawTree(ctx, x, y, r)
 }
 
 function drawObstacles(ctx) {
-	for (const obstacle of MID_OBSTACLES) {
-		drawObstacle(ctx, obstacle)
+	for (const obstacle of HARD_OBSTACLES) {
+		drawHardObstacle(ctx, obstacle)
+	}
+	for (const hazard of WATER_HAZARDS) {
+		drawWater(ctx, hazard.x, hazard.y, hazard.r)
 	}
 }
 
-function drawZone(ctx, zone) {
-	ctx.fillStyle = zone.type === 'oil' ?
-		'rgba(20, 20, 30, 0.6)' :
-		'rgba(210, 180, 120, 0.7)'
+function wedgePoint(a, b, angle) {
+	return {
+		x: CENTER.x + Math.cos(angle) * a,
+		y: CENTER.y + Math.sin(angle) * b,
+	}
+}
+
+function drawWedge(ctx, inner, outer, wedge, color) {
+	const steps = 12
+	ctx.fillStyle = color
 	ctx.beginPath()
-	ctx.ellipse(
-		zone.x, zone.y, zone.r, zone.r * 0.7,
-		0, 0, Math.PI * 2)
+	for (let i = 0; i <= steps; i++) {
+		const a = wedge.angle - wedge.spread +
+			(2 * wedge.spread * i) / steps
+		const p = wedgePoint(outer.a, outer.b, a)
+		if (i === 0) ctx.moveTo(p.x, p.y)
+		else ctx.lineTo(p.x, p.y)
+	}
+	for (let i = steps; i >= 0; i--) {
+		const a = wedge.angle - wedge.spread +
+			(2 * wedge.spread * i) / steps
+		const p = wedgePoint(inner.a, inner.b, a)
+		ctx.lineTo(p.x, p.y)
+	}
+	ctx.closePath()
 	ctx.fill()
 }
 
-function drawZones(ctx) {
-	for (const zone of TRACK_ZONES) drawZone(ctx, zone)
+const OIL_COLOR = 'rgba(15, 15, 25, 0.65)'
+const SAND_COLOR = 'rgba(216, 186, 128, 0.85)'
+
+function drawWedges(ctx) {
+	for (const wedge of OIL_WEDGES) {
+		drawWedge(ctx, INNER, OUTER, wedge, OIL_COLOR)
+	}
+	for (const wedge of SAND_WEDGES) {
+		drawWedge(ctx, OUTER, BOUND, wedge, SAND_COLOR)
+	}
 }
 
 function drawCar(ctx, state) {
@@ -329,12 +442,12 @@ function drawCar(ctx, state) {
 function draw(ctx, state) {
 	ctx.fillStyle = '#3e8e41'
 	ctx.fillRect(0, 0, WIDTH, HEIGHT)
-	drawTreeRing(ctx)
+	drawTreeLine(ctx)
 	drawEllipse(ctx, OUTER, '#555')
 	drawEllipse(ctx, INNER, '#3e8e41')
 	drawRumbleRing(ctx, OUTER, -4)
 	drawRumbleRing(ctx, INNER, 4)
-	drawZones(ctx)
+	drawWedges(ctx)
 	drawObstacles(ctx)
 	drawStartLine(ctx)
 	drawCar(ctx, state)
@@ -352,8 +465,9 @@ function createCanvas() {
 	return canvas
 }
 
-function createInput(ref) {
+function createInput(ref, audio) {
 	function onKeyDown(e) {
+		audio.unlock()
 		const action = KEY_DIRS[e.key]
 		if (!action) return
 		ref.state.keys.add(action)
@@ -368,7 +482,7 @@ function createInput(ref) {
 	return { onKeyDown, onKeyUp }
 }
 
-function createRuntime(ctx, stats, best) {
+function createRuntime(ctx, stats, best, audio) {
 	const ref = { state: null }
 	let handle = null
 	let last = null
@@ -384,7 +498,7 @@ function createRuntime(ctx, stats, best) {
 		if (last === null) last = time
 		const dt = Math.min((time - last) / 1000, 0.05)
 		last = time
-		update(ref.state, dt, best)
+		update(ref.state, dt, best, audio)
 		render()
 		handle = requestAnimationFrame(frame)
 	}
@@ -395,14 +509,17 @@ function createRuntime(ctx, stats, best) {
 		render()
 	}
 
-	const input = createInput(ref)
+	const input = createInput(ref, audio)
 	handle = requestAnimationFrame(frame)
 
 	return {
 		start,
 		onKeyDown: input.onKeyDown,
 		onKeyUp: input.onKeyUp,
-		stop: () => cancelAnimationFrame(handle),
+		stop: () => {
+			cancelAnimationFrame(handle)
+			audio.stop()
+		},
 	}
 }
 
@@ -430,10 +547,11 @@ export default {
 			setSpeed: createStat(side, 'Speed'),
 			setBest: createStat(side, 'Best lap'),
 		}
+		const audio = setupSound(side)
 
 		const best = { value: loadNumber(BEST_KEY, 0) }
 		runtime = createRuntime(
-			canvas.getContext('2d'), stats, best)
+			canvas.getContext('2d'), stats, best, audio)
 
 		canvas.addEventListener('keydown', runtime.onKeyDown)
 		canvas.addEventListener('keyup', runtime.onKeyUp)
