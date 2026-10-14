@@ -4,9 +4,9 @@ import { createChrome, createStat } from '../_shared/chrome.js'
 import { loadNumber, saveNumber } from '../_shared/storage.js'
 import { setupSound } from './audio.js'
 
-const WIDTH = 640
-const HEIGHT = 500
-const CENTER = { x: 320, y: 250 }
+const WIDTH = 660
+const HEIGHT = 520
+const CENTER = { x: 330, y: 260 }
 const OUTER = { a: 220, b: 150 }
 const INNER = { a: 120, b: 70 }
 const BOUND = { a: 256, b: 186 }
@@ -39,40 +39,38 @@ function deg(d) {
 // light and bouncy. Verified off-script to not overlap each
 // other and to sit well inside INNER.
 const HARD_OBSTACLES = [
-	{ x: 380, y: 250, r: 9, type: 'tyre', damping: 0.75 },
-	{ x: 320, y: 285, r: 11, type: 'barrel', damping: 0.4 },
-	{ x: 255.5, y: 287.6, r: 14, type: 'tree', damping: 0.15 },
-	{ x: 260, y: 250, r: 10, type: 'tyre', damping: 0.75 },
-	{ x: 320, y: 215, r: 12, type: 'barrel', damping: 0.4 },
-	{ x: 384.5, y: 212.4, r: 15, type: 'tree', damping: 0.15 },
+	{ x: 390, y: 260, r: 9, type: 'tyre', damping: 0.75 },
+	{ x: 330, y: 295, r: 11, type: 'barrel', damping: 0.4 },
+	{ x: 265.5, y: 297.6, r: 14, type: 'tree', damping: 0.15 },
+	{ x: 270, y: 260, r: 10, type: 'tyre', damping: 0.75 },
+	{ x: 330, y: 225, r: 12, type: 'barrel', damping: 0.4 },
+	{ x: 394.5, y: 222.4, r: 15, type: 'tree', damping: 0.15 },
 ]
 
 // Water isn't a hard collision — driving through a pond just
 // drags you down hard, it doesn't stop you dead.
 const WATER_HAZARDS = [
-	{ x: 384.5, y: 287.6, r: 18 },
-	{ x: 255.5, y: 212.4, r: 16 },
+	{ x: 394.5, y: 297.6, r: 18 },
+	{ x: 265.5, y: 222.4, r: 16 },
 ]
 
-// Oil: on the track surface, full radial band at these angles
-// (so any line through the wedge hits it, not just one exact
-// radius). Sand: off-track in the verge between OUTER and
-// BOUND — only hit by running wide, not by driving the track.
-const OIL_WEDGES = [
-	{ angle: deg(60), spread: deg(14) },
-	{ angle: deg(240), spread: deg(14) },
-]
+// Sand: off-track in the verge between OUTER and BOUND — only
+// hit by running wide, not by driving the track.
 const SAND_WEDGES = [
 	{ angle: deg(150), spread: deg(18) },
 	{ angle: deg(330), spread: deg(18) },
 ]
 
 function buildTreeLine() {
+	// Every tree sits at or outside BOUND (offset >= 0) — none
+	// render on the drivable side of the hard boundary, so the
+	// car never visually drives into solid-looking trees before
+	// the invisible collision catches it.
 	const layers = [
-		{ count: 26, offset: -10, r: 9 },
-		{ count: 32, offset: 6, r: 11 },
-		{ count: 28, offset: 22, r: 10 },
-		{ count: 22, offset: 38, r: 12 },
+		{ count: 26, offset: 0, r: 9 },
+		{ count: 32, offset: 16, r: 11 },
+		{ count: 28, offset: 32, r: 10 },
+		{ count: 22, offset: 48, r: 12 },
 	]
 	const trees = []
 	for (const layer of layers) {
@@ -92,6 +90,41 @@ function buildTreeLine() {
 
 const TREE_LINE = buildTreeLine()
 
+const OIL_COUNT = 5
+const OIL_RADIUS_MIN = 7
+const OIL_RADIUS_RANGE = 5
+
+// Small randomly-scattered puddles on the track surface —
+// regenerated each New Game, so the hazard layout isn't the
+// same lap after lap. Positions are restricted to the actual
+// road band (between INNER and OUTER), away from its very
+// edges, so a puddle never ends up partly off the track.
+function trackBandPoint(angle, frac) {
+	const a = INNER.a + (OUTER.a - INNER.a) * frac
+	const b = INNER.b + (OUTER.b - INNER.b) * frac
+	return {
+		x: CENTER.x + Math.cos(angle) * a,
+		y: CENTER.y + Math.sin(angle) * b,
+	}
+}
+
+function randomOilPatches() {
+	const patches = []
+	for (let i = 0; i < OIL_COUNT; i++) {
+		const angle = Math.random() * Math.PI * 2
+		const frac = 0.3 + Math.random() * 0.4
+		const p = trackBandPoint(angle, frac)
+		patches.push({
+			x: p.x,
+			y: p.y,
+			r: OIL_RADIUS_MIN +
+				Math.random() * OIL_RADIUS_RANGE,
+			seed: Math.random() * Math.PI * 2,
+		})
+	}
+	return patches
+}
+
 function createState() {
 	return {
 		x: CENTER.x,
@@ -104,6 +137,7 @@ function createState() {
 		lastLapAt: 0,
 		terrain: null,
 		wasColliding: false,
+		oilPatches: randomOilPatches(),
 		keys: new Set(),
 	}
 }
@@ -131,6 +165,18 @@ function angleOf(x, y) {
 	return Math.atan2(y - CENTER.y, x - CENTER.x)
 }
 
+// Distance from the center to the ellipse's edge along the ray
+// at this (geometric) angle. Needed because (a*cos(angle),
+// b*sin(angle)) is NOT a point at `angle` unless a === b — using
+// that naively to "clamp onto the ellipse" lands on a different
+// angle than the car actually crossed at, which looked like the
+// car teleporting to an unrelated point on the boundary.
+function ellipseRadiusAt(angle, a, b) {
+	const c = Math.cos(angle)
+	const s = Math.sin(angle)
+	return 1 / Math.sqrt((c * c) / (a * a) + (s * s) / (b * b))
+}
+
 function inWedge(angle, wedges) {
 	return wedges.some(
 		(w) => Math.abs(angleDelta(w.angle, angle)) <=
@@ -142,10 +188,14 @@ function waterAt(x, y) {
 		(w) => Math.hypot(x - w.x, y - w.y) <= w.r)
 }
 
-function terrainAt(x, y) {
-	if (onTrack(x, y) && inWedge(angleOf(x, y), OIL_WEDGES)) {
-		return 'oil'
-	}
+function oilAt(x, y, patches) {
+	return patches.some(
+		(p) => Math.hypot(x - p.x, y - p.y) <= p.r)
+}
+
+function terrainAt(state) {
+	const { x, y } = state
+	if (oilAt(x, y, state.oilPatches)) return 'oil'
 	const outerNorm = ellipseNorm(
 		x, y, CENTER.x, CENTER.y, OUTER.a, OUTER.b)
 	const boundNorm = ellipseNorm(
@@ -224,8 +274,9 @@ function clampToBound(state) {
 		BOUND.a, BOUND.b)
 	if (norm <= 1) return false
 	const normalAngle = angleOf(state.x, state.y)
-	state.x = CENTER.x + Math.cos(normalAngle) * BOUND.a
-	state.y = CENTER.y + Math.sin(normalAngle) * BOUND.b
+	const r = ellipseRadiusAt(normalAngle, BOUND.a, BOUND.b)
+	state.x = CENTER.x + Math.cos(normalAngle) * r
+	state.y = CENTER.y + Math.sin(normalAngle) * r
 	bounceOff(state, normalAngle, 0.5)
 	return true
 }
@@ -247,7 +298,7 @@ function integrate(state, dt, audio) {
 	if (collided && !state.wasColliding) audio.bump()
 	state.wasColliding = collided
 
-	const newTerrain = terrainAt(state.x, state.y)
+	const newTerrain = terrainAt(state)
 	if (newTerrain !== state.terrain) {
 		playTerrainSound(newTerrain, audio)
 	}
@@ -274,7 +325,7 @@ function recordLap(state, best) {
 }
 
 function update(state, dt, best, audio) {
-	const terrain = terrainAt(state.x, state.y)
+	const terrain = terrainAt(state)
 	applyControls(state, dt, terrain)
 	integrate(state, dt, audio)
 	state.elapsed += dt
@@ -410,16 +461,37 @@ function drawWedge(ctx, inner, outer, wedge, color) {
 	ctx.fill()
 }
 
-const OIL_COLOR = 'rgba(15, 15, 25, 0.65)'
+const OIL_COLOR = 'rgba(15, 15, 25, 0.7)'
 const SAND_COLOR = 'rgba(216, 186, 128, 0.85)'
 
 function drawWedges(ctx) {
-	for (const wedge of OIL_WEDGES) {
-		drawWedge(ctx, INNER, OUTER, wedge, OIL_COLOR)
-	}
 	for (const wedge of SAND_WEDGES) {
 		drawWedge(ctx, OUTER, BOUND, wedge, SAND_COLOR)
 	}
+}
+
+function drawBlob(ctx, patch) {
+	const { x, y, r, seed } = patch
+	ctx.fillStyle = OIL_COLOR
+	const lobes = 5
+	for (let i = 0; i < lobes; i++) {
+		const a = seed + (i / lobes) * Math.PI * 2
+		const wobble = 0.5 +
+			0.3 * Math.abs(Math.sin(seed * (i + 2)))
+		ctx.beginPath()
+		ctx.arc(
+			x + Math.cos(a) * r * 0.4,
+			y + Math.sin(a) * r * 0.4,
+			r * wobble, 0, Math.PI * 2)
+		ctx.fill()
+	}
+	ctx.beginPath()
+	ctx.arc(x, y, r * 0.55, 0, Math.PI * 2)
+	ctx.fill()
+}
+
+function drawOilPatches(ctx, patches) {
+	for (const patch of patches) drawBlob(ctx, patch)
 }
 
 function drawCar(ctx, state) {
@@ -439,7 +511,23 @@ function drawCar(ctx, state) {
 	ctx.restore()
 }
 
-function draw(ctx, state) {
+function formatBest(value) {
+	return value === 0 ? '–' : `${value.toFixed(1)}s`
+}
+
+function drawHud(ctx, state, best) {
+	ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
+	ctx.fillRect(10, 10, 150, 78)
+	ctx.fillStyle = '#fff'
+	ctx.font = '14px system-ui, sans-serif'
+	ctx.fillText(`Laps: ${state.lapsShown}`, 22, 32)
+	ctx.fillText(
+		`Speed: ${Math.round(state.speed)}`, 22, 54)
+	ctx.fillText(
+		`Best lap: ${formatBest(best.value)}`, 22, 76)
+}
+
+function draw(ctx, state, best) {
 	ctx.fillStyle = '#3e8e41'
 	ctx.fillRect(0, 0, WIDTH, HEIGHT)
 	drawTreeLine(ctx)
@@ -448,13 +536,11 @@ function draw(ctx, state) {
 	drawRumbleRing(ctx, OUTER, -4)
 	drawRumbleRing(ctx, INNER, 4)
 	drawWedges(ctx)
+	drawOilPatches(ctx, state.oilPatches)
 	drawObstacles(ctx)
 	drawStartLine(ctx)
 	drawCar(ctx, state)
-}
-
-function formatBest(value) {
-	return value === 0 ? '–' : `${value.toFixed(1)}s`
+	drawHud(ctx, state, best)
 }
 
 function createCanvas() {
@@ -488,7 +574,7 @@ function createRuntime(ctx, stats, best, audio) {
 	let last = null
 
 	function render() {
-		draw(ctx, ref.state)
+		draw(ctx, ref.state, best)
 		stats.setLaps(ref.state.lapsShown)
 		stats.setSpeed(Math.round(ref.state.speed))
 		stats.setBest(formatBest(best.value))
