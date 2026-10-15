@@ -54,21 +54,25 @@ per browser) and has its own "New game" button next to its title.
   layouts, cycling with ghosts getting faster/more numerous each
   time) rather than ending the game. Has its own "Sound"/"Music"
   toggles.
-- **Dash** — a top-down racer, dusk setting, with the camera
-  zoomed in and following the car (you can't see the whole oval
-  at once) and a headlight beam cutting through the dim to light
-  up whatever's ahead with its true colours, not a white wash.
-  Title, buttons and the Laps/Speed/Best lap meters overlay the
-  top of the canvas itself (a translucent bar) rather than sitting
-  beside it in the side panel, so the canvas can fill the window.
-  Bounded by a thick treeline, with
-  obstacles scattered round the infield (tyres/barrels/trees,
-  each with its own bounce weight) and water hazards that drag
-  rather than block. Small randomly-placed oil blobs sit on the
-  track surface (reduced grip and steering, a new layout each
-  game); sand traps sit off-track in the verge, so you only hit
-  one by running wide. Arrow keys / WASD to drive; the lap
-  counter never decreases. Has its own "Sound"/"Music" toggles.
+- **Dash** — a top-down racer on a large, randomly generated
+  track (built by `tools/generate_track.py` into
+  `games/racer/track-data.js` — rerun it for a fresh layout),
+  starting from a grid on a straight before the line. Dusk
+  setting, with the camera zoomed in and following the car (you
+  can't see the whole track at once) and a headlight beam cutting
+  through the dim to light up whatever's ahead with its true
+  colours, not a white wash. Title, buttons and the Laps/Speed/
+  Best lap meters overlay the top of the canvas itself (a
+  translucent bar) rather than sitting beside it in the side
+  panel, so the canvas can fill the window. Bounded by a thick
+  treeline, with obstacles scattered round the infield (tyres/
+  barrels/trees, each with its own bounce weight) and water
+  hazards that drag rather than block. Small randomly-placed oil
+  blobs sit on the track surface (reduced grip and steering, a
+  new layout each game); sand traps sit off-track in the verge,
+  so you only hit one by running wide. Arrow keys / WASD to
+  drive; the lap counter never decreases. Has its own "Sound"/
+  "Music" toggles.
 
 ## Adding a game
 
@@ -79,6 +83,7 @@ See [games/README.md](games/README.md).
 ```
 Containerfile           image for the container (make pod-build)
 tools/dev_server.py     static server: local dev and the container
+tools/generate_track.py generates games/racer/track-data.js
 index.html              launcher page (game-select grid + viewport)
 css/style.css           styling
 js/app.js               launcher logic: render grid, mount/unmount
@@ -91,6 +96,8 @@ games/_shared/          chrome.js (title/buttons sidebar),
 games/tetris/           Blockfall (+ audio.js: its own melody/
                         SFX built on games/_shared/audio.js)
 games/pacman/           Maze Muncher (+ audio.js, same pattern)
-games/racer/            Dash (+ audio.js, same pattern)
+games/racer/            Dash (+ audio.js, same pattern; track
+                        -data.js is generated, see tools/
+                        generate_track.py)
 games/_template/        copy-paste starting point for a new game
 ```

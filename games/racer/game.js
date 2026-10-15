@@ -1,21 +1,27 @@
-// Top-down racing game on an oval track.
+// Top-down racing game on a randomly generated track (built by
+// tools/generate_track.py into track-data.js — rerun that script
+// for a fresh layout). The track is star-shaped around CENTER
+// (every angle maps to exactly one boundary point), so it reuses
+// the same angle-indexed-radius-lookup approach the old fixed
+// oval used, generalized from a closed-form ellipse formula to a
+// lookup table.
 
 import { createStat } from '../_shared/chrome.js'
 import { loadNumber, saveNumber } from '../_shared/storage.js'
 import { setupSound } from './audio.js'
+import * as TRACK from './track-data.js'
 
-const CENTER = { x: 330, y: 260 }
-const OUTER = { a: 220, b: 150 }
-const INNER = { a: 120, b: 70 }
-const BOUND = { a: 256, b: 186 }
+const CENTER = { x: 0, y: 0 }
+
+const OUTER_RUMBLE = offsetTable(TRACK.OUTER_RADIUS, -4)
+const INNER_RUMBLE = offsetTable(TRACK.INNER_RADIUS, 4)
 
 // The camera follows the car and only shows a window onto the
 // world — tall enough to always show the full width of the
-// track's surface (OUTER.a - INNER.a, the bigger of its two
-// radial gaps) rather than the whole oval at once. VIEW_SCALE
-// blows that up to a sensible on-screen window size without
-// changing how much of the track it actually shows.
-const VIEWPORT_HEIGHT = OUTER.a - INNER.a
+// track's road surface rather than the whole track at once.
+// VIEW_SCALE blows that up to a sensible on-screen window size
+// without changing how much of the track it actually shows.
+const VIEWPORT_HEIGHT = TRACK.ROAD_WIDTH
 const VIEWPORT_WIDTH = Math.round(VIEWPORT_HEIGHT * 2.4)
 const VIEW_SCALE = 4
 const CANVAS_WIDTH = VIEWPORT_WIDTH * VIEW_SCALE
@@ -43,62 +49,9 @@ function deg(d) {
 	return (d * Math.PI) / 180
 }
 
-// Hard obstacles scattered round the infield — each type has
-// its own size and bounce "weight" so a hit feels different:
-// trees barely give, barrels knock you back a bit, tyres are
-// light and bouncy. Verified off-script to not overlap each
-// other and to sit well inside INNER.
-const HARD_OBSTACLES = [
-	{ x: 390, y: 260, r: 9, type: 'tyre', damping: 0.75 },
-	{ x: 330, y: 295, r: 11, type: 'barrel', damping: 0.4 },
-	{ x: 265.5, y: 297.6, r: 14, type: 'tree', damping: 0.15 },
-	{ x: 270, y: 260, r: 10, type: 'tyre', damping: 0.75 },
-	{ x: 330, y: 225, r: 12, type: 'barrel', damping: 0.4 },
-	{ x: 394.5, y: 222.4, r: 15, type: 'tree', damping: 0.15 },
-]
-
-// Water isn't a hard collision — driving through a pond just
-// drags you down hard, it doesn't stop you dead.
-const WATER_HAZARDS = [
-	{ x: 394.5, y: 297.6, r: 18 },
-	{ x: 265.5, y: 222.4, r: 16 },
-]
-
-// Sand: off-track in the verge between OUTER and BOUND — only
-// hit by running wide, not by driving the track.
-const SAND_WEDGES = [
-	{ angle: deg(150), spread: deg(18) },
-	{ angle: deg(330), spread: deg(18) },
-]
-
-function buildTreeLine() {
-	// Every tree sits at or outside BOUND (offset >= 0) — none
-	// render on the drivable side of the hard boundary, so the
-	// car never visually drives into solid-looking trees before
-	// the invisible collision catches it.
-	const layers = [
-		{ count: 26, offset: 0, r: 9 },
-		{ count: 32, offset: 16, r: 11 },
-		{ count: 28, offset: 32, r: 10 },
-		{ count: 22, offset: 48, r: 12 },
-	]
-	const trees = []
-	for (const layer of layers) {
-		const a = BOUND.a + layer.offset
-		const b = BOUND.b + layer.offset
-		for (let i = 0; i < layer.count; i++) {
-			const angle = (i / layer.count) * Math.PI * 2
-			trees.push({
-				x: CENTER.x + Math.cos(angle) * a,
-				y: CENTER.y + Math.sin(angle) * b,
-				r: layer.r + ((i % 3) - 1) * 1.5,
-			})
-		}
-	}
-	return trees
+function offsetTable(table, inset) {
+	return table.map((r) => r + inset)
 }
-
-const TREE_LINE = buildTreeLine()
 
 const OIL_COUNT = 5
 const OIL_RADIUS_MIN = 7
@@ -107,14 +60,16 @@ const OIL_RADIUS_RANGE = 5
 // Small randomly-scattered puddles on the track surface —
 // regenerated each New Game, so the hazard layout isn't the
 // same lap after lap. Positions are restricted to the actual
-// road band (between INNER and OUTER), away from its very
-// edges, so a puddle never ends up partly off the track.
+// road band (between the inner and outer lookup radii), away
+// from its very edges, so a puddle never ends up partly off
+// the track.
 function trackBandPoint(angle, frac) {
-	const a = INNER.a + (OUTER.a - INNER.a) * frac
-	const b = INNER.b + (OUTER.b - INNER.b) * frac
+	const innerR = lerpArray(TRACK.INNER_RADIUS, angle)
+	const outerR = lerpArray(TRACK.OUTER_RADIUS, angle)
+	const r = innerR + (outerR - innerR) * frac
 	return {
-		x: CENTER.x + Math.cos(angle) * a,
-		y: CENTER.y + Math.sin(angle) * b,
+		x: CENTER.x + Math.cos(angle) * r,
+		y: CENTER.y + Math.sin(angle) * r,
 	}
 }
 
@@ -136,10 +91,11 @@ function randomOilPatches() {
 }
 
 function createState() {
+	const pole = TRACK.GRID_SLOTS[0]
 	return {
-		x: CENTER.x,
-		y: CENTER.y - (OUTER.b + INNER.b) / 2,
-		angle: 0,
+		x: pole.x,
+		y: pole.y,
+		angle: pole.angle,
 		speed: 0,
 		totalAngle: 0,
 		elapsed: 0,
@@ -152,15 +108,37 @@ function createState() {
 	}
 }
 
-function ellipseNorm(x, y, cx, cy, a, b) {
-	return ((x - cx) / a) ** 2 + ((y - cy) / b) ** 2
+// Radius of the track's angle-indexed lookup table at an
+// arbitrary (geometric) angle, linearly interpolated between
+// the two nearest sampled entries. This is the generalization
+// of the old ellipse's closed-form radius formula to a track
+// shape with no closed form.
+function lerpArray(table, angle) {
+	const n = table.length
+	const twoPi = Math.PI * 2
+	const norm = ((angle % twoPi) + twoPi) % twoPi
+	const t = (norm / twoPi) * n
+	const i0 = Math.floor(t) % n
+	const i1 = (i0 + 1) % n
+	const frac = t - Math.floor(t)
+	return table[i0] * (1 - frac) + table[i1] * frac
+}
+
+function angleOf(x, y) {
+	return Math.atan2(y - CENTER.y, x - CENTER.x)
+}
+
+// How far (x, y) sits past a lookup-table boundary, as a ratio
+// (<=1 inside it, >1 outside) — the lookup-table equivalent of
+// the old ellipseNorm.
+function normFor(x, y, table) {
+	const dist = Math.hypot(x - CENTER.x, y - CENTER.y)
+	return dist / lerpArray(table, angleOf(x, y))
 }
 
 function onTrack(x, y) {
-	const outerNorm = ellipseNorm(
-		x, y, CENTER.x, CENTER.y, OUTER.a, OUTER.b)
-	const innerNorm = ellipseNorm(
-		x, y, CENTER.x, CENTER.y, INNER.a, INNER.b)
+	const outerNorm = normFor(x, y, TRACK.OUTER_RADIUS)
+	const innerNorm = normFor(x, y, TRACK.INNER_RADIUS)
 	return outerNorm <= 1 && innerNorm >= 1
 }
 
@@ -171,22 +149,6 @@ function angleDelta(a, b) {
 	return d
 }
 
-function angleOf(x, y) {
-	return Math.atan2(y - CENTER.y, x - CENTER.x)
-}
-
-// Distance from the center to the ellipse's edge along the ray
-// at this (geometric) angle. Needed because (a*cos(angle),
-// b*sin(angle)) is NOT a point at `angle` unless a === b — using
-// that naively to "clamp onto the ellipse" lands on a different
-// angle than the car actually crossed at, which looked like the
-// car teleporting to an unrelated point on the boundary.
-function ellipseRadiusAt(angle, a, b) {
-	const c = Math.cos(angle)
-	const s = Math.sin(angle)
-	return 1 / Math.sqrt((c * c) / (a * a) + (s * s) / (b * b))
-}
-
 function inWedge(angle, wedges) {
 	return wedges.some(
 		(w) => Math.abs(angleDelta(w.angle, angle)) <=
@@ -194,7 +156,7 @@ function inWedge(angle, wedges) {
 }
 
 function waterAt(x, y) {
-	return WATER_HAZARDS.some(
+	return TRACK.WATER_HAZARDS.some(
 		(w) => Math.hypot(x - w.x, y - w.y) <= w.r)
 }
 
@@ -206,12 +168,10 @@ function oilAt(x, y, patches) {
 function terrainAt(state) {
 	const { x, y } = state
 	if (oilAt(x, y, state.oilPatches)) return 'oil'
-	const outerNorm = ellipseNorm(
-		x, y, CENTER.x, CENTER.y, OUTER.a, OUTER.b)
-	const boundNorm = ellipseNorm(
-		x, y, CENTER.x, CENTER.y, BOUND.a, BOUND.b)
+	const outerNorm = normFor(x, y, TRACK.OUTER_RADIUS)
+	const boundNorm = normFor(x, y, TRACK.BOUND_RADIUS)
 	const inVerge = outerNorm > 1 && boundNorm <= 1
-	if (inVerge && inWedge(angleOf(x, y), SAND_WEDGES)) {
+	if (inVerge && inWedge(angleOf(x, y), TRACK.SAND_WEDGES)) {
 		return 'sand'
 	}
 	if (waterAt(x, y)) return 'water'
@@ -272,19 +232,17 @@ function resolveObstacle(state, obstacle) {
 
 function resolveObstacles(state) {
 	let hit = false
-	for (const obstacle of HARD_OBSTACLES) {
+	for (const obstacle of TRACK.HARD_OBSTACLES) {
 		if (resolveObstacle(state, obstacle)) hit = true
 	}
 	return hit
 }
 
 function clampToBound(state) {
-	const norm = ellipseNorm(
-		state.x, state.y, CENTER.x, CENTER.y,
-		BOUND.a, BOUND.b)
+	const norm = normFor(state.x, state.y, TRACK.BOUND_RADIUS)
 	if (norm <= 1) return false
 	const normalAngle = angleOf(state.x, state.y)
-	const r = ellipseRadiusAt(normalAngle, BOUND.a, BOUND.b)
+	const r = lerpArray(TRACK.BOUND_RADIUS, normalAngle)
 	state.x = CENTER.x + Math.cos(normalAngle) * r
 	state.y = CENTER.y + Math.sin(normalAngle) * r
 	bounceOff(state, normalAngle, 0.5)
@@ -347,25 +305,35 @@ function update(state, dt, best, audio) {
 	}
 }
 
-function drawEllipse(ctx, radii, color) {
-	ctx.fillStyle = color
+// Traces the closed path of a radius lookup table (one point per
+// table entry, evenly spaced in angle) — the generalization of
+// ctx.ellipse() for a track shape with no closed form.
+function ringPath(ctx, table) {
+	const n = table.length
 	ctx.beginPath()
-	ctx.ellipse(
-		CENTER.x, CENTER.y, radii.a, radii.b,
-		0, 0, Math.PI * 2)
+	for (let i = 0; i < n; i++) {
+		const angle = (i / n) * Math.PI * 2
+		const r = table[i]
+		const x = CENTER.x + Math.cos(angle) * r
+		const y = CENTER.y + Math.sin(angle) * r
+		if (i === 0) ctx.moveTo(x, y)
+		else ctx.lineTo(x, y)
+	}
+	ctx.closePath()
+}
+
+function drawTrackRing(ctx, table, color) {
+	ringPath(ctx, table)
+	ctx.fillStyle = color
 	ctx.fill()
 }
 
-function drawRumbleRing(ctx, radii, inset) {
+function drawRumbleRing(ctx, table) {
 	ctx.save()
 	ctx.setLineDash([10, 10])
 	ctx.lineWidth = 6
 	ctx.strokeStyle = '#fff'
-	ctx.beginPath()
-	ctx.ellipse(
-		CENTER.x, CENTER.y,
-		radii.a + inset, radii.b + inset,
-		0, 0, Math.PI * 2)
+	ringPath(ctx, table)
 	ctx.stroke()
 	ctx.lineDashOffset = 10
 	ctx.strokeStyle = '#e53935'
@@ -374,12 +342,33 @@ function drawRumbleRing(ctx, radii, inset) {
 }
 
 function drawStartLine(ctx) {
+	const { x, y, angle } = TRACK.START
+	const perp = angle + Math.PI / 2
+	const half = TRACK.ROAD_WIDTH / 2
 	ctx.strokeStyle = '#fff'
 	ctx.lineWidth = 3
 	ctx.beginPath()
-	ctx.moveTo(CENTER.x, CENTER.y - INNER.b)
-	ctx.lineTo(CENTER.x, CENTER.y - OUTER.b)
+	ctx.moveTo(
+		x + Math.cos(perp) * half, y + Math.sin(perp) * half)
+	ctx.lineTo(
+		x - Math.cos(perp) * half, y - Math.sin(perp) * half)
 	ctx.stroke()
+}
+
+function drawGridSlot(ctx, slot) {
+	ctx.save()
+	ctx.translate(slot.x, slot.y)
+	ctx.rotate(slot.angle)
+	ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'
+	ctx.lineWidth = 1.5
+	ctx.strokeRect(
+		-CAR_LENGTH * 0.7, -CAR_WIDTH * 0.9,
+		CAR_LENGTH * 1.4, CAR_WIDTH * 1.8)
+	ctx.restore()
+}
+
+function drawStartGrid(ctx) {
+	for (const slot of TRACK.GRID_SLOTS) drawGridSlot(ctx, slot)
 }
 
 function drawTree(ctx, x, y, r) {
@@ -392,7 +381,7 @@ function drawTree(ctx, x, y, r) {
 }
 
 function drawTreeLine(ctx) {
-	for (const tree of TREE_LINE) {
+	for (const tree of TRACK.TREE_LINE) {
 		drawTree(ctx, tree.x, tree.y, tree.r)
 	}
 }
@@ -435,36 +424,37 @@ function drawHardObstacle(ctx, obstacle) {
 }
 
 function drawObstacles(ctx) {
-	for (const obstacle of HARD_OBSTACLES) {
+	for (const obstacle of TRACK.HARD_OBSTACLES) {
 		drawHardObstacle(ctx, obstacle)
 	}
-	for (const hazard of WATER_HAZARDS) {
+	for (const hazard of TRACK.WATER_HAZARDS) {
 		drawWater(ctx, hazard.x, hazard.y, hazard.r)
 	}
 }
 
-function wedgePoint(a, b, angle) {
+function wedgePoint(table, angle) {
+	const r = lerpArray(table, angle)
 	return {
-		x: CENTER.x + Math.cos(angle) * a,
-		y: CENTER.y + Math.sin(angle) * b,
+		x: CENTER.x + Math.cos(angle) * r,
+		y: CENTER.y + Math.sin(angle) * r,
 	}
 }
 
-function drawWedge(ctx, inner, outer, wedge, color) {
+function drawWedge(ctx, innerTable, outerTable, wedge, color) {
 	const steps = 12
 	ctx.fillStyle = color
 	ctx.beginPath()
 	for (let i = 0; i <= steps; i++) {
 		const a = wedge.angle - wedge.spread +
 			(2 * wedge.spread * i) / steps
-		const p = wedgePoint(outer.a, outer.b, a)
+		const p = wedgePoint(outerTable, a)
 		if (i === 0) ctx.moveTo(p.x, p.y)
 		else ctx.lineTo(p.x, p.y)
 	}
 	for (let i = steps; i >= 0; i--) {
 		const a = wedge.angle - wedge.spread +
 			(2 * wedge.spread * i) / steps
-		const p = wedgePoint(inner.a, inner.b, a)
+		const p = wedgePoint(innerTable, a)
 		ctx.lineTo(p.x, p.y)
 	}
 	ctx.closePath()
@@ -475,8 +465,10 @@ const OIL_COLOR = 'rgba(15, 15, 25, 0.7)'
 const SAND_COLOR = 'rgba(216, 186, 128, 0.85)'
 
 function drawWedges(ctx) {
-	for (const wedge of SAND_WEDGES) {
-		drawWedge(ctx, OUTER, BOUND, wedge, SAND_COLOR)
+	for (const wedge of TRACK.SAND_WEDGES) {
+		drawWedge(
+			ctx, TRACK.OUTER_RADIUS, TRACK.BOUND_RADIUS,
+			wedge, SAND_COLOR)
 	}
 }
 
@@ -527,13 +519,14 @@ function formatBest(value) {
 
 function drawWorld(ctx, state) {
 	drawTreeLine(ctx)
-	drawEllipse(ctx, OUTER, '#555')
-	drawEllipse(ctx, INNER, '#3e8e41')
-	drawRumbleRing(ctx, OUTER, -4)
-	drawRumbleRing(ctx, INNER, 4)
+	drawTrackRing(ctx, TRACK.OUTER_RADIUS, '#555')
+	drawTrackRing(ctx, TRACK.INNER_RADIUS, '#3e8e41')
+	drawRumbleRing(ctx, OUTER_RUMBLE)
+	drawRumbleRing(ctx, INNER_RUMBLE)
 	drawWedges(ctx)
 	drawOilPatches(ctx, state.oilPatches)
 	drawObstacles(ctx)
+	drawStartGrid(ctx)
 	drawStartLine(ctx)
 	drawCar(ctx, state)
 }
@@ -735,8 +728,8 @@ export default {
 	title: 'Dash',
 	description:
 		'A top-down racer. Arrow keys / WASD to drive ' +
-		'laps around the oval track — mind the oil, ' +
-		'sand and obstacles.',
+		'laps around a randomly generated track, from a ' +
+		'starting grid — mind the oil, sand and obstacles.',
 
 	init(container, controls) {
 		let runtime = null
