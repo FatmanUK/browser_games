@@ -4,12 +4,17 @@ import { createChrome, createStat } from '../_shared/chrome.js'
 import { loadNumber, saveNumber } from '../_shared/storage.js'
 import { setupSound } from './audio.js'
 
-const WIDTH = 660
-const HEIGHT = 520
 const CENTER = { x: 330, y: 260 }
 const OUTER = { a: 220, b: 150 }
 const INNER = { a: 120, b: 70 }
 const BOUND = { a: 256, b: 186 }
+
+// The camera follows the car and only shows a window onto the
+// world — tall enough to always show the full width of the
+// track's surface (OUTER.a - INNER.a, the bigger of its two
+// radial gaps) rather than the whole oval at once.
+const VIEWPORT_HEIGHT = OUTER.a - INNER.a
+const VIEWPORT_WIDTH = Math.round(VIEWPORT_HEIGHT * 2.4)
 
 const ACCEL = 220
 const BRAKE = 260
@@ -515,21 +520,7 @@ function formatBest(value) {
 	return value === 0 ? '–' : `${value.toFixed(1)}s`
 }
 
-function drawHud(ctx, state, best) {
-	ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'
-	ctx.fillRect(10, 10, 150, 78)
-	ctx.fillStyle = '#fff'
-	ctx.font = '14px system-ui, sans-serif'
-	ctx.fillText(`Laps: ${state.lapsShown}`, 22, 32)
-	ctx.fillText(
-		`Speed: ${Math.round(state.speed)}`, 22, 54)
-	ctx.fillText(
-		`Best lap: ${formatBest(best.value)}`, 22, 76)
-}
-
-function draw(ctx, state, best) {
-	ctx.fillStyle = '#3e8e41'
-	ctx.fillRect(0, 0, WIDTH, HEIGHT)
+function drawWorld(ctx, state) {
 	drawTreeLine(ctx)
 	drawEllipse(ctx, OUTER, '#555')
 	drawEllipse(ctx, INNER, '#3e8e41')
@@ -540,13 +531,78 @@ function draw(ctx, state, best) {
 	drawObstacles(ctx)
 	drawStartLine(ctx)
 	drawCar(ctx, state)
-	drawHud(ctx, state, best)
+}
+
+// Dusky evening: dim everything down, then "cut out" two
+// headlight cones from that dimming via destination-out — the
+// car's own two draws underneath stay normally lit there.
+const DUSK_COLOR = 'rgba(18, 22, 48, 0.55)'
+
+function drawDusk(ctx) {
+	ctx.fillStyle = DUSK_COLOR
+	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+}
+
+function headlightOrigins(angle) {
+	const cx = VIEWPORT_WIDTH / 2
+	const cy = VIEWPORT_HEIGHT / 2
+	const frontDist = CAR_LENGTH / 2 - 1
+	const fx = cx + Math.cos(angle) * frontDist
+	const fy = cy + Math.sin(angle) * frontDist
+	const perp = angle + Math.PI / 2
+	const lateral = CAR_WIDTH / 2 - 1.5
+	return [-1, 1].map((side) => ({
+		x: fx + Math.cos(perp) * lateral * side,
+		y: fy + Math.sin(perp) * lateral * side,
+	}))
+}
+
+function drawHeadlightBeam(ctx, origin, angle) {
+	const spread = deg(16)
+	const length = 150
+	const grad = ctx.createRadialGradient(
+		origin.x, origin.y, 0, origin.x, origin.y, length)
+	grad.addColorStop(0, 'rgba(255, 255, 255, 1)')
+	grad.addColorStop(0.7, 'rgba(255, 255, 255, 0.6)')
+	grad.addColorStop(1, 'rgba(255, 255, 255, 0)')
+	ctx.fillStyle = grad
+	ctx.beginPath()
+	ctx.moveTo(origin.x, origin.y)
+	ctx.arc(
+		origin.x, origin.y, length,
+		angle - spread, angle + spread)
+	ctx.closePath()
+	ctx.fill()
+}
+
+function drawHeadlights(ctx, angle) {
+	ctx.save()
+	ctx.globalCompositeOperation = 'destination-out'
+	for (const origin of headlightOrigins(angle)) {
+		drawHeadlightBeam(ctx, origin, angle)
+	}
+	ctx.restore()
+}
+
+function draw(ctx, state) {
+	ctx.fillStyle = '#3e8e41'
+	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+
+	ctx.save()
+	ctx.translate(
+		VIEWPORT_WIDTH / 2 - state.x,
+		VIEWPORT_HEIGHT / 2 - state.y)
+	drawWorld(ctx, state)
+	ctx.restore()
+
+	drawDusk(ctx)
+	drawHeadlights(ctx, state.angle)
 }
 
 function createCanvas() {
 	const canvas = document.createElement('canvas')
-	canvas.width = WIDTH
-	canvas.height = HEIGHT
+	canvas.width = VIEWPORT_WIDTH
+	canvas.height = VIEWPORT_HEIGHT
 	canvas.tabIndex = 0
 	return canvas
 }
@@ -574,7 +630,7 @@ function createRuntime(ctx, stats, best, audio) {
 	let last = null
 
 	function render() {
-		draw(ctx, ref.state, best)
+		draw(ctx, ref.state)
 		stats.setLaps(ref.state.lapsShown)
 		stats.setSpeed(Math.round(ref.state.speed))
 		stats.setBest(formatBest(best.value))

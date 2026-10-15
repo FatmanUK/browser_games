@@ -54,16 +54,17 @@ per browser) and has its own "New game" button next to its title.
   layouts, cycling with ghosts getting faster/more numerous each
   time) rather than ending the game. Has its own "Sound"/"Music"
   toggles.
-- **Dash** — a top-down racer around an oval track bounded by a
-  thick treeline, with obstacles scattered round the infield
-  (tyres/barrels/trees, each with its own bounce weight) and water
-  hazards that drag rather than block. Small randomly-placed oil
-  blobs sit on the track surface (reduced grip and steering, a new
-  layout each game); sand traps sit off-track in the verge, so you
-  only hit one by running wide. Laps/Speed/Best lap show both in
-  the sidebar and on the track itself. Arrow keys / WASD to drive;
-  the lap counter never decreases. Has its own "Sound"/"Music"
-  toggles.
+- **Dash** — a top-down racer, dusk setting, with the camera
+  zoomed in and following the car (you can't see the whole oval
+  at once) and two headlight beams cutting through the dim to
+  light up whatever's ahead. Bounded by a thick treeline, with
+  obstacles scattered round the infield (tyres/barrels/trees,
+  each with its own bounce weight) and water hazards that drag
+  rather than block. Small randomly-placed oil blobs sit on the
+  track surface (reduced grip and steering, a new layout each
+  game); sand traps sit off-track in the verge, so you only hit
+  one by running wide. Arrow keys / WASD to drive; the lap
+  counter never decreases. Has its own "Sound"/"Music" toggles.
 
 ## Adding a game
 
