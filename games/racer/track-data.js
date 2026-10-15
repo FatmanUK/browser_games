@@ -326,23 +326,59 @@ export const BOUND_RADIUS = [
 ]
 
 export const HARD_OBSTACLES = [
-	{ x: 75.3, y: -106.0, r: 9, type: 'tyre', damping: 0.75 },
-	{ x: -92.9, y: -96.5, r: 10, type: 'tyre', damping: 0.75 },
-	{ x: 259.4, y: 50.8, r: 11, type: 'barrel', damping: 0.4 },
-	{ x: -138.3, y: 310.0, r: 12, type: 'barrel', damping: 0.4 },
-	{ x: 145.9, y: -47.2, r: 14, type: 'tree', damping: 0.15 },
-	{ x: -359.2, y: -178.3, r: 15, type: 'tree', damping: 0.15 },
+	{
+		x: 66.1,
+		y: -532.9,
+		r: 3,
+		type: 'tyre',
+		behavior: 'bounce',
+	},
+	{
+		x: -99.1,
+		y: -106.7,
+		r: 3.5,
+		type: 'tyre',
+		behavior: 'bounce',
+	},
+	{
+		x: 565.4,
+		y: 281.4,
+		r: 3.5,
+		type: 'barrel',
+		behavior: 'stop',
+	},
+	{
+		x: -314.8,
+		y: 510.1,
+		r: 4,
+		type: 'barrel',
+		behavior: 'stop',
+	},
+	{
+		x: 221.3,
+		y: -139.6,
+		r: 14,
+		type: 'tree',
+		behavior: 'stop',
+	},
+	{
+		x: -326.9,
+		y: -145.9,
+		r: 15,
+		type: 'tree',
+		behavior: 'stop',
+	},
 ]
 
 export const WATER_HAZARDS = [
-	{ x: -218.0, y: 211.2, r: 18 },
-	{ x: 63.9, y: 162.2, r: 16 },
+	{ x: -130.3, y: 42.2, r: 18 },
+	{ x: 89.5, y: 266.1, r: 16 },
 ]
 
 export const SAND_WEDGES = [
-	{ angle: 2.7975, spread: 0.2443 },
-	{ angle: 2.1217, spread: 0.2443 },
-	{ angle: 5.6838, spread: 0.2443 },
+	{ angle: 0.1272, spread: 0.2443 },
+	{ angle: 5.1892, spread: 0.2443 },
+	{ angle: 3.2787, spread: 0.2443 },
 ]
 
 export const TREE_LINE = [

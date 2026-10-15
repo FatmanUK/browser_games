@@ -65,14 +65,19 @@ per browser) and has its own "New game" button next to its title.
   Best lap meters overlay the top of the canvas itself (a
   translucent bar) rather than sitting beside it in the side
   panel, so the canvas can fill the window. Bounded by a thick
-  treeline, with obstacles scattered round the infield (tyres/
-  barrels/trees, each with its own bounce weight) and water
-  hazards that drag rather than block. Small randomly-placed oil
-  blobs sit on the track surface (reduced grip and steering, a
-  new layout each game); sand traps sit off-track in the verge,
-  so you only hit one by running wide. Arrow keys / WASD to
-  drive; the lap counter never decreases. Has its own "Sound"/
-  "Music" toggles.
+  treeline, with hard obstacles (small tyres/barrels, smaller
+  than the car, and big trees) scattered off the track surface —
+  either in the infield or out past the rumble strips — and
+  water hazards that drag rather than block. Tyres bounce the
+  car off; barrels and trees are solid and stop it dead. Small
+  randomly-placed oil blobs are the only hazard on the track
+  surface itself (a new layout each game) and send the car into
+  a sudden spin; sand traps sit off-track in the verge (higher
+  friction than anything else, hauling the car down to a stop
+  fast but not instantly), so you only hit one by running wide.
+  Each generated track keeps its own best-lap time. Arrow keys /
+  WASD to drive; the lap counter never decreases. Has its own
+  "Sound"/"Music" toggles.
 
 ## Adding a game
 

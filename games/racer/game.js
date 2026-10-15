@@ -184,7 +184,11 @@ function terrainAt(state) {
 
 function dragFor(state, terrain) {
 	if (terrain === 'oil') return 0.1
-	if (terrain === 'sand') return 1.8
+	// Higher than water: sand grabs the car hard and hauls it
+	// down to a stop quickly, just not instantly — it's still
+	// the same exponential-decay drag model as everything else,
+	// so there's no single-frame dead stop.
+	if (terrain === 'sand') return 3.2
 	if (terrain === 'water') return 2.5
 	return onTrack(state.x, state.y) ?
 		FRICTION : FRICTION * OFF_TRACK_DRAG
@@ -211,8 +215,21 @@ function applyControls(state, dt, terrain) {
 	if (state.keys.has('left')) state.angle -= turn
 	if (state.keys.has('right')) state.angle += turn
 	if (terrain === 'oil') {
-		state.angle += (Math.random() - 0.5) * 3 * dt
+		state.angle += (Math.random() - 0.5) * 6 * dt
 	}
+}
+
+// A sudden spin-out kick applied the instant the car enters oil
+// (see integrate, which fires this on the terrain edge rather
+// than every frame) — a sharp, random half-to-full-turn jolt on
+// top of the continuous wobble applyControls adds for as long as
+// the car sits in the puddle.
+const SPIN_MIN = deg(60)
+const SPIN_RANGE = deg(120)
+
+function applySpinOut(state) {
+	const dir = Math.random() < 0.5 ? -1 : 1
+	state.angle += dir * (SPIN_MIN + Math.random() * SPIN_RANGE)
 }
 
 function bounceOff(state, normalAngle, damping) {
@@ -220,6 +237,8 @@ function bounceOff(state, normalAngle, damping) {
 	state.angle = 2 * tangent - state.angle
 	state.speed *= damping
 }
+
+const TYRE_DAMPING = 0.75
 
 function resolveObstacle(state, obstacle) {
 	const dx = state.x - obstacle.x
@@ -230,7 +249,11 @@ function resolveObstacle(state, obstacle) {
 	const normalAngle = Math.atan2(dy, dx)
 	state.x = obstacle.x + Math.cos(normalAngle) * minDist
 	state.y = obstacle.y + Math.sin(normalAngle) * minDist
-	bounceOff(state, normalAngle, obstacle.damping)
+	if (obstacle.behavior === 'stop') {
+		state.speed = 0
+	} else {
+		bounceOff(state, normalAngle, TYRE_DAMPING)
+	}
 	return true
 }
 
@@ -273,6 +296,7 @@ function integrate(state, dt, audio) {
 	const newTerrain = terrainAt(state)
 	if (newTerrain !== state.terrain) {
 		playTerrainSound(newTerrain, audio)
+		if (newTerrain === 'oil') applySpinOut(state)
 	}
 	state.terrain = newTerrain
 

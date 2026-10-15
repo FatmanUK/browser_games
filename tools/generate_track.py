@@ -42,15 +42,40 @@ HAZARD_MIN_FRAC = 0.22
 HAZARD_MAX_FRAC = 0.78
 HAZARD_CLEAR_ANGLE = math.radians(20)
 
-# Hard obstacles and water live in the grassy infield, not on the
-# track surface — oil is the only hazard on the track itself.
-# Scattering them one-per-sector around the whole infield (rather
-# than clustering at random) means a straight-line shortcut from
-# any part of the inner edge risks running into something.
-OBSTACLE_KINDS = [
-	('tyre', 9, 0.75), ('tyre', 10, 0.75),
-	('barrel', 11, 0.4), ('barrel', 12, 0.4),
-	('tree', 14, 0.15), ('tree', 15, 0.15),
+# Hard obstacles and water live off the track surface — oil is
+# the only hazard on the track itself. Scattering them one-per-
+# sector around a ring (rather than clustering at random) means
+# a straight-line shortcut across the infield risks running into
+# something from any direction. Tyres and barrels are small (car-
+# sized or smaller) and can land either in the grassy infield or
+# out past the rumble strips in the verge; trees are the big
+# boundary-style obstacle and stay in the infield only. Tyres
+# bounce the car off; barrels and trees are solid and stop it.
+OBSTACLE_SPECS = [
+	{
+		'type': 'tyre', 'r': 3, 'behavior': 'bounce',
+		'zones': ('infield', 'verge'),
+	},
+	{
+		'type': 'tyre', 'r': 3.5, 'behavior': 'bounce',
+		'zones': ('infield', 'verge'),
+	},
+	{
+		'type': 'barrel', 'r': 3.5, 'behavior': 'stop',
+		'zones': ('infield', 'verge'),
+	},
+	{
+		'type': 'barrel', 'r': 4, 'behavior': 'stop',
+		'zones': ('infield', 'verge'),
+	},
+	{
+		'type': 'tree', 'r': 14, 'behavior': 'stop',
+		'zones': ('infield',),
+	},
+	{
+		'type': 'tree', 'r': 15, 'behavior': 'stop',
+		'zones': ('infield',),
+	},
 ]
 WATER_RADII = [18, 16]
 
@@ -250,6 +275,21 @@ def infield_point(inner_table, angle, frac):
 	return (math.cos(angle) * r, math.sin(angle) * r)
 
 
+def verge_point(outer_table, bound_table, angle, frac):
+	outer_r = lerp_table(outer_table, angle)
+	bound_r = lerp_table(bound_table, angle)
+	r = outer_r + (bound_r - outer_r) * frac
+	return (math.cos(angle) * r, math.sin(angle) * r)
+
+
+def zone_point_fn(zone, tables):
+	inner_table, outer_table, bound_table = tables
+	if zone == 'infield':
+		return lambda a, f: infield_point(inner_table, a, f)
+	return lambda a, f: verge_point(
+		outer_table, bound_table, a, f)
+
+
 def far_from(x, y, placed, min_gap):
 	return all(
 		math.hypot(x - px, y - py) >= min_gap
@@ -276,41 +316,44 @@ def sector_angle(rng, sector_index, sector_count, grid_angle):
 
 
 def place_in_sector(
-		inner_table, rng, sector_index, sector_count,
+		point_fn, rng, sector_index, sector_count,
 		grid_angle, placed, min_gap):
 	for _ in range(100):
 		angle = sector_angle(
 			rng, sector_index, sector_count, grid_angle)
 		frac = rng.uniform(HAZARD_MIN_FRAC, HAZARD_MAX_FRAC)
-		x, y = infield_point(inner_table, angle, frac)
+		x, y = point_fn(angle, frac)
 		if far_from(x, y, placed, min_gap):
 			return x, y
-	raise RuntimeError('could not place an infield hazard')
+	raise RuntimeError('could not place a hazard')
 
 
-def build_infield_hazards(inner_table, rng, grid_angle):
-	slots = len(OBSTACLE_KINDS) + len(WATER_RADII)
+def build_obstacles_and_water(tables, rng, grid_angle):
+	slots = len(OBSTACLE_SPECS) + len(WATER_RADII)
 	order = list(range(slots))
 	rng.shuffle(order)
 
 	placed = []
 	obstacles = []
-	for (kind, radius, damping), sector in zip(
-			OBSTACLE_KINDS, order):
+	for spec, sector in zip(OBSTACLE_SPECS, order):
+		zone = rng.choice(spec['zones'])
+		point_fn = zone_point_fn(zone, tables)
 		x, y = place_in_sector(
-			inner_table, rng, sector, slots, grid_angle,
-			placed, radius * 3 + 6)
+			point_fn, rng, sector, slots, grid_angle,
+			placed, spec['r'] * 3 + 6)
 		placed.append((x, y))
 		obstacles.append({
 			'x': round(x, 1), 'y': round(y, 1),
-			'r': radius, 'type': kind, 'damping': damping,
+			'r': spec['r'], 'type': spec['type'],
+			'behavior': spec['behavior'],
 		})
 
 	water = []
+	point_fn = zone_point_fn('infield', tables)
 	for radius, sector in zip(
-			WATER_RADII, order[len(OBSTACLE_KINDS):]):
+			WATER_RADII, order[len(OBSTACLE_SPECS):]):
 		x, y = place_in_sector(
-			inner_table, rng, sector, slots, grid_angle,
+			point_fn, rng, sector, slots, grid_angle,
 			placed, radius * 3 + 6)
 		placed.append((x, y))
 		water.append({
@@ -376,17 +419,26 @@ def js_number_array(values, per_line=7):
 	return '\n'.join(rows)
 
 
+def js_field(key, value):
+	if isinstance(value, str):
+		return f"{key}: '{value}'"
+	return f'{key}: {value}'
+
+
+# A tab is 8 columns and the 70-column limit leaves 62 for an
+# object's own text; wrap one field per line once a single-line
+# object would run past that.
 def js_object_array(objs, fields):
 	lines = []
 	for obj in objs:
-		parts = []
-		for key in fields:
-			value = obj[key]
-			if isinstance(value, str):
-				parts.append(f"{key}: '{value}'")
-			else:
-				parts.append(f'{key}: {value}')
-		lines.append('\t{ ' + ', '.join(parts) + ' },')
+		parts = [js_field(key, obj[key]) for key in fields]
+		oneline = '{ ' + ', '.join(parts) + ' },'
+		if len(oneline) <= 62:
+			lines.append('\t' + oneline)
+		else:
+			lines.append('\t{')
+			lines += [f'\t\t{p},' for p in parts]
+			lines.append('\t},')
 	return '\n'.join(lines)
 
 
@@ -415,7 +467,7 @@ def render_tables(outer, inner, bound):
 
 
 def render_hazards(obstacles, water, wedges, trees):
-	obstacle_fields = ['x', 'y', 'r', 'type', 'damping']
+	obstacle_fields = ['x', 'y', 'r', 'type', 'behavior']
 	return (
 		'export const HARD_OBSTACLES = [\n' +
 		js_object_array(obstacles, obstacle_fields) +
@@ -469,8 +521,9 @@ def generate(seed):
 		dense[line_idx][1], dense[line_idx][0])
 
 	rng = random.Random(seed ^ 0x5be5)
-	obstacles, water = build_infield_hazards(
-		inner, rng, grid_angle)
+	tables = (inner, outer, bound)
+	obstacles, water = build_obstacles_and_water(
+		tables, rng, grid_angle)
 	wedges = build_sand_wedges(rng, grid_angle)
 	trees = build_tree_line(bound)
 
