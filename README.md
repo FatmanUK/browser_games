@@ -56,8 +56,11 @@ per browser) and has its own "New game" button next to its title.
   toggles.
 - **Dash** — a top-down racer, dusk setting, with the camera
   zoomed in and following the car (you can't see the whole oval
-  at once) and two headlight beams cutting through the dim to
-  light up whatever's ahead. Bounded by a thick treeline, with
+  at once) and a headlight beam cutting through the dim to light
+  up whatever's ahead with its true colours, not a white wash.
+  Title, buttons and the Laps/Speed/Best lap meters live inside
+  the game window itself (above the canvas) rather than beside it
+  in the side panel. Bounded by a thick treeline, with
   obstacles scattered round the infield (tyres/barrels/trees,
   each with its own bounce weight) and water hazards that drag
   rather than block. Small randomly-placed oil blobs sit on the

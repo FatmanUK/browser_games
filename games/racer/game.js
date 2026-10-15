@@ -1,6 +1,6 @@
 // Top-down racing game on an oval track.
 
-import { createChrome, createStat } from '../_shared/chrome.js'
+import { createStat } from '../_shared/chrome.js'
 import { loadNumber, saveNumber } from '../_shared/storage.js'
 import { setupSound } from './audio.js'
 
@@ -20,6 +20,13 @@ const VIEWPORT_WIDTH = Math.round(VIEWPORT_HEIGHT * 2.4)
 const VIEW_SCALE = 3
 const CANVAS_WIDTH = VIEWPORT_WIDTH * VIEW_SCALE
 const CANVAS_HEIGHT = VIEWPORT_HEIGHT * VIEW_SCALE
+
+// The title/buttons/meters live in a header bar inside the game
+// window itself, above the canvas, rather than in the launcher's
+// usual side panel — this is how much bigger the window gets to
+// fit that bar.
+const WINDOW_EXTRA_WIDTH = 75
+const WINDOW_EXTRA_HEIGHT = 100
 
 const ACCEL = 220
 const BRAKE = 260
@@ -545,7 +552,7 @@ function drawWorld(ctx, state) {
 const DUSK_COLOR = 'rgba(18, 22, 48, 0.55)'
 const DUSK_CLEAR = 'rgba(18, 22, 48, 0)'
 const BEAM_SPREAD = deg(18)
-const BEAM_LENGTH = 150
+const BEAM_LENGTH = 85
 
 function headlightOrigin(angle) {
 	const frontDist = CAR_LENGTH / 2
@@ -627,6 +634,50 @@ function createCanvas() {
 	return canvas
 }
 
+function createButton(label, onClick) {
+	const btn = document.createElement('button')
+	btn.type = 'button'
+	btn.className = 'game-side-button'
+	btn.textContent = label
+	btn.addEventListener('click', onClick)
+	return btn
+}
+
+// Builds the game window itself: a header bar (title, New
+// game/Back buttons, Sound/Music toggles, and the Laps/Speed/
+// Best lap meters) stacked above the canvas, all inside one box
+// — rather than the title/buttons/meters sitting in the
+// launcher's side panel the way the other games lay them out.
+function buildWindow(container, title, controls, onNewGame) {
+	const dashWindow = document.createElement('div')
+	dashWindow.className = 'dash-window'
+	dashWindow.style.width =
+		`${CANVAS_WIDTH + WINDOW_EXTRA_WIDTH}px`
+
+	const header = document.createElement('div')
+	header.className = 'dash-header'
+	header.style.height = `${WINDOW_EXTRA_HEIGHT}px`
+
+	const controlsRow = document.createElement('div')
+	controlsRow.className = 'dash-row'
+	const statsRow = document.createElement('div')
+	statsRow.className = 'dash-row'
+
+	const heading = document.createElement('h2')
+	heading.textContent = title
+	controlsRow.append(
+		heading,
+		createButton('New game', onNewGame),
+		createButton('← Back to games', controls.back))
+
+	const canvas = createCanvas()
+	header.append(controlsRow, statsRow)
+	dashWindow.append(header, canvas)
+	container.appendChild(dashWindow)
+
+	return { canvas, controlsRow, statsRow }
+}
+
 function createInput(ref, audio) {
 	function onKeyDown(e) {
 		audio.unlock()
@@ -694,22 +745,17 @@ export default {
 		'sand and obstacles.',
 
 	init(container, controls) {
-		const canvas = createCanvas()
 		let runtime = null
-
-		const { main, side } = createChrome(container, {
-			title: this.title,
-			onBack: controls.back,
-			onNewGame: () => runtime.start(),
-		})
-		main.appendChild(canvas)
+		const { canvas, controlsRow, statsRow } = buildWindow(
+			container, this.title, controls,
+			() => runtime.start())
 
 		const stats = {
-			setLaps: createStat(side, 'Laps'),
-			setSpeed: createStat(side, 'Speed'),
-			setBest: createStat(side, 'Best lap'),
+			setLaps: createStat(statsRow, 'Laps'),
+			setSpeed: createStat(statsRow, 'Speed'),
+			setBest: createStat(statsRow, 'Best lap'),
 		}
-		const audio = setupSound(side)
+		const audio = setupSound(controlsRow)
 
 		const best = { value: loadNumber(BEST_KEY, 0) }
 		runtime = createRuntime(
