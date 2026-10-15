@@ -36,13 +36,23 @@ GRID_ROW_GAP = CAR_LENGTH * 1.8
 GRID_LANE_OFFSET = ROAD_WIDTH * 0.22
 LINE_SETBACK = CAR_LENGTH * 1.2
 
-HARD_OBSTACLE_COUNT = 6
-WATER_COUNT = 2
 SAND_WEDGE_COUNT = 3
 SAND_WEDGE_SPREAD = math.radians(14)
 HAZARD_MIN_FRAC = 0.22
 HAZARD_MAX_FRAC = 0.78
 HAZARD_CLEAR_ANGLE = math.radians(20)
+
+# Hard obstacles and water live in the grassy infield, not on the
+# track surface — oil is the only hazard on the track itself.
+# Scattering them one-per-sector around the whole infield (rather
+# than clustering at random) means a straight-line shortcut from
+# any part of the inner edge risks running into something.
+OBSTACLE_KINDS = [
+	('tyre', 9, 0.75), ('tyre', 10, 0.75),
+	('barrel', 11, 0.4), ('barrel', 12, 0.4),
+	('tree', 14, 0.15), ('tree', 15, 0.15),
+]
+WATER_RADII = [18, 16]
 
 TREE_LAYERS = [
 	{'count_per_360': 0.072, 'offset': 0, 'r': 9},
@@ -170,11 +180,6 @@ def lerp_table(table, angle):
 	return table[i0] * (1 - frac) + table[i1] * frac
 
 
-def point_at(table, angle):
-	r = lerp_table(table, angle)
-	return (math.cos(angle) * r, math.sin(angle) * r)
-
-
 def heading_run_lengths(dense):
 	n = len(dense)
 	headings = []
@@ -240,9 +245,8 @@ def build_start_and_grid(dense, headings, straight_start,
 	return start, slots, line_idx
 
 
-def track_band_point(center_table, angle, frac):
-	r = lerp_table(center_table, angle) + \
-		(frac - 0.5) * ROAD_WIDTH
+def infield_point(inner_table, angle, frac):
+	r = lerp_table(inner_table, angle) * frac
 	return (math.cos(angle) * r, math.sin(angle) * r)
 
 
@@ -257,63 +261,65 @@ def near_grid_zone(angle, grid_angle):
 		HAZARD_CLEAR_ANGLE
 
 
-def build_hard_obstacles(center_table, rng, grid_angle):
-	kinds = [
-		('tyre', 9, 0.75), ('tyre', 10, 0.75),
-		('barrel', 11, 0.4), ('barrel', 12, 0.4),
-		('tree', 14, 0.15), ('tree', 15, 0.15),
-	]
+def sector_angle(rng, sector_index, sector_count, grid_angle):
+	width = 2 * math.pi / sector_count
+	base = sector_index * width
+	for _ in range(50):
+		angle = base + rng.uniform(0, width)
+		if not near_grid_zone(angle, grid_angle):
+			return angle
+	for _ in range(200):
+		angle = rng.uniform(0, 2 * math.pi)
+		if not near_grid_zone(angle, grid_angle):
+			return angle
+	raise RuntimeError('could not find a clear hazard angle')
+
+
+def place_in_sector(
+		inner_table, rng, sector_index, sector_count,
+		grid_angle, placed, min_gap):
+	for _ in range(100):
+		angle = sector_angle(
+			rng, sector_index, sector_count, grid_angle)
+		frac = rng.uniform(HAZARD_MIN_FRAC, HAZARD_MAX_FRAC)
+		x, y = infield_point(inner_table, angle, frac)
+		if far_from(x, y, placed, min_gap):
+			return x, y
+	raise RuntimeError('could not place an infield hazard')
+
+
+def build_infield_hazards(inner_table, rng, grid_angle):
+	slots = len(OBSTACLE_KINDS) + len(WATER_RADII)
+	order = list(range(slots))
+	rng.shuffle(order)
+
 	placed = []
 	obstacles = []
-	for kind, radius, damping in kinds:
-		for _ in range(200):
-			angle = rng.uniform(0, 2 * math.pi)
-			if near_grid_zone(angle, grid_angle):
-				continue
-			frac = rng.uniform(0.3, 0.7)
-			x, y = track_band_point(
-				center_table, angle, frac)
-			if far_from(x, y, placed, radius * 3 + 6):
-				placed.append((x, y))
-				obstacles.append({
-					'x': round(x, 1),
-					'y': round(y, 1),
-					'r': radius, 'type': kind,
-					'damping': damping,
-				})
-				break
-	if len(obstacles) < len(kinds):
-		raise RuntimeError('could not place all obstacles')
-	return obstacles
+	for (kind, radius, damping), sector in zip(
+			OBSTACLE_KINDS, order):
+		x, y = place_in_sector(
+			inner_table, rng, sector, slots, grid_angle,
+			placed, radius * 3 + 6)
+		placed.append((x, y))
+		obstacles.append({
+			'x': round(x, 1), 'y': round(y, 1),
+			'r': radius, 'type': kind, 'damping': damping,
+		})
 
+	water = []
+	for radius, sector in zip(
+			WATER_RADII, order[len(OBSTACLE_KINDS):]):
+		x, y = place_in_sector(
+			inner_table, rng, sector, slots, grid_angle,
+			placed, radius * 3 + 6)
+		placed.append((x, y))
+		water.append({
+			'x': round(x, 1),
+			'y': round(y, 1),
+			'r': radius,
+		})
 
-def build_water_hazards(center_table, rng, grid_angle, avoid):
-	hazards = []
-	for radius in (18, 16):
-		for _ in range(200):
-			angle = rng.uniform(0, 2 * math.pi)
-			if near_grid_zone(angle, grid_angle):
-				continue
-			frac = rng.uniform(0.3, 0.7)
-			x, y = track_band_point(
-				center_table, angle, frac)
-			if far_from(
-					x, y,
-					avoid + hazards_xy(hazards),
-					radius * 3 + 6):
-				hazards.append({
-					'x': round(x, 1),
-					'y': round(y, 1),
-					'r': radius,
-				})
-				break
-	if len(hazards) < 2:
-		raise RuntimeError('could not place water hazards')
-	return hazards
-
-
-def hazards_xy(hazards):
-	return [(h['x'], h['y']) for h in hazards]
+	return obstacles, water
 
 
 def build_sand_wedges(rng, grid_angle):
@@ -391,6 +397,7 @@ def render_header(seed):
 		'// Do not hand-edit — rerun the script to '
 		'reproduce\n'
 		'// or regenerate this track.\n\n'
+		f'export const TRACK_ID = {seed}\n'
 		f'export const ANGLE_STEPS = {ANGLE_STEPS}\n'
 		f'export const ROAD_WIDTH = {ROAD_WIDTH}\n'
 		f'export const VERGE_WIDTH = {VERGE_WIDTH}\n\n')
@@ -462,10 +469,8 @@ def generate(seed):
 		dense[line_idx][1], dense[line_idx][0])
 
 	rng = random.Random(seed ^ 0x5be5)
-	obstacles = build_hard_obstacles(
-		center_table, rng, grid_angle)
-	water = build_water_hazards(
-		center_table, rng, grid_angle, hazards_xy(obstacles))
+	obstacles, water = build_infield_hazards(
+		inner, rng, grid_angle)
 	wedges = build_sand_wedges(rng, grid_angle)
 	trees = build_tree_line(bound)
 

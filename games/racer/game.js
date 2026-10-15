@@ -36,7 +36,11 @@ const OFF_TRACK_DRAG = 2.2
 const TURN_RATE = 2.6
 const CAR_LENGTH = 16
 const CAR_WIDTH = 9
-const BEST_KEY = 'bg-dash-bestlap'
+
+// Keyed by the track's own id so each generated track (see
+// tools/generate_track.py) keeps its own best lap rather than
+// sharing one score across whatever track happens to be loaded.
+const BEST_KEY = `bg-dash-bestlap-${TRACK.TRACK_ID}`
 
 const KEY_DIRS = {
 	ArrowUp: 'accel', w: 'accel', W: 'accel',

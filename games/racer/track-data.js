@@ -2,6 +2,7 @@
 // Do not hand-edit — rerun the script to reproduce
 // or regenerate this track.
 
+export const TRACK_ID = 438059836
 export const ANGLE_STEPS = 720
 export const ROAD_WIDTH = 100
 export const VERGE_WIDTH = 40
@@ -325,23 +326,23 @@ export const BOUND_RADIUS = [
 ]
 
 export const HARD_OBSTACLES = [
-	{ x: 472.0, y: 329.6, r: 9, type: 'tyre', damping: 0.75 },
-	{ x: 187.1, y: 402.8, r: 10, type: 'tyre', damping: 0.75 },
-	{ x: 280.3, y: 424.9, r: 11, type: 'barrel', damping: 0.4 },
-	{ x: 75.1, y: 484.6, r: 12, type: 'barrel', damping: 0.4 },
-	{ x: 494.8, y: -70.8, r: 14, type: 'tree', damping: 0.15 },
-	{ x: -149.3, y: 599.3, r: 15, type: 'tree', damping: 0.15 },
+	{ x: 75.3, y: -106.0, r: 9, type: 'tyre', damping: 0.75 },
+	{ x: -92.9, y: -96.5, r: 10, type: 'tyre', damping: 0.75 },
+	{ x: 259.4, y: 50.8, r: 11, type: 'barrel', damping: 0.4 },
+	{ x: -138.3, y: 310.0, r: 12, type: 'barrel', damping: 0.4 },
+	{ x: 145.9, y: -47.2, r: 14, type: 'tree', damping: 0.15 },
+	{ x: -359.2, y: -178.3, r: 15, type: 'tree', damping: 0.15 },
 ]
 
 export const WATER_HAZARDS = [
-	{ x: 176.2, y: -453.5, r: 18 },
-	{ x: 488.6, y: 73.4, r: 16 },
+	{ x: -218.0, y: 211.2, r: 18 },
+	{ x: 63.9, y: 162.2, r: 16 },
 ]
 
 export const SAND_WEDGES = [
-	{ angle: 1.5465, spread: 0.2443 },
-	{ angle: 3.8952, spread: 0.2443 },
-	{ angle: 3.3575, spread: 0.2443 },
+	{ angle: 2.7975, spread: 0.2443 },
+	{ angle: 2.1217, spread: 0.2443 },
+	{ angle: 5.6838, spread: 0.2443 },
 ]
 
 export const TREE_LINE = [
