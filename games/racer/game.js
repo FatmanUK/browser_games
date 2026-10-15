@@ -12,9 +12,14 @@ const BOUND = { a: 256, b: 186 }
 // The camera follows the car and only shows a window onto the
 // world — tall enough to always show the full width of the
 // track's surface (OUTER.a - INNER.a, the bigger of its two
-// radial gaps) rather than the whole oval at once.
+// radial gaps) rather than the whole oval at once. VIEW_SCALE
+// blows that up to a sensible on-screen window size without
+// changing how much of the track it actually shows.
 const VIEWPORT_HEIGHT = OUTER.a - INNER.a
 const VIEWPORT_WIDTH = Math.round(VIEWPORT_HEIGHT * 2.4)
+const VIEW_SCALE = 3
+const CANVAS_WIDTH = VIEWPORT_WIDTH * VIEW_SCALE
+const CANVAS_HEIGHT = VIEWPORT_HEIGHT * VIEW_SCALE
 
 const ACCEL = 220
 const BRAKE = 260
@@ -533,58 +538,73 @@ function drawWorld(ctx, state) {
 	drawCar(ctx, state)
 }
 
-// Dusky evening: dim everything down, then "cut out" two
-// headlight cones from that dimming via destination-out — the
-// car's own two draws underneath stay normally lit there.
+// Dusky evening: dim everything down except a headlight cone
+// ahead of the car, where the normal daylight colors underneath
+// show through undimmed (not brightened — restored, not washed
+// out) with a soft fade back to full dusk at the beam's reach.
 const DUSK_COLOR = 'rgba(18, 22, 48, 0.55)'
+const DUSK_CLEAR = 'rgba(18, 22, 48, 0)'
+const BEAM_SPREAD = deg(18)
+const BEAM_LENGTH = 150
 
-function drawDusk(ctx) {
-	ctx.fillStyle = DUSK_COLOR
-	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+function headlightOrigin(angle) {
+	const frontDist = CAR_LENGTH / 2
+	return {
+		x: VIEWPORT_WIDTH / 2 + Math.cos(angle) * frontDist,
+		y: VIEWPORT_HEIGHT / 2 + Math.sin(angle) * frontDist,
+	}
 }
 
-function headlightOrigins(angle) {
-	const cx = VIEWPORT_WIDTH / 2
-	const cy = VIEWPORT_HEIGHT / 2
-	const frontDist = CAR_LENGTH / 2 - 1
-	const fx = cx + Math.cos(angle) * frontDist
-	const fy = cy + Math.sin(angle) * frontDist
-	const perp = angle + Math.PI / 2
-	const lateral = CAR_WIDTH / 2 - 1.5
-	return [-1, 1].map((side) => ({
-		x: fx + Math.cos(perp) * lateral * side,
-		y: fy + Math.sin(perp) * lateral * side,
-	}))
-}
-
-function drawHeadlightBeam(ctx, origin, angle) {
-	const spread = deg(16)
-	const length = 150
-	const grad = ctx.createRadialGradient(
-		origin.x, origin.y, 0, origin.x, origin.y, length)
-	grad.addColorStop(0, 'rgba(255, 255, 255, 1)')
-	grad.addColorStop(0.7, 'rgba(255, 255, 255, 0.6)')
-	grad.addColorStop(1, 'rgba(255, 255, 255, 0)')
-	ctx.fillStyle = grad
-	ctx.beginPath()
+function beamPath(ctx, origin, angle) {
 	ctx.moveTo(origin.x, origin.y)
 	ctx.arc(
-		origin.x, origin.y, length,
-		angle - spread, angle + spread)
+		origin.x, origin.y, BEAM_LENGTH,
+		angle - BEAM_SPREAD, angle + BEAM_SPREAD)
 	ctx.closePath()
-	ctx.fill()
 }
 
-function drawHeadlights(ctx, angle) {
+// A rectangle covering the viewport, with the beam wedge cut out
+// of it (even-odd fill rule), filled dusk — so everything outside
+// the beam dims, and the beam itself is left untouched (showing
+// whatever was already drawn there at full daylight brightness).
+function drawDuskOutsideBeam(ctx, origin, angle) {
 	ctx.save()
-	ctx.globalCompositeOperation = 'destination-out'
-	for (const origin of headlightOrigins(angle)) {
-		drawHeadlightBeam(ctx, origin, angle)
-	}
+	ctx.beginPath()
+	ctx.rect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+	beamPath(ctx, origin, angle)
+	ctx.fillStyle = DUSK_COLOR
+	ctx.fill('evenodd')
 	ctx.restore()
 }
 
+// Within just the beam, fade back to full dusk toward its far
+// reach, so the headlight looks like it's shining a finite
+// distance rather than cutting a hard-edged hole.
+function drawBeamFalloff(ctx, origin, angle) {
+	ctx.save()
+	ctx.beginPath()
+	beamPath(ctx, origin, angle)
+	ctx.clip()
+	const grad = ctx.createRadialGradient(
+		origin.x, origin.y, BEAM_LENGTH * 0.4,
+		origin.x, origin.y, BEAM_LENGTH)
+	grad.addColorStop(0, DUSK_CLEAR)
+	grad.addColorStop(1, DUSK_COLOR)
+	ctx.fillStyle = grad
+	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+	ctx.restore()
+}
+
+function drawDusk(ctx, angle) {
+	const origin = headlightOrigin(angle)
+	drawDuskOutsideBeam(ctx, origin, angle)
+	drawBeamFalloff(ctx, origin, angle)
+}
+
 function draw(ctx, state) {
+	ctx.save()
+	ctx.scale(VIEW_SCALE, VIEW_SCALE)
+
 	ctx.fillStyle = '#3e8e41'
 	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
 
@@ -595,14 +615,14 @@ function draw(ctx, state) {
 	drawWorld(ctx, state)
 	ctx.restore()
 
-	drawDusk(ctx)
-	drawHeadlights(ctx, state.angle)
+	drawDusk(ctx, state.angle)
+	ctx.restore()
 }
 
 function createCanvas() {
 	const canvas = document.createElement('canvas')
-	canvas.width = VIEWPORT_WIDTH
-	canvas.height = VIEWPORT_HEIGHT
+	canvas.width = CANVAS_WIDTH
+	canvas.height = CANVAS_HEIGHT
 	canvas.tabIndex = 0
 	return canvas
 }
