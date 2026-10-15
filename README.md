@@ -59,25 +59,27 @@ per browser) and has its own "New game" button next to its title.
   `games/racer/track-data.js` — rerun it for a fresh layout),
   starting from a grid on a straight before the line. Dusk
   setting, with the camera zoomed in and following the car (you
-  can't see the whole track at once) and a headlight beam cutting
-  through the dim to light up whatever's ahead with its true
-  colours, not a white wash. Title, buttons and the Laps/Speed/
-  Best lap meters overlay the top of the canvas itself (a
-  translucent bar) rather than sitting beside it in the side
-  panel, so the canvas can fill the window. Bounded by a thick
-  treeline, with hard obstacles (small tyres/barrels, smaller
-  than the car, and big trees) scattered off the track surface —
-  either in the infield or out past the rumble strips — and
-  water hazards that drag rather than block. Tyres bounce the
-  car off; barrels and trees are solid and stop it dead. Small
-  randomly-placed oil blobs are the only hazard on the track
-  surface itself (a new layout each game) and send the car into
-  a sudden spin; sand traps sit off-track in the verge (higher
-  friction than anything else, hauling the car down to a stop
-  fast but not instantly), so you only hit one by running wide.
-  Each generated track keeps its own best-lap time. Arrow keys /
-  WASD to drive; the lap counter never decreases. Has its own
-  "Sound"/"Music" toggles.
+  can't see the whole track at once) and twin headlight beams
+  cutting through the dim to light up whatever's ahead with its
+  true colours, not a white wash. Title, buttons and the
+  Laps/Speed/Best lap meters overlay the top of the canvas
+  itself (a translucent bar) rather than sitting beside it in
+  the side panel, so the canvas can fill the window. Bounded by
+  a thick treeline that stops the car dead if you plough into
+  it, with hard obstacles (small tyres/barrels, smaller than the
+  car; big trees; and solid buildings filling out the middle)
+  scattered off the track surface — either in the infield or out
+  past the rumble strips — and water hazards that drag rather
+  than block. Tyres bounce the car off; everything else stops it
+  dead. Small randomly-placed oil blobs are the only hazard on
+  the track surface itself (never on the starting grid, a new
+  layout each game) and send the car into a sudden spin that
+  slides it sideways rather than bouncing it off; sand traps sit
+  off-track in the verge (higher friction than anything else,
+  hauling the car down to a stop fast but not instantly), so you
+  only hit one by running wide. Each generated track keeps its
+  own best-lap time. Arrow keys / WASD to drive; the lap counter
+  never decreases. Has its own "Sound"/"Music" toggles.
 
 ## Adding a game
 

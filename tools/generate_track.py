@@ -48,9 +48,11 @@ HAZARD_CLEAR_ANGLE = math.radians(20)
 # a straight-line shortcut across the infield risks running into
 # something from any direction. Tyres and barrels are small (car-
 # sized or smaller) and can land either in the grassy infield or
-# out past the rumble strips in the verge; trees are the big
-# boundary-style obstacle and stay in the infield only. Tyres
-# bounce the car off; barrels and trees are solid and stop it.
+# out past the rumble strips in the verge; trees and buildings
+# are the big obstacles and stay infield-only, filling out the
+# middle of a track now large enough to otherwise feel empty.
+# Tyres bounce the car off; everything else is solid and stops
+# it dead.
 OBSTACLE_SPECS = [
 	{
 		'type': 'tyre', 'r': 3, 'behavior': 'bounce',
@@ -58,6 +60,10 @@ OBSTACLE_SPECS = [
 	},
 	{
 		'type': 'tyre', 'r': 3.5, 'behavior': 'bounce',
+		'zones': ('infield', 'verge'),
+	},
+	{
+		'type': 'tyre', 'r': 3, 'behavior': 'bounce',
 		'zones': ('infield', 'verge'),
 	},
 	{
@@ -69,6 +75,10 @@ OBSTACLE_SPECS = [
 		'zones': ('infield', 'verge'),
 	},
 	{
+		'type': 'barrel', 'r': 3.5, 'behavior': 'stop',
+		'zones': ('infield', 'verge'),
+	},
+	{
 		'type': 'tree', 'r': 14, 'behavior': 'stop',
 		'zones': ('infield',),
 	},
@@ -76,14 +86,37 @@ OBSTACLE_SPECS = [
 		'type': 'tree', 'r': 15, 'behavior': 'stop',
 		'zones': ('infield',),
 	},
+	{
+		'type': 'building', 'r': 18, 'behavior': 'stop',
+		'zones': ('infield',),
+	},
+	{
+		'type': 'building', 'r': 22, 'behavior': 'stop',
+		'zones': ('infield',),
+	},
+	{
+		'type': 'building', 'r': 20, 'behavior': 'stop',
+		'zones': ('infield',),
+	},
+	{
+		'type': 'building', 'r': 16, 'behavior': 'stop',
+		'zones': ('infield',),
+	},
 ]
 WATER_RADII = [18, 16]
 
+# Tree count per layer is derived from the track's own perimeter
+# (below) rather than a fixed number, so the treeline's density
+# stays the same regardless of how large a given track comes out
+# — a fixed tree count went visibly thin once tracks got much
+# bigger. `spacing` is the target gap (world units) between tree
+# centers along that layer's ring; smaller = denser.
 TREE_LAYERS = [
-	{'count_per_360': 0.072, 'offset': 0, 'r': 9},
-	{'count_per_360': 0.089, 'offset': 16, 'r': 11},
-	{'count_per_360': 0.078, 'offset': 32, 'r': 10},
-	{'count_per_360': 0.061, 'offset': 48, 'r': 12},
+	{'spacing': 40, 'offset': 0, 'r': 9},
+	{'spacing': 32, 'offset': 15, 'r': 11},
+	{'spacing': 38, 'offset': 30, 'r': 10},
+	{'spacing': 48, 'offset': 45, 'r': 12},
+	{'spacing': 55, 'offset': 62, 'r': 13},
 ]
 
 
@@ -386,10 +419,12 @@ def build_sand_wedges(rng, grid_angle):
 
 
 def build_tree_line(bound_table):
+	avg_bound = sum(bound_table) / len(bound_table)
 	trees = []
 	for layer in TREE_LAYERS:
-		count = max(
-			12, round(360 * layer['count_per_360']))
+		radius = avg_bound + layer['offset']
+		perimeter = 2 * math.pi * radius
+		count = max(12, round(perimeter / layer['spacing']))
 		for i in range(count):
 			angle = (i / count) * 2 * math.pi
 			r = lerp_table(bound_table, angle) + \

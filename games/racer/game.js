@@ -61,6 +61,27 @@ const OIL_COUNT = 5
 const OIL_RADIUS_MIN = 7
 const OIL_RADIUS_RANGE = 5
 
+// Keeps oil off the starting straight — same angular-clearance
+// trick tools/generate_track.py already uses to keep the other
+// hazards off the grid, just applied at runtime since oil is
+// randomized fresh every New Game rather than baked into the
+// track data.
+const GRID_CLEAR_ANGLE = deg(20)
+const GRID_ANGLE = Math.atan2(TRACK.START.y, TRACK.START.x)
+
+function nearGridZone(angle) {
+	return Math.abs(angleDelta(GRID_ANGLE, angle)) <
+		GRID_CLEAR_ANGLE
+}
+
+function randomOilAngle() {
+	let angle
+	do {
+		angle = Math.random() * Math.PI * 2
+	} while (nearGridZone(angle))
+	return angle
+}
+
 // Small randomly-scattered puddles on the track surface —
 // regenerated each New Game, so the hazard layout isn't the
 // same lap after lap. Positions are restricted to the actual
@@ -80,7 +101,7 @@ function trackBandPoint(angle, frac) {
 function randomOilPatches() {
 	const patches = []
 	for (let i = 0; i < OIL_COUNT; i++) {
-		const angle = Math.random() * Math.PI * 2
+		const angle = randomOilAngle()
 		const frac = 0.3 + Math.random() * 0.4
 		const p = trackBandPoint(angle, frac)
 		patches.push({
@@ -99,7 +120,13 @@ function createState() {
 	return {
 		x: pole.x,
 		y: pole.y,
+		// `angle` is the true heading (travel direction);
+		// `facing` is just how the sprite/headlamps are drawn
+		// — normally the same, but oil lets facing spin on
+		// its own so the car visibly spins while still
+		// sliding along its actual heading.
 		angle: pole.angle,
+		facing: pole.angle,
 		speed: 0,
 		totalAngle: 0,
 		elapsed: 0,
@@ -214,8 +241,17 @@ function applyControls(state, dt, terrain) {
 		Math.sign(state.speed || 1)
 	if (state.keys.has('left')) state.angle -= turn
 	if (state.keys.has('right')) state.angle += turn
+
+	// Oil spins the sprite's facing, not the heading — the car
+	// keeps sliding along whatever line it was already on
+	// (slippery, barely any drag) while it visibly spins out of
+	// control on top of that slide. Off oil, facing always snaps
+	// straight back to the real heading.
 	if (terrain === 'oil') {
-		state.angle += (Math.random() - 0.5) * 6 * dt
+		state.facing +=
+			(Math.random() - 0.5) * OIL_WOBBLE * dt
+	} else {
+		state.facing = state.angle
 	}
 }
 
@@ -223,13 +259,15 @@ function applyControls(state, dt, terrain) {
 // (see integrate, which fires this on the terrain edge rather
 // than every frame) — a sharp, random half-to-full-turn jolt on
 // top of the continuous wobble applyControls adds for as long as
-// the car sits in the puddle.
+// the car sits in the puddle. Only ever touches `facing`, never
+// the real heading — see createState.
 const SPIN_MIN = deg(60)
 const SPIN_RANGE = deg(120)
+const OIL_WOBBLE = 6
 
 function applySpinOut(state) {
 	const dir = Math.random() < 0.5 ? -1 : 1
-	state.angle += dir * (SPIN_MIN + Math.random() * SPIN_RANGE)
+	state.facing += dir * (SPIN_MIN + Math.random() * SPIN_RANGE)
 }
 
 function bounceOff(state, normalAngle, damping) {
@@ -265,6 +303,9 @@ function resolveObstacles(state) {
 	return hit
 }
 
+// The treeline marks this boundary, so running into it should
+// feel the same as hitting one of the solid tree obstacles —
+// stopped dead, not bounced back onto the track.
 function clampToBound(state) {
 	const norm = normFor(state.x, state.y, TRACK.BOUND_RADIUS)
 	if (norm <= 1) return false
@@ -272,7 +313,7 @@ function clampToBound(state) {
 	const r = lerpArray(TRACK.BOUND_RADIUS, normalAngle)
 	state.x = CENTER.x + Math.cos(normalAngle) * r
 	state.y = CENTER.y + Math.sin(normalAngle) * r
-	bounceOff(state, normalAngle, 0.5)
+	state.speed = 0
 	return true
 }
 
@@ -432,6 +473,23 @@ function drawBarrel(ctx, x, y, r) {
 	ctx.fillRect(x - r, y - r * 0.3, r * 2, r * 0.3)
 }
 
+function drawBuilding(ctx, x, y, r) {
+	ctx.fillStyle = '#6d6d78'
+	ctx.fillRect(x - r, y - r, r * 2, r * 2)
+	ctx.fillStyle = '#4a4a52'
+	ctx.fillRect(x - r, y - r, r * 2, r * 0.35)
+	ctx.fillStyle = '#ffd54f'
+	const windowSize = r * 0.3
+	for (const wx of [-r * 0.5, r * 0.5]) {
+		for (const wy of [-r * 0.1, r * 0.5]) {
+			ctx.fillRect(
+				x + wx - windowSize / 2,
+				y + wy - windowSize / 2,
+				windowSize, windowSize)
+		}
+	}
+}
+
 function drawWater(ctx, x, y, r) {
 	ctx.fillStyle = '#2196f3'
 	ctx.beginPath()
@@ -448,6 +506,7 @@ function drawHardObstacle(ctx, obstacle) {
 	const { x, y, r, type } = obstacle
 	if (type === 'tyre') drawTyre(ctx, x, y, r)
 	else if (type === 'barrel') drawBarrel(ctx, x, y, r)
+	else if (type === 'building') drawBuilding(ctx, x, y, r)
 	else drawTree(ctx, x, y, r)
 }
 
@@ -527,7 +586,7 @@ function drawOilPatches(ctx, patches) {
 function drawCar(ctx, state) {
 	ctx.save()
 	ctx.translate(state.x, state.y)
-	ctx.rotate(state.angle)
+	ctx.rotate(state.facing)
 	ctx.fillStyle = '#b71c1c'
 	ctx.fillRect(
 		-CAR_LENGTH / 2, -CAR_WIDTH / 2,
@@ -559,53 +618,55 @@ function drawWorld(ctx, state) {
 	drawCar(ctx, state)
 }
 
-// Dusky evening: dim everything down except a headlight cone
+// Dusky evening: dim everything down except two headlight cones
 // ahead of the car, where the normal daylight colors underneath
 // show through undimmed (not brightened — restored, not washed
-// out) with a soft fade back to full dusk at the beam's reach.
+// out) with a soft fade back to full dusk at each beam's reach.
 const DUSK_COLOR = 'rgba(18, 22, 48, 0.55)'
 const DUSK_CLEAR = 'rgba(18, 22, 48, 0)'
 const BEAM_SPREAD = deg(18)
 const BEAM_LENGTH = 85
+const HEADLIGHT_OFFSET = 2.5
 
-function headlightOrigin(angle) {
+// The two headlamps sit a little either side of the car's front
+// center, so their beams overlap for almost their whole length —
+// see revealBeam for why that overlap has to be handled by
+// layering independent reveals rather than cutting both wedges
+// out of one dusk fill (evenodd parity breaks on overlapping
+// holes: a point inside both wedges gets toggled back "outside").
+function headlightOrigins(facing) {
 	const frontDist = CAR_LENGTH / 2
-	return {
-		x: VIEWPORT_WIDTH / 2 + Math.cos(angle) * frontDist,
-		y: VIEWPORT_HEIGHT / 2 + Math.sin(angle) * frontDist,
-	}
+	const perp = facing + Math.PI / 2
+	const cx = VIEWPORT_WIDTH / 2 + Math.cos(facing) * frontDist
+	const cy = VIEWPORT_HEIGHT / 2 + Math.sin(facing) * frontDist
+	const ox = Math.cos(perp) * HEADLIGHT_OFFSET
+	const oy = Math.sin(perp) * HEADLIGHT_OFFSET
+	return [
+		{ x: cx - ox, y: cy - oy },
+		{ x: cx + ox, y: cy + oy },
+	]
 }
 
-function beamPath(ctx, origin, angle) {
+function beamPath(ctx, origin, facing) {
 	ctx.moveTo(origin.x, origin.y)
 	ctx.arc(
 		origin.x, origin.y, BEAM_LENGTH,
-		angle - BEAM_SPREAD, angle + BEAM_SPREAD)
+		facing - BEAM_SPREAD, facing + BEAM_SPREAD)
 	ctx.closePath()
 }
 
-// A rectangle covering the viewport, with the beam wedge cut out
-// of it (even-odd fill rule), filled dusk — so everything outside
-// the beam dims, and the beam itself is left untouched (showing
-// whatever was already drawn there at full daylight brightness).
-function drawDuskOutsideBeam(ctx, origin, angle) {
+// Clips to one beam's wedge and pastes the true-color world
+// (pre-rendered to worldCanvas, see draw) back in over the dusk
+// fill, then fades that back toward dusk with distance. Confined
+// entirely to its own clip, so a second beam's reveal just lays
+// over this one wherever they overlap — always correct, however
+// much the wedges intersect, unlike a shared fill-rule cutout.
+function revealBeam(ctx, worldCanvas, origin, facing) {
 	ctx.save()
 	ctx.beginPath()
-	ctx.rect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
-	beamPath(ctx, origin, angle)
-	ctx.fillStyle = DUSK_COLOR
-	ctx.fill('evenodd')
-	ctx.restore()
-}
-
-// Within just the beam, fade back to full dusk toward its far
-// reach, so the headlight looks like it's shining a finite
-// distance rather than cutting a hard-edged hole.
-function drawBeamFalloff(ctx, origin, angle) {
-	ctx.save()
-	ctx.beginPath()
-	beamPath(ctx, origin, angle)
+	beamPath(ctx, origin, facing)
 	ctx.clip()
+	ctx.drawImage(worldCanvas, 0, 0)
 	const grad = ctx.createRadialGradient(
 		origin.x, origin.y, BEAM_LENGTH * 0.4,
 		origin.x, origin.y, BEAM_LENGTH)
@@ -616,27 +677,36 @@ function drawBeamFalloff(ctx, origin, angle) {
 	ctx.restore()
 }
 
-function drawDusk(ctx, angle) {
-	const origin = headlightOrigin(angle)
-	drawDuskOutsideBeam(ctx, origin, angle)
-	drawBeamFalloff(ctx, origin, angle)
+function drawDusk(ctx, worldCanvas, facing) {
+	ctx.fillStyle = DUSK_COLOR
+	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+	for (const origin of headlightOrigins(facing)) {
+		revealBeam(ctx, worldCanvas, origin, facing)
+	}
 }
 
-function draw(ctx, state) {
-	ctx.save()
-	ctx.scale(VIEW_SCALE, VIEW_SCALE)
-
-	ctx.fillStyle = '#3e8e41'
-	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
-
-	ctx.save()
-	ctx.translate(
+// Renders world-space (true daylight colors) to its own
+// viewport-sized offscreen canvas so drawDusk can paste pieces
+// of it back in per-beam — see revealBeam.
+function renderWorldToOffscreen(world, state) {
+	const wctx = world.ctx
+	wctx.fillStyle = '#3e8e41'
+	wctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+	wctx.save()
+	wctx.translate(
 		VIEWPORT_WIDTH / 2 - state.x,
 		VIEWPORT_HEIGHT / 2 - state.y)
-	drawWorld(ctx, state)
-	ctx.restore()
+	drawWorld(wctx, state)
+	wctx.restore()
+}
 
-	drawDusk(ctx, state.angle)
+function draw(ctx, world, state) {
+	renderWorldToOffscreen(world, state)
+	ctx.save()
+	ctx.scale(VIEW_SCALE, VIEW_SCALE)
+	ctx.imageSmoothingEnabled = false
+	ctx.drawImage(world.canvas, 0, 0)
+	drawDusk(ctx, world.canvas, state.facing)
 	ctx.restore()
 }
 
@@ -710,13 +780,20 @@ function createInput(ref, audio) {
 	return { onKeyDown, onKeyUp }
 }
 
+function createWorldCanvas() {
+	const canvas = document.createElement('canvas')
+	canvas.width = VIEWPORT_WIDTH
+	canvas.height = VIEWPORT_HEIGHT
+	return { canvas, ctx: canvas.getContext('2d') }
+}
+
 function createRuntime(ctx, stats, best, audio) {
 	const ref = { state: null }
-	let handle = null
-	let last = null
+	const world = createWorldCanvas()
+	let handle = null, last = null
 
 	function render() {
-		draw(ctx, ref.state)
+		draw(ctx, world, ref.state)
 		stats.setLaps(ref.state.lapsShown)
 		stats.setSpeed(Math.round(ref.state.speed))
 		stats.setBest(formatBest(best.value))
