@@ -151,6 +151,10 @@ function createToggleButton(side, label, getValue, setValue) {
 	btn.className = 'game-side-button'
 	const text = () => `${label}: ${getValue() ? 'On' : 'Off'}`
 	btn.textContent = text()
+	// See chrome.js's createButton — stops this click from
+	// stealing keyboard focus from the game canvas.
+	btn.addEventListener(
+		'mousedown', (e) => e.preventDefault())
 	btn.addEventListener('click', () => {
 		setValue(!getValue())
 		btn.textContent = text()

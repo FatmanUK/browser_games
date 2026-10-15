@@ -9,6 +9,11 @@ function createButton(label, onClick) {
 	btn.type = 'button'
 	btn.className = 'game-side-button'
 	btn.textContent = label
+	// Don't let clicking this button steal keyboard focus from
+	// the game canvas — preventing the default on mousedown
+	// stops the focus shift without blocking the click itself.
+	btn.addEventListener(
+		'mousedown', (e) => e.preventDefault())
 	btn.addEventListener('click', onClick)
 	return btn
 }

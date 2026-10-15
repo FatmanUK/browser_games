@@ -632,6 +632,11 @@ function createButton(label, onClick) {
 	btn.type = 'button'
 	btn.className = 'game-side-button'
 	btn.textContent = label
+	// Don't let clicking this button steal keyboard focus from
+	// the game canvas — it needs to stay focused for the arrow
+	// keys to keep driving.
+	btn.addEventListener(
+		'mousedown', (e) => e.preventDefault())
 	btn.addEventListener('click', onClick)
 	return btn
 }
