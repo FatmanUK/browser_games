@@ -85,22 +85,30 @@ main {
   font-size: 0.9rem;
 }
 
-/* Dash keeps its title/buttons/meters inside its own window,
-   stacked above the canvas, instead of in the side panel. */
+/* Dash overlays its title/buttons/meters directly on top of the
+   canvas, instead of putting them in the side panel or a bar
+   that takes up space beside/above it. */
 .dash-window {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  position: relative;
+  display: inline-block;
+}
+
+.dash-window canvas {
+  display: block;
 }
 
 .dash-header {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 0.35rem;
-  padding: 0 0.5rem;
+  padding: 0.4rem 0.6rem;
 }
 
 .dash-header h2 {

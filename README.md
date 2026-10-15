@@ -58,9 +58,10 @@ per browser) and has its own "New game" button next to its title.
   zoomed in and following the car (you can't see the whole oval
   at once) and a headlight beam cutting through the dim to light
   up whatever's ahead with its true colours, not a white wash.
-  Title, buttons and the Laps/Speed/Best lap meters live inside
-  the game window itself (above the canvas) rather than beside it
-  in the side panel. Bounded by a thick treeline, with
+  Title, buttons and the Laps/Speed/Best lap meters overlay the
+  top of the canvas itself (a translucent bar) rather than sitting
+  beside it in the side panel, so the canvas can fill the window.
+  Bounded by a thick treeline, with
   obstacles scattered round the infield (tyres/barrels/trees,
   each with its own bounce weight) and water hazards that drag
   rather than block. Small randomly-placed oil blobs sit on the

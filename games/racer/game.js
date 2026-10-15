@@ -17,16 +17,9 @@ const BOUND = { a: 256, b: 186 }
 // changing how much of the track it actually shows.
 const VIEWPORT_HEIGHT = OUTER.a - INNER.a
 const VIEWPORT_WIDTH = Math.round(VIEWPORT_HEIGHT * 2.4)
-const VIEW_SCALE = 3
+const VIEW_SCALE = 4
 const CANVAS_WIDTH = VIEWPORT_WIDTH * VIEW_SCALE
 const CANVAS_HEIGHT = VIEWPORT_HEIGHT * VIEW_SCALE
-
-// The title/buttons/meters live in a header bar inside the game
-// window itself, above the canvas, rather than in the launcher's
-// usual side panel — this is how much bigger the window gets to
-// fit that bar.
-const WINDOW_EXTRA_WIDTH = 75
-const WINDOW_EXTRA_HEIGHT = 100
 
 const ACCEL = 220
 const BRAKE = 260
@@ -643,20 +636,16 @@ function createButton(label, onClick) {
 	return btn
 }
 
-// Builds the game window itself: a header bar (title, New
-// game/Back buttons, Sound/Music toggles, and the Laps/Speed/
-// Best lap meters) stacked above the canvas, all inside one box
-// — rather than the title/buttons/meters sitting in the
-// launcher's side panel the way the other games lay them out.
+// Builds the game window: title, New game/Back buttons,
+// Sound/Music toggles and the Laps/Speed/Best lap meters sit in
+// a translucent bar overlaid on top of the canvas itself — not
+// beside or above it — so the canvas can be the whole window.
 function buildWindow(container, title, controls, onNewGame) {
 	const dashWindow = document.createElement('div')
 	dashWindow.className = 'dash-window'
-	dashWindow.style.width =
-		`${CANVAS_WIDTH + WINDOW_EXTRA_WIDTH}px`
 
 	const header = document.createElement('div')
 	header.className = 'dash-header'
-	header.style.height = `${WINDOW_EXTRA_HEIGHT}px`
 
 	const controlsRow = document.createElement('div')
 	controlsRow.className = 'dash-row'
@@ -672,7 +661,7 @@ function buildWindow(container, title, controls, onNewGame) {
 
 	const canvas = createCanvas()
 	header.append(controlsRow, statsRow)
-	dashWindow.append(header, canvas)
+	dashWindow.append(canvas, header)
 	container.appendChild(dashWindow)
 
 	return { canvas, controlsRow, statsRow }
