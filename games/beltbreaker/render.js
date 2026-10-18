@@ -11,6 +11,7 @@ import { W, H } from './common.js'
 import { frameFor } from './rocks.js'
 import { SHIP_R } from './craft.js'
 import { PICKUP_LIFE } from './common.js'
+import { drawHud } from './hud.js'
 import { drawTunnel } from './render-tunnel.js'
 
 function spread(v, span, pad) {
@@ -146,7 +147,7 @@ function drawBossBar(ctx, state) {
 	if (!b || b.y < 0) return
 	const w = W * 0.5
 	const x = (W - w) / 2
-	const y = H - 34
+	const y = H - 52
 	ctx.fillStyle = 'rgba(0,0,0,0.5)'
 	ctx.fillRect(x - 2, y - 2, w + 4, 16)
 	const k = Math.max(0, b.hp / b.max)
@@ -160,9 +161,9 @@ function drawBossBar(ctx, state) {
 	ctx.lineWidth = 1
 	ctx.strokeRect(x, y, w, 12)
 	ctx.fillStyle = 'rgba(255,235,200,0.85)'
-	ctx.font = 'bold 11px system-ui, sans-serif'
+	ctx.font = 'bold 10px ui-monospace, Menlo, monospace'
 	ctx.textAlign = 'center'
-	ctx.fillText('GUARDIAN', W / 2, y - 7)
+	ctx.fillText('GUARDIAN', W / 2, y - 12)
 }
 
 function drawBanner(ctx, state) {
@@ -216,11 +217,11 @@ function drawHint(ctx, state) {
 	if (state.level > 1 || state.t > 9 || state.over) return
 	ctx.globalAlpha = Math.max(0, 1 - state.t / 9)
 	ctx.textAlign = 'center'
-	ctx.fillStyle = 'rgba(210,230,255,0.9)'
-	ctx.font = '14px system-ui, sans-serif'
+	ctx.fillStyle = 'rgba(150,215,245,0.85)'
+	ctx.font = '11px ui-monospace, "SF Mono", Menlo, monospace'
 	ctx.fillText(
-		'Arrows / WASD to fly · Space to fire · ' +
-		'Shift for hyperspace', W / 2, H - 56)
+		'ARROWS / WASD · SPACE TO FIRE · ' +
+		'SHIFT FOR HYPERSPACE', W / 2, H - 70)
 	ctx.globalAlpha = 1
 }
 
@@ -238,7 +239,7 @@ function drawField(ctx, atlas, state) {
 	drawHint(ctx, state)
 }
 
-export function draw(ctx, atlas, state) {
+export function draw(ctx, atlas, state, best) {
 	ctx.setTransform(1, 0, 0, 1, 0, 0)
 	if (state.phase === 'tunnel') {
 		drawTunnel(ctx, atlas, state)
@@ -246,6 +247,7 @@ export function draw(ctx, atlas, state) {
 		drawField(ctx, atlas, state)
 	}
 	ctx.setTransform(1, 0, 0, 1, 0, 0)
+	drawHud(ctx, atlas, state, best)
 	drawBanner(ctx, state)
 	drawReady(ctx, state)
 	drawOver(ctx, state)

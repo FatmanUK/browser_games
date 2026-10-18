@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
-"""Generates games/beltbreaker/music-data.js: a ProTracker 2
-module (4 channels, 31 sample slots, "M.K.") carrying Belt
-Breaker's background music, base64-encoded into an ES module.
+"""Generates Belt Breaker's background music: a ProTracker 2
+module (4 channels, 31 sample slots, "M.K.").
+
+Writes it twice. games/beltbreaker/music/belt-breaker.mod is
+the file the game loads and the one to open in a tracker (or
+replace with your own — see that directory's README).
+games/beltbreaker/music-data.js is the same bytes base64'd,
+which the game falls back to when the .mod cannot be fetched.
 
 The repo ships no binary assets, so the module — instruments
 included — is synthesized here rather than sourced: every
@@ -11,9 +16,7 @@ code. Re-run after editing the score:
 
 	tools/generate_mod.py [--mod out.mod]
 
---mod also writes the raw .mod, which any tracker (ProTracker,
-MilkyTracker, OpenMPT) will open if the score wants editing by
-ear instead of by list.
+--mod writes an extra copy somewhere else, for inspection.
 """
 import argparse
 import base64
@@ -23,6 +26,7 @@ import random
 import struct
 
 OUT_JS = 'games/beltbreaker/music-data.js'
+OUT_MOD = 'games/beltbreaker/music/belt-breaker.mod'
 
 NOTES = [
 	'C-', 'C#', 'D-', 'D#', 'E-', 'F-',
@@ -316,7 +320,7 @@ def main():
 	ap = argparse.ArgumentParser(
 		description='Generate Belt Breaker music data.')
 	ap.add_argument(
-		'--mod', help='also write the raw .mod here')
+		'--mod', help='write an extra copy here too')
 	args = ap.parse_args()
 
 	samples = build_samples()
@@ -325,10 +329,12 @@ def main():
 		'belt breaker', samples, patterns,
 		list(range(len(patterns))))
 	write_js(OUT_JS, blob)
-	if args.mod:
-		with open(args.mod, 'wb') as fh:
+	os.makedirs(os.path.dirname(OUT_MOD), exist_ok=True)
+	for path in filter(None, [OUT_MOD, args.mod]):
+		with open(path, 'wb') as fh:
 			fh.write(blob)
-	print(f'{OUT_JS}: {len(blob)} bytes of module')
+	print(f'{OUT_MOD}: {len(blob)} bytes of module')
+	print(f'{OUT_JS}: same bytes, base64 fallback')
 
 
 if __name__ == '__main__':

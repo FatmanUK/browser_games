@@ -5,8 +5,13 @@
 
 import { ROCK_R } from './rocks.js'
 
+// Matches the Dash window exactly (games/racer/game.js builds
+// 960x400 out of its viewport constants). Several things are
+// keyed to the height rather than assuming a tall field: where
+// the guardian hangs, and how far the wormhole lets the ship
+// stray before it would fly off the top of the screen.
 export const W = 960
-export const H = 620
+export const H = 400
 
 export const SHIP = {
 	turn: 3.5, thrust: 310, drag: 0.5, max: 400,
@@ -30,14 +35,17 @@ export const KINDS = {
 // finally breaks: [what, how often]. Silver is the common one
 // and drops nothing; gold pays; red arms you.
 //
-// The odds matter more than they look. A large red splits into
-// three, and each of those into three again, so a single rock
-// ends as nine fragments — at a certainty every one of them
-// would drop a pod and the gun would be maxed before the first
-// belt was clear.
+// The odds matter more than they look, and they pull in
+// opposite directions. Gold wants to drop often: coins are
+// what make it worth flying out to meet a rock instead of
+// parking in the middle and turning on the spot. Red wants to
+// drop rarely: a large red splits into three and each of those
+// into three again, so nine fragments come off one rock, and
+// at any generous rate the gun maxes out before the first belt
+// is clear.
 export const DROPS = {
 	silver: null,
-	gold: ['cash', 0.5],
+	gold: ['cash', 0.92],
 	red: ['upgrade', 0.26],
 }
 

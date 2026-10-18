@@ -7,12 +7,15 @@
 // game loop is busy — the cost is a one-off render (about a
 // tenth of a second for this module) and the memory to hold it.
 //
-// Effects are the ones Belt Breaker's own module uses or might
-// reasonably grow into: Cxx set volume, Fxx speed/tempo, Axy
-// volume slide, Dxx pattern break, Bxx position jump. Anything
-// else is ignored rather than mis-played.
+// Effect handling lives in modfx.js — see there for which of
+// ProTracker's effects are supported. Hand-written PT2 modules
+// use most of them, so the set is not the bare minimum this
+// game's own generated module needs.
 
-const AMIGA = 7093789.2
+import {
+	resetChannel, rowEffect, tickEffect, setPeriod,
+} from './modfx.js'
+
 const ROWS = 64
 const CHANNELS = 4
 const HEADER = 1084
@@ -34,8 +37,14 @@ function readSamples(b) {
 	const out = []
 	for (let i = 0; i < 31; i++) {
 		const at = 20 + i * 30
+		const raw = b[at + 24] & 0x0f
+		const fine = raw > 7 ? raw - 16 : raw
 		out.push({
 			length: be16(b, at + 22) * 2,
+			// Finetune is a signed nibble of eighths of
+			// a semitone; scaling the period is close
+			// enough to ProTracker's own table.
+			tune: Math.pow(2, -fine / 96),
 			volume: b[at + 25],
 			repeat: be16(b, at + 26) * 2,
 			repLen: be16(b, at + 28) * 2,
@@ -70,6 +79,18 @@ function readPatterns(b, count) {
 	return pats
 }
 
+const TAGS = ['M.K.', 'M!K!', 'FLT4', '4CHN']
+
+// Four-channel, 31-sample modules only — which is what
+// ProTracker 2 writes. A 6- or 8-channel module from another
+// tracker would parse as garbage, so say so instead.
+export function isSupported(b) {
+	if (!b || b.length < HEADER) return false
+	const tag = String.fromCharCode(
+		b[1080], b[1081], b[1082], b[1083])
+	return TAGS.includes(tag)
+}
+
 export function parseMod(b) {
 	const samples = readSamples(b)
 	const songLen = b[950]
@@ -88,63 +109,65 @@ export function parseMod(b) {
 function newState(mod) {
 	const chans = []
 	for (let i = 0; i < CHANNELS; i++) {
-		chans.push({
+		const ch = {
 			data: null, pos: 0, step: 0, vol: 0,
-			loopAt: 0, loopLen: 0, on: false, slide: 0,
-		})
+			period: 0, loopAt: 0, loopLen: 0,
+			end: 0, on: false,
+		}
+		resetChannel(ch)
+		chans.push(ch)
 	}
 	return {
 		chans, pos: 0, row: 0, speed: 6, bpm: 125,
-		jump: -1, breakTo: -1, done: false,
+		jump: -1, breakTo: -1, rowDelay: 0, done: false,
 	}
 }
 
-function trigger(ch, s, period, rate) {
-	if (period > 0) {
-		ch.step = AMIGA / (period * 2) / rate
-		ch.pos = 0
-		ch.on = s.length > 0
-	}
+function loadSample(ch, s) {
 	ch.data = s.data
 	ch.vol = s.volume
 	ch.loopAt = s.repeat
 	ch.loopLen = s.repLen > 2 ? s.repLen : 0
 	ch.end = s.length
+	ch.sample = s
 }
 
-function applyEffect(st, ch, cell) {
-	ch.slide = 0
-	if (cell.effect === 0x0c) ch.vol = Math.min(64, cell.param)
-	else if (cell.effect === 0x0a) {
-		const up = cell.param >> 4
-		ch.slide = up > 0 ? up : -(cell.param & 0x0f)
-	} else if (cell.effect === 0x0f) {
-		if (cell.param < 32) st.speed = cell.param || 1
-		else st.bpm = cell.param
-	} else if (cell.effect === 0x0d) {
-		st.breakTo = (cell.param >> 4) * 10 +
-			(cell.param & 0x0f)
-	} else if (cell.effect === 0x0b) {
-		st.jump = cell.param
+// 3xx and 5xx slide towards the written note instead of
+// jumping to it, so on those rows the note sets a target and
+// the channel is left where it is.
+function startNote(ch, cell, rate, porta) {
+	const base = cell.period * (ch.sample
+		? ch.sample.tune : 1)
+	if (porta) {
+		ch.target = base
+		return
 	}
+	ch.target = base
+	setPeriod(ch, base, rate)
+	ch.pos = cell.effect === 0x09
+		? Math.min(ch.end, cell.param * 256)
+		: 0
+	ch.on = ch.end > 0
+	ch.vibPos = 0
+	ch.tremPos = 0
 }
 
 function startRow(mod, st, rate) {
 	const pat = mod.patterns[mod.order[st.pos]]
 	const row = pat[st.row]
+	st.rowDelay = 0
 	for (let c = 0; c < CHANNELS; c++) {
 		const cell = row[c]
 		const ch = st.chans[c]
 		if (cell.sample > 0) {
-			trigger(
-				ch, mod.samples[cell.sample - 1],
-				cell.period, rate)
-		} else if (cell.period > 0 && ch.data) {
-			ch.step = AMIGA / (cell.period * 2) / rate
-			ch.pos = 0
-			ch.on = true
+			loadSample(ch, mod.samples[cell.sample - 1])
 		}
-		applyEffect(st, ch, cell)
+		rowEffect(st, ch, cell, rate)
+		const porta = cell.effect === 0x03 ||
+			cell.effect === 0x05
+		if (cell.period > 0) {
+			startNote(ch, cell, rate, porta)
+		}
 	}
 }
 
@@ -165,8 +188,10 @@ function mixFrame(st, left, right, at) {
 	for (let c = 0; c < CHANNELS; c++) {
 		const ch = st.chans[c]
 		if (!ch.on || !ch.data) continue
+		const vol = Math.max(0, Math.min(
+			64, ch.vol + ch.tremVol))
 		const v = (ch.data[ch.pos | 0] / 128) *
-			(ch.vol / 64) * 0.26
+			(vol / 64) * 0.26
 		// ProTracker hard-pans 1 and 4 left, 2 and 3
 		// right; softened here so headphones are bearable.
 		const wide = c === 0 || c === 3
@@ -186,19 +211,17 @@ function mixFrame(st, left, right, at) {
 	right[at] = r
 }
 
-function slideTick(st) {
-	for (const ch of st.chans) {
-		if (!ch.slide) continue
-		ch.vol = Math.max(
-			0, Math.min(64, ch.vol + ch.slide))
-	}
-}
-
 function mixRow(st, left, right, at, rate) {
-	const tick = Math.round((2.5 / st.bpm) * rate)
-	for (let t = 0; t < st.speed; t++) {
-		if (t > 0) slideTick(st)
-		for (let i = 0; i < tick; i++) {
+	const frames = Math.round((2.5 / st.bpm) * rate)
+	// EEx holds the row for extra ticks before moving on.
+	const ticks = st.speed * (1 + st.rowDelay)
+	for (let t = 0; t < ticks; t++) {
+		if (t > 0) {
+			for (const ch of st.chans) {
+				tickEffect(ch, t, rate)
+			}
+		}
+		for (let i = 0; i < frames; i++) {
 			mixFrame(st, left, right, at)
 			at++
 		}

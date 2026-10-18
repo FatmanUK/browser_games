@@ -11,82 +11,56 @@
 // drawn. It is all still baked once into sprites; nothing here
 // runs during play.
 
-const T = (1 + Math.sqrt(5)) / 2
-
-const ICO_VERTS = [
-	[-1, T, 0], [1, T, 0], [-1, -T, 0], [1, -T, 0],
-	[0, -1, T], [0, 1, T], [0, -1, -T], [0, 1, -T],
-	[T, 0, -1], [T, 0, 1], [-T, 0, -1], [-T, 0, 1],
-]
-
-const ICO_FACES = [
-	[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10],
-	[0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2],
-	[10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2],
-	[3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5],
-	[2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
-]
-
 function unit(v) {
 	const d = Math.hypot(v[0], v[1], v[2]) || 1
 	return [v[0] / d, v[1] / d, v[2] / d]
 }
 
-function midpoint(verts, cache, a, b) {
-	const key = a < b ? `${a},${b}` : `${b},${a}`
-	if (cache.has(key)) return cache.get(key)
-	const p = unit([
-		(verts[a][0] + verts[b][0]) / 2,
-		(verts[a][1] + verts[b][1]) / 2,
-		(verts[a][2] + verts[b][2]) / 2,
+function cross(a, b) {
+	return [
+		a[1] * b[2] - a[2] * b[1],
+		a[2] * b[0] - a[0] * b[2],
+		a[0] * b[1] - a[1] * b[0],
+	]
+}
+
+// Two axes across a plane, for laying out its face.
+function basis(n) {
+	const t = Math.abs(n[0]) < 0.8 ? [1, 0, 0] : [0, 1, 0]
+	const u = unit(cross(t, n))
+	return [u, cross(n, u)]
+}
+
+function planeSquare(n, d, size) {
+	const [u, v] = basis(n)
+	const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]]
+	return corners.map(([a, b]) => [
+		n[0] * d + (u[0] * a + v[0] * b) * size,
+		n[1] * d + (u[1] * a + v[1] * b) * size,
+		n[2] * d + (u[2] * a + v[2] * b) * size,
 	])
-	verts.push(p)
-	cache.set(key, verts.length - 1)
-	return verts.length - 1
 }
 
-export function icosphere(subdiv) {
-	const verts = ICO_VERTS.map(unit)
-	let faces = ICO_FACES.map((f) => f.slice())
-	for (let s = 0; s < subdiv; s++) {
-		const cache = new Map()
-		const next = []
-		for (const [a, b, c] of faces) {
-			const ab = midpoint(verts, cache, a, b)
-			const bc = midpoint(verts, cache, b, c)
-			const ca = midpoint(verts, cache, c, a)
-			next.push(
-				[a, ab, ca], [b, bc, ab],
-				[c, ca, bc], [ab, bc, ca])
-		}
-		faces = next
+// Sutherland-Hodgman against one half-space.
+function clipPoly(poly, n, d) {
+	const out = []
+	for (let i = 0; i < poly.length; i++) {
+		const a = poly[i]
+		const b = poly[(i + 1) % poly.length]
+		const da = a[0] * n[0] + a[1] * n[1] +
+			a[2] * n[2] - d
+		const db = b[0] * n[0] + b[1] * n[1] +
+			b[2] * n[2] - d
+		if (da <= 0) out.push(a)
+		if ((da > 0) === (db > 0)) continue
+		const t = da / (da - db)
+		out.push([
+			a[0] + (b[0] - a[0]) * t,
+			a[1] + (b[1] - a[1]) * t,
+			a[2] + (b[2] - a[2]) * t,
+		])
 	}
-	return { verts, faces }
-}
-
-// Coherent lumpiness: a sum of 3D sinusoids, so neighbouring
-// vertices move together and the result is a boulder rather
-// than the sea urchin that per-vertex noise would give.
-export function lumpy(verts, rand, strength) {
-	const waves = []
-	for (let i = 0; i < 5; i++) {
-		const axis = () => (rand() - 0.5) * 7
-		waves.push({
-			k: [axis(), axis(), axis()],
-			amp: strength / (1 + i * 0.75),
-			ph: rand() * Math.PI * 2,
-		})
-	}
-	return verts.map((v) => {
-		let r = 1
-		for (const w of waves) {
-			const k = w.k
-			const d = v[0] * k[0] + v[1] * k[1] +
-				v[2] * k[2]
-			r += w.amp * Math.sin(d + w.ph)
-		}
-		return [v[0] * r, v[1] * r, v[2] * r]
-	})
+	return out
 }
 
 // Spin about the body's own axis, then a fixed tilt, so a rock
@@ -112,23 +86,76 @@ export function makeRotate(tiltX, tiltZ, spin) {
 	}
 }
 
-export function faceNormal(a, b, c) {
-	const ux = b[0] - a[0]
-	const uy = b[1] - a[1]
-	const uz = b[2] - a[2]
-	const vx = c[0] - a[0]
-	const vy = c[1] - a[1]
-	const vz = c[2] - a[2]
-	const n = unit([
-		uy * vz - uz * vy,
-		uz * vx - ux * vz,
-		ux * vy - uy * vx,
-	])
-	// The mesh is grown outward from a sphere, so the
-	// outward normal is the one pointing away from the
-	// origin; flip any face whose winding disagrees.
-	const dot = n[0] * a[0] + n[1] * a[1] + n[2] * a[2]
-	return dot < 0 ? [-n[0], -n[1], -n[2]] : n
+// Plane normals spread evenly over the sphere by the golden
+// angle, then jittered: even spacing is what keeps the solid
+// "fairly regular" — equidimensional, no spikes — while the
+// jitter and the varied cutting depths keep it from looking
+// like a manufactured gem.
+function planeSet(rand, count, rough) {
+	const out = []
+	for (let i = 0; i < count; i++) {
+		const y = 1 - (2 * i + 1) / count
+		const r = Math.sqrt(Math.max(0, 1 - y * y))
+		const th = i * 2.399963 + rand() * 0.6
+		const wob = () => (rand() - 0.5) * 0.3
+		out.push({
+			n: unit([
+				Math.cos(th) * r + wob(),
+				y + wob(),
+				Math.sin(th) * r + wob(),
+			]),
+			d: 1 - rough * rand(),
+		})
+	}
+	return out
+}
+
+// A rock as a convex solid cut by planes, rather than as a
+// displaced sphere. Two reasons. Sharpness: a plane's face is
+// exactly flat and meets its neighbour on a hard edge, where
+// displaced triangles only ever approximate one. Cost: this
+// comes out as a dozen-odd polygons instead of hundreds of
+// triangles, which is what makes it affordable to bake enough
+// tumble frames for the rotation to look smooth.
+// Squashing the finished solid along its own axes is what
+// stops a set of rocks all reading as the same die rolled to a
+// different face. Normals have to be divided by the scale, not
+// multiplied: scaling a surface tilts its normal the other way.
+function squash(faces, rand) {
+	const s = [
+		0.82 + rand() * 0.36,
+		0.82 + rand() * 0.36,
+		0.82 + rand() * 0.36,
+	]
+	for (const f of faces) {
+		f.poly = f.poly.map((p) => [
+			p[0] * s[0], p[1] * s[1], p[2] * s[2],
+		])
+		f.n = unit([
+			f.n[0] / s[0], f.n[1] / s[1], f.n[2] / s[2],
+		])
+	}
+	return faces
+}
+
+export function crystal(rand, count, rough) {
+	const planes = planeSet(rand, count, rough)
+	const faces = []
+	for (const p of planes) {
+		let poly = planeSquare(p.n, p.d, 3)
+		for (const q of planes) {
+			if (q === p) continue
+			poly = clipPoly(poly, q.n, q.d)
+			if (poly.length < 3) break
+		}
+		if (poly.length < 3) continue
+		faces.push({
+			n: p.n, poly,
+			mul: 0.86 + rand() * 0.3,
+			glint: rand() < 0.16,
+		})
+	}
+	return squash(faces, rand)
 }
 
 // Key light up and to the left (the same direction art.js

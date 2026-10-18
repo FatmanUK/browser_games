@@ -9,7 +9,7 @@
 // which is what makes the zoom read as depth rather than as
 // things merely growing.
 
-import { KINDS, addScore } from './common.js'
+import { W, H, KINDS, addScore } from './common.js'
 
 export const FOCAL = 420
 export const Z_FAR = 1500
@@ -20,6 +20,15 @@ const ACC = 460
 const MAX_V = 200
 const DRAG = 3.6
 const SHOT_V = 1500
+
+// How far the ship may stray, in tunnel units, before it would
+// leave the screen. The field is much wider than it is tall, so
+// this is an ellipse rather than the tunnel's own circle —
+// clamping to a circle would let the ship fly off the top.
+const SCALE = FOCAL / Z_SHIP
+export const LIM_X = (W / 2 - 34) / SCALE
+export const LIM_Y = (H / 2 - 30) / SCALE
+const ASPECT = LIM_Y / LIM_X
 
 export function project(o, cx, cy) {
 	const s = FOCAL / o.z
@@ -60,6 +69,15 @@ export function radial(r) {
 	return { ox: Math.cos(a) * d, oy: Math.sin(a) * d }
 }
 
+// Traffic spreads to the ellipse the ship flies in, stretched
+// a little vertically so some still passes over and under
+// rather than every rock arriving on the same line. The wall
+// streaks keep the circle — that is the tube itself.
+function spawnSpot() {
+	const at = radial(LIM_X * 0.96)
+	return { ox: at.ox, oy: at.oy * ASPECT * 1.55 }
+}
+
 function tburst(tn, o, count, scale) {
 	for (let i = 0; i < count; i++) {
 		const a = Math.random() * Math.PI * 2
@@ -84,7 +102,7 @@ function kindFor(level) {
 
 function spawnObj(state) {
 	const tn = state.tunnel
-	const at = radial(TR * 0.86)
+	const at = spawnSpot()
 	if (Math.random() < 0.26 + state.level * 0.02) {
 		tn.objs.push({
 			drone: true, ox: at.ox, oy: at.oy,
@@ -120,11 +138,10 @@ function steer(tn, keys, dt) {
 	tn.vy = Math.max(-MAX_V, Math.min(MAX_V, tn.vy))
 	tn.tx += tn.vx * dt
 	tn.ty += tn.vy * dt
-	const d = Math.hypot(tn.tx, tn.ty)
-	const lim = TR * 0.84
-	if (d > lim) {
-		tn.tx *= lim / d
-		tn.ty *= lim / d
+	const d = Math.hypot(tn.tx / LIM_X, tn.ty / LIM_Y)
+	if (d > 1) {
+		tn.tx /= d
+		tn.ty /= d
 	}
 	tn.bank += (tn.vx / MAX_V * 0.5 - tn.bank) * dt * 6
 }

@@ -15,6 +15,9 @@ import {
 } from './belt.js'
 
 const HULL_R = BOSS_R * 0.92
+// Where it settles: high enough to leave the player room on a
+// short field, low enough that its guns reach.
+const REST_Y = 112
 const CORE_R = BOSS_R * 0.32
 const MODES = 3
 
@@ -35,9 +38,8 @@ function moveBoss(b, dt, level) {
 	b.t += dt
 	b.core += dt * 5
 	b.flash = Math.max(0, b.flash - dt * 5)
-	const restY = 150
-	if (b.y < restY) {
-		b.y = Math.min(restY, b.y + 90 * dt)
+	if (b.y < REST_Y) {
+		b.y = Math.min(REST_Y, b.y + 90 * dt)
 		return
 	}
 	b.x += b.vx * dt
@@ -49,7 +51,7 @@ function moveBoss(b, dt, level) {
 		b.x = W - pad
 		b.vx = -Math.abs(b.vx)
 	}
-	b.y = restY + Math.sin(b.t * 1.3) * 26
+	b.y = REST_Y + Math.sin(b.t * 1.3) * 20
 	// Winds up over the fight, but to a ceiling: an
 	// unbounded ramp eventually tunnels through the walls.
 	if (Math.abs(b.vx) < 230) {
@@ -91,7 +93,7 @@ function spit(state, fx) {
 
 function attack(state, dt, fx) {
 	const b = state.boss
-	if (b.y < 140) return
+	if (b.y < REST_Y - 10) return
 	b.timer -= dt
 	if (b.timer > 0) return
 	const rage = b.hp / b.max < 0.4 ? 0.65 : 1

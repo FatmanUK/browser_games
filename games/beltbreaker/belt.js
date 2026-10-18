@@ -13,11 +13,26 @@ import {
 // belt is slower to chew through and faster to get hit by.
 function pickKind(level) {
 	const roll = Math.random()
-	const gold = 0.13 + Math.min(0.2, level * 0.03)
-	const red = 0.08 + Math.min(0.26, level * 0.05)
+	const gold = 0.16 + Math.min(0.2, level * 0.03)
+	const red = 0.14 + Math.min(0.22, level * 0.04)
 	if (roll < red) return 'red'
 	if (roll < red + gold) return 'gold'
 	return 'silver'
+}
+
+// Rolling every rock independently is how a belt ends up all
+// silver: at level 1 that was four rolls at about one in seven
+// for red, so most first levels had no red rock in them at all
+// and no upgrade to be had. One of each is seeded by hand and
+// the rest are rolled.
+function kindPlan(level, n) {
+	const plan = ['red', 'gold']
+	while (plan.length < n) plan.push(pickKind(level))
+	for (let i = plan.length - 1; i > 0; i--) {
+		const j = Math.floor(Math.random() * (i + 1))
+		;[plan[i], plan[j]] = [plan[j], plan[i]]
+	}
+	return plan
 }
 
 export function makeRock(level, kind, size, x, y) {
@@ -49,12 +64,10 @@ function safeSpot(ship) {
 export function spawnBelt(state) {
 	const n = 3 + Math.min(9, state.level)
 	state.rocks = []
-	for (let i = 0; i < n; i++) {
+	for (const kind of kindPlan(state.level, n)) {
 		const { x, y } = safeSpot(state.ship)
 		state.rocks.push(
-			makeRock(
-				state.level, pickKind(state.level),
-				2, x, y))
+			makeRock(state.level, kind, 2, x, y))
 	}
 }
 

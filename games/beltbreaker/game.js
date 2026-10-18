@@ -7,7 +7,7 @@
 // sprites.js owns the art and audio.js owns the sound.
 
 import { loadNumber, saveNumber } from '../_shared/storage.js'
-import { buildWindow, createHud, updateHud } from './hud.js'
+import { buildWindow } from './hud.js'
 import { setupSound } from './audio.js'
 import { getAtlas } from './sprites.js'
 import { newGame, updateWorld } from './world.js'
@@ -49,7 +49,7 @@ function createInput(ref, fx) {
 	return { onKeyDown, onKeyUp, onBlur }
 }
 
-function createRuntime(ctx, hud, best, fx) {
+function createRuntime(ctx, best, fx) {
 	const ref = { state: newGame() }
 	const atlas = getAtlas()
 	let handle = null
@@ -64,8 +64,7 @@ function createRuntime(ctx, hud, best, fx) {
 			best.value = ref.state.score
 			saveNumber(BEST_KEY, best.value)
 		}
-		draw(ctx, atlas, ref.state)
-		updateHud(hud, ref.state, best)
+		draw(ctx, atlas, ref.state, best)
 		handle = requestAnimationFrame(frame)
 	}
 
@@ -99,17 +98,15 @@ export default {
 
 	init(container, controls) {
 		let runtime = null
-		const { canvas, controlsRow, statsRow } =
-			buildWindow(
-				container, this.title, controls,
-				() => runtime.start())
+		const { canvas, controlsRow } = buildWindow(
+			container, this.title, controls,
+			() => runtime.start())
 
-		const hud = createHud(statsRow)
 		const fx = setupSound(controlsRow)
 		const best = { value: loadNumber(BEST_KEY, 0) }
 
 		runtime = createRuntime(
-			canvas.getContext('2d'), hud, best, fx)
+			canvas.getContext('2d'), best, fx)
 
 		canvas.addEventListener('keydown', runtime.onKeyDown)
 		canvas.addEventListener('keyup', runtime.onKeyUp)
