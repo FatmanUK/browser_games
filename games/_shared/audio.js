@@ -132,6 +132,11 @@ export function createAudio(melody, noteMs = 220) {
 		// click) to start the AudioContext inside that
 		// gesture — see the file header.
 		unlock: () => ensureContext(state),
+		// Lets a game whose music this engine can't
+		// express as a melody (a tracker module, a
+		// recorded track) mix into that same context
+		// instead of opening a second one.
+		context: () => ensureContext(state),
 		tone: (freq, duration, type, volume) =>
 			playSfx(state, freq, duration, type, volume),
 		toneSequence: (notes, type, volume, gapMs) =>

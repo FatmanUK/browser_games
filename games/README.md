@@ -66,6 +66,13 @@ games should too, for a consistent look:
   remember to re-export `unlock` (and anything else you need) from
   your own `setupSound()` wrapper — it isn't on `createAudio()`'s
   return value by accident, it has to be forwarded explicitly.
+  If your game's music is something this engine can't express as
+  a melody of frequencies — a tracker module, a recorded track —
+  `context()` hands you the same AudioContext to mix into rather
+  than opening a second one, and the toggles will take a façade
+  object in place of the engine (same four `is*On`/`set*On`
+  members) if Music should drive your player instead of the
+  melody loop. `games/beltbreaker/audio.js` does both.
 
 ## Steps
 

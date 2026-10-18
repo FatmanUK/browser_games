@@ -81,6 +81,19 @@ per browser) and has its own "New game" button next to its title.
   only hit one by running wide. Each generated track keeps its
   own best-lap time. Arrow keys / WASD to drive; the lap counter
   never decreases. Has its own "Sound"/"Music" toggles.
+- **Belt Breaker** — an Asteroids-style rock shoot with a
+  pre-rendered, fake-3D look. Each level is three phases: clear a
+  belt of silver, gold and red rocks (gold is armoured, red is
+  fast and bursts into three), fly a zooming wormhole dodging
+  rocks and drones, then fight the level guardian. Arrows/WASD to
+  fly, space to fire, shift for hyperspace; title, buttons and
+  meters overlay the canvas as in Dash. Its sprites are baked to
+  offscreen canvases on first play (`games/beltbreaker/
+  sprites.js`), its sound effects are rendered waveforms
+  (`samples.js`) and its music is a ProTracker 2 module built by
+  `tools/generate_mod.py` into `games/beltbreaker/music-data.js`
+  and mixed by `modplayer.js` — rerun that tool after editing the
+  score. Has its own "Sound"/"Music" toggles.
 
 ## Adding a game
 
@@ -92,6 +105,7 @@ See [games/README.md](games/README.md).
 Containerfile           image for the container (make pod-build)
 tools/dev_server.py     static server: local dev and the container
 tools/generate_track.py generates games/racer/track-data.js
+tools/generate_mod.py   generates games/beltbreaker/music-data.js
 index.html              launcher page (game-select grid + viewport)
 css/style.css           styling
 js/app.js               launcher logic: render grid, mount/unmount
@@ -107,5 +121,11 @@ games/pacman/           Maze Muncher (+ audio.js, same pattern)
 games/racer/            Dash (+ audio.js, same pattern; track
                         -data.js is generated, see tools/
                         generate_track.py)
+games/beltbreaker/      Belt Breaker (art.js/rocks.js/craft.js/
+                        sprites.js pre-render the art; common.js
+                        /belt.js/tunnel.js/boss.js/world.js the
+                        rules; render*.js the drawing; audio.js
+                        + samples.js + music.js + modplayer.js
+                        the sound, over generated music-data.js)
 games/_template/        copy-paste starting point for a new game
 ```

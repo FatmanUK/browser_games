@@ -1,43 +1,31 @@
-// Belt Breaker's own sound palette, built on the shared engine
-// in games/_shared/audio.js. Every game-specific audio choice
-// lives here; the game code only ever calls the named effects.
+// Belt Breaker's own sound palette. Every game-specific audio
+// choice lives here; the game code only ever calls the named
+// effects.
 //
-// The effects are tables rather than a wall of closures so the
-// whole palette can be read (and retuned) at a glance.
+// Two sources feed it. The percussive effects — shots, breaks,
+// explosions — are rendered waveforms from samples.js, fired as
+// one-shots, because oscillator tones can't make noise or a
+// filtered blast. The jingles stay tone sequences on the shared
+// engine, which is what that engine is good at. Music is a
+// ProTracker module (music.js), so the Music toggle is wired to
+// that rather than to the engine's melody loop.
 
 import {
 	createAudio, createAudioToggles,
 } from '../_shared/audio.js'
+import { buildSfx } from './samples.js'
+import { createMusic } from './music.js'
 
-// The shared engine wants a melody to loop; Belt Breaker's
-// music comes from a tracker module instead, so this single
-// rest is never heard.
+// The shared engine wants a melody to loop; this game's music
+// comes from the tracker module instead, so this single rest is
+// never heard.
 const SILENT = [null]
-
-// name: [freq, seconds, waveform, volume]
-const HITS = {
-	shoot: [760, 0.06, 'square', 0.04],
-	foeShoot: [300, 0.1, 'sawtooth', 0.04],
-	rockClang: [1250, 0.05, 'square', 0.03],
-	bossFire: [210, 0.14, 'sawtooth', 0.05],
-	bossSpit: [130, 0.2, 'triangle', 0.06],
-	bossCore: [1600, 0.07, 'square', 0.05],
-	bossHit: [90, 0.22, 'sawtooth', 0.07],
-}
 
 // name: [notes, waveform, volume, gap in ms]
 const SEQS = {
-	shipDie: [
-		[[300, 0.2], [190, 0.26], [95, 0.4]],
-		'sawtooth', 0.09, 110,
-	],
 	extraLife: [
 		[[523, 0.1], [659, 0.1], [880, 0.2]],
 		'square', 0.06, 90,
-	],
-	warp: [
-		[[180, 0.08], [420, 0.08], [980, 0.12]],
-		'triangle', 0.06, 50,
 	],
 	warpIn: [
 		[[120, 0.3], [240, 0.3], [480, 0.45]],
@@ -51,35 +39,51 @@ const SEQS = {
 		[[392, 0.12], [523, 0.12], [659, 0.3]],
 		'triangle', 0.07, 110,
 	],
-	foeDie: [
-		[[420, 0.1], [260, 0.16]], 'sawtooth', 0.06, 70,
-	],
-	bossDie: [
-		[[160, 0.3], [120, 0.35], [80, 0.5], [60, 0.7]],
-		'sawtooth', 0.1, 190,
-	],
 	gameOver: [
 		[[330, 0.3], [262, 0.3], [196, 0.4], [131, 0.7]],
 		'triangle', 0.09, 230,
 	],
 }
 
-// Bigger rocks break lower: the pitch of the sequence is the
-// only cue the player gets about what just split.
-function breakNotes(size) {
-	const base = [150, 220, 320][size]
-	return [
-		[base, 0.14], [base * 0.7, 0.18],
-		[base * 0.5, 0.22],
-	]
+// name: [sample in the bank, gain]
+const ONESHOTS = {
+	shoot: ['shoot', 0.3],
+	foeShoot: ['foeShoot', 0.3],
+	rockClang: ['clang', 0.4],
+	foeDie: ['foeDie', 0.5],
+	shipDie: ['shipDie', 0.65],
+	bossFire: ['bossFire', 0.4],
+	bossSpit: ['bossSpit', 0.45],
+	bossCore: ['bossCore', 0.4],
+	bossHit: ['bossHit', 0.5],
+	bossDie: ['bossDie', 0.8],
+	warp: ['warp', 0.45],
 }
 
-function bindHits(audio) {
-	const out = {}
-	for (const [name, a] of Object.entries(HITS)) {
-		out[name] = () =>
-			audio.tone(a[0], a[1], a[2], a[3])
+// The bank is built on first use, not at setup: building it
+// needs a live AudioContext, and the context may not legally
+// start until the player's first keypress.
+function createBank(audio) {
+	let sfx = null
+
+	function fire(name, gain) {
+		if (!audio.isSoundOn()) return
+		const ctx = audio.context()
+		if (!sfx) sfx = buildSfx(ctx)
+		const level = ctx.createGain()
+		level.gain.value = gain
+		level.connect(ctx.destination)
+		const src = ctx.createBufferSource()
+		src.buffer = sfx[name]
+		src.connect(level)
+		src.start()
 	}
+
+	const out = {}
+	for (const [name, a] of Object.entries(ONESHOTS)) {
+		out[name] = () => fire(a[0], a[1])
+	}
+	out.rockBreak = (size) => fire(`break${size}`, 0.55)
 	return out
 }
 
@@ -94,17 +98,24 @@ function bindSeqs(audio) {
 
 export function setupSound(side) {
 	const audio = createAudio(SILENT, 500)
-	createAudioToggles(side, audio)
+	const music = createMusic(audio.context)
+	// A façade, not the engine itself: Sound stays the
+	// engine's, Music belongs to the tracker player.
+	createAudioToggles(side, {
+		isSoundOn: audio.isSoundOn,
+		setSoundOn: audio.setSoundOn,
+		isMusicOn: music.isOn,
+		setMusicOn: music.setOn,
+	})
 	return {
-		...bindHits(audio),
+		...createBank(audio),
 		...bindSeqs(audio),
-		rockBreak: (size) =>
-			audio.toneSequence(
-				breakNotes(size), 'sawtooth',
-				0.07, 45),
 		// Forwarded explicitly: see games/README.md on the
 		// AudioContext unlock gotcha.
 		unlock: audio.unlock,
-		stop: audio.stop,
+		stop() {
+			music.stop()
+			audio.stop()
+		},
 	}
 }
