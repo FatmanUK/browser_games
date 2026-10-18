@@ -332,3 +332,98 @@ export function buildShield() {
 	ctx.fill()
 	return canvas
 }
+
+const COIN_FRAMES = 10
+export const COIN_R = 9
+export const POD_R = 11
+
+function coinFace(ctx, r, squash) {
+	const g = ctx.createLinearGradient(0, -r, 0, r)
+	g.addColorStop(0, '#fff3c4')
+	g.addColorStop(0.35, '#f0c23c')
+	g.addColorStop(0.62, '#a9761a')
+	g.addColorStop(1, '#f7dc87')
+	ctx.save()
+	ctx.scale(Math.max(0.06, squash), 1)
+	ctx.fillStyle = g
+	ctx.beginPath()
+	ctx.arc(0, 0, r, 0, Math.PI * 2)
+	ctx.fill()
+	ctx.lineWidth = r * 0.16
+	ctx.strokeStyle = 'rgba(94,62,10,0.75)'
+	ctx.stroke()
+	ctx.restore()
+}
+
+// Spun by squashing the face rather than by drawing ten
+// separate coins: the edge-on frames are the cheap ones and
+// they are what sells the rotation.
+export function buildCoins() {
+	const span = COIN_R * 2 + 8
+	const frames = []
+	for (let i = 0; i < COIN_FRAMES; i++) {
+		const { canvas, ctx } = centred(span)
+		const a = (i / COIN_FRAMES) * Math.PI * 2
+		coinFace(ctx, COIN_R, Math.abs(Math.cos(a)))
+		glow(ctx, COIN_R * 1.7, 'rgba(255,220,120,0.22)',
+			'rgba(255,170,40,0.1)')
+		frames.push(canvas)
+	}
+	return frames
+}
+
+const POD_PAL = {
+	hi: '#ffe4e0', mid: '#c4443a', lo: '#53181a',
+	rim: '#1d0708',
+}
+
+function podShell(ctx, r) {
+	ctx.beginPath()
+	ctx.moveTo(-r * 0.85, -r * 0.5)
+	ctx.quadraticCurveTo(0, -r * 1.05, r * 0.85, -r * 0.5)
+	ctx.quadraticCurveTo(r * 1.1, 0, r * 0.85, r * 0.5)
+	ctx.quadraticCurveTo(0, r * 1.05, -r * 0.85, r * 0.5)
+	ctx.quadraticCurveTo(-r * 1.1, 0, -r * 0.85, -r * 0.5)
+	ctx.closePath()
+}
+
+function podChevrons(ctx, r) {
+	ctx.strokeStyle = 'rgba(255,240,220,0.85)'
+	ctx.lineWidth = r * 0.16
+	ctx.lineCap = 'round'
+	for (let i = 0; i < 2; i++) {
+		const y = r * (0.1 + i * 0.34)
+		ctx.beginPath()
+		ctx.moveTo(-r * 0.38, y)
+		ctx.lineTo(0, y - r * 0.34)
+		ctx.lineTo(r * 0.38, y)
+		ctx.stroke()
+	}
+}
+
+// A pulsing drop pod, so an upgrade reads as a thing to chase
+// rather than as one more piece of debris.
+export function buildPods() {
+	const span = POD_R * 3
+	const frames = []
+	for (let i = 0; i < 8; i++) {
+		const { canvas, ctx } = centred(span)
+		const k = 0.5 + 0.5 * Math.sin(
+			(i / 8) * Math.PI * 2)
+		glow(
+			ctx, POD_R * (1.5 + 0.5 * k),
+			`rgba(255,160,130,${0.2 + 0.25 * k})`,
+			'rgba(220,60,40,0.12)')
+		podShell(ctx, POD_R)
+		ctx.save()
+		ctx.clip()
+		ctx.fillStyle = bodyGradient(ctx, POD_R, POD_PAL)
+		ctx.fillRect(-span, -span, span * 2, span * 2)
+		ctx.restore()
+		podShell(ctx, POD_R)
+		limbStroke(ctx, POD_R, POD_PAL, 1.5)
+		podChevrons(ctx, POD_R)
+		frames.push(canvas)
+	}
+	return frames
+}

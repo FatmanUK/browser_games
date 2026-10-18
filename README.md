@@ -82,18 +82,27 @@ per browser) and has its own "New game" button next to its title.
   own best-lap time. Arrow keys / WASD to drive; the lap counter
   never decreases. Has its own "Sound"/"Music" toggles.
 - **Belt Breaker** — an Asteroids-style rock shoot with a
-  pre-rendered, fake-3D look. Each level is three phases: clear a
+  pre-rendered, fake-3D look. Three ships, a 3-2-1 countdown at
+  the start of each level, then three phases per level: clear a
   belt of silver, gold and red rocks (gold is armoured, red is
   fast and bursts into three), fly a zooming wormhole dodging
   rocks and drones, then fight the level guardian. Arrows/WASD to
   fly, space to fire, shift for hyperspace; title, buttons and
-  meters overlay the canvas as in Dash. Its sprites are baked to
-  offscreen canvases on first play (`games/beltbreaker/
-  sprites.js`), its sound effects are rendered waveforms
-  (`samples.js`) and its music is a ProTracker 2 module built by
-  `tools/generate_mod.py` into `games/beltbreaker/music-data.js`
-  and mixed by `modplayer.js` — rerun that tool after editing the
-  score. Has its own "Sound"/"Music" toggles.
+  meters overlay the canvas as in Dash. Break a rock all the way
+  down to its smallest fragment and it may leave something:
+  silver drops nothing, gold drops money (every 500 buys a
+  ship), red drops a gun upgrade (four levels, from the single
+  forward gun to a four-barrel spread — losing a ship costs one
+  level). The rocks are shaded as real geometry rather than
+  drawn: a subdivided, displaced icosahedron, flat-shaded facet
+  by facet against a fixed light (`mesh.js`), so silver and gold
+  read as metal and red as rough stone. All of the art bakes to
+  offscreen canvases on first play (`sprites.js`), the sound
+  effects are rendered waveforms (`samples.js`) and the music is
+  a ProTracker 2 module built by `tools/generate_mod.py` into
+  `games/beltbreaker/music-data.js` and mixed by `modplayer.js` —
+  rerun that tool after editing the score. Has its own
+  "Sound"/"Music" toggles.
 
 ## Adding a game
 
@@ -121,11 +130,12 @@ games/pacman/           Maze Muncher (+ audio.js, same pattern)
 games/racer/            Dash (+ audio.js, same pattern; track
                         -data.js is generated, see tools/
                         generate_track.py)
-games/beltbreaker/      Belt Breaker (art.js/rocks.js/craft.js/
-                        sprites.js pre-render the art; common.js
-                        /belt.js/tunnel.js/boss.js/world.js the
-                        rules; render*.js the drawing; audio.js
-                        + samples.js + music.js + modplayer.js
-                        the sound, over generated music-data.js)
+games/beltbreaker/      Belt Breaker (art.js/mesh.js/rocks.js/
+                        craft.js/sprites.js pre-render the art;
+                        common.js/belt.js/tunnel.js/boss.js/
+                        world.js the rules; render*.js the
+                        drawing; audio.js + samples.js +
+                        music.js + modplayer.js the sound, over
+                        generated music-data.js)
 games/_template/        copy-paste starting point for a new game
 ```

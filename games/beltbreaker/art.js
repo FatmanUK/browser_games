@@ -3,14 +3,18 @@
 // canvas once, at init, so the game loop only ever blits.
 //
 // The fake-3D look comes from one rule: geometry rotates, light
-// does not. A tumbling rock's silhouette and craters spin with
-// the frame angle, but the shading gradient and the specular
-// hotspot stay pinned to the top-left of the sprite, as if a
-// fixed sun were off-screen up and to the left. Rotating a
-// pre-lit sprite with ctx.rotate() instead would spin the
-// highlight with the body and read as flat.
+// does not. A hull's outline spins with the frame angle, but
+// the shading gradient and the specular hotspot stay pinned to
+// the top-left of the sprite, as if a fixed sun were off-screen
+// up and to the left. Rotating a pre-lit sprite with
+// ctx.rotate() instead would spin the highlight with the body
+// and read as flat.
+//
+// This is the cheap version, and it suits the built things —
+// the ship, the drones, the guardian. The rocks get the real
+// thing: see mesh.js.
 
-export const LIGHT = { x: -0.4, y: -0.45 }
+const LIGHT = { x: -0.4, y: -0.45 }
 
 // mulberry32: small seeded PRNG so each rock variety/size keeps
 // the same lumps and craters every run (pre-rendered art should
@@ -57,7 +61,7 @@ export function makeLumps(rand, count) {
 	return out
 }
 
-export function lumpRadius(lumps, th) {
+function lumpRadius(lumps, th) {
 	let r = 1
 	for (const l of lumps) {
 		r += l.amp * Math.sin(l.k * th + l.ph)
@@ -90,40 +94,6 @@ export function bodyGradient(ctx, r, pal) {
 	g.addColorStop(0.82, pal.lo)
 	g.addColorStop(1, pal.rim)
 	return g
-}
-
-export function makeCraters(rand, count) {
-	const out = []
-	for (let i = 0; i < count; i++) {
-		const th = rand() * Math.PI * 2
-		const d = 0.18 + rand() * 0.52
-		out.push({
-			x: Math.cos(th) * d,
-			y: Math.sin(th) * d,
-			r: 0.09 + rand() * 0.14,
-		})
-	}
-	return out
-}
-
-// A pit is lit on the wall *facing* the light, which is the one
-// opposite the light's direction — so the gradient's bright end
-// sits down-right of centre while the light sits up-left.
-export function drawCrater(ctx, c, r, pal) {
-	const cr = c.r * r
-	const cx = c.x * r
-	const cy = c.y * r
-	const g = ctx.createRadialGradient(
-		cx - LIGHT.x * cr * 0.7,
-		cy - LIGHT.y * cr * 0.7, cr * 0.05,
-		cx, cy, cr)
-	g.addColorStop(0, pal.mid)
-	g.addColorStop(0.5, pal.lo)
-	g.addColorStop(1, pal.rim)
-	ctx.fillStyle = g
-	ctx.beginPath()
-	ctx.arc(cx, cy, cr, 0, Math.PI * 2)
-	ctx.fill()
 }
 
 // Stroking one path with a gradient running along the light

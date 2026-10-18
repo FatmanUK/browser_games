@@ -59,12 +59,15 @@ export function createHud(statsRow) {
 		best: createStat(statsRow, 'Best'),
 		level: createStat(statsRow, 'Level'),
 		lives: createStat(statsRow, 'Ships'),
+		cash: createStat(statsRow, 'Cash'),
+		gun: createStat(statsRow, 'Guns'),
 		phase: createStat(statsRow, 'Phase'),
 	}
 }
 
 function phaseLabel(state) {
 	if (state.over) return 'Game over'
+	if (state.phase === 'ready') return 'Get ready'
 	if (state.phase === 'belt') {
 		return `Belt (${state.rocks.length} left)`
 	}
@@ -83,5 +86,7 @@ export function updateHud(hud, state, best) {
 	hud.best(best.value)
 	hud.level(state.level)
 	hud.lives(Math.max(0, state.lives))
+	hud.cash(state.cash)
+	hud.gun(state.gun)
 	hud.phase(phaseLabel(state))
 }

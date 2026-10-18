@@ -5,7 +5,8 @@
 import {
 	W, H, KINDS, SHIP, SHOT, rockRadius, wrap, near,
 	driveShip, fire, updateShots, burst, updateParts,
-	updateRespawn, killShip, addScore,
+	updateRespawn, killShip, addScore, spawnDrop,
+	updatePickups,
 } from './common.js'
 
 // Gold and red thin out the silver as levels climb, so a late
@@ -75,6 +76,10 @@ export function destroyRock(state, rock, fx) {
 		state, rock.x, rock.y, 8 + rock.size * 7,
 		0.6 + rock.size * 0.4)
 	splitRock(state, rock)
+	// Only the smallest fragment leaves anything behind, so
+	// the drop is the reward for finishing a rock off rather
+	// than for clipping it once.
+	if (rock.size === 0) spawnDrop(state, rock)
 	fx.rockBreak(rock.size, rock.kind)
 	const i = state.rocks.indexOf(rock)
 	if (i >= 0) state.rocks.splice(i, 1)
@@ -136,6 +141,8 @@ export function updateBelt(state, dt, fx) {
 	collideShots(state, fx)
 	collideShip(state, fx)
 	updateParts(state, dt)
+	updatePickups(state, dt, fx)
 	updateRespawn(state, dt)
-	return state.rocks.length === 0
+	return state.rocks.length === 0 &&
+		state.pickups.length === 0
 }

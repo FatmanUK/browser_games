@@ -10,6 +10,7 @@
 import { W, H } from './common.js'
 import { frameFor } from './rocks.js'
 import { SHIP_R } from './craft.js'
+import { PICKUP_LIFE } from './common.js'
 import { drawTunnel } from './render-tunnel.js'
 
 function spread(v, span, pad) {
@@ -64,6 +65,22 @@ export function drawParts(ctx, atlas, state, blitter) {
 	}
 	ctx.globalAlpha = 1
 	ctx.globalCompositeOperation = 'source-over'
+}
+
+// Drops blink out over their last couple of seconds, which is
+// the only warning the player gets that one is about to go.
+function drawPickups(ctx, atlas, state) {
+	for (const p of state.pickups) {
+		const left = PICKUP_LIFE - p.t
+		if (left < 2.5 &&
+			Math.floor(p.t * 7) % 2 === 0) continue
+		const frames = p.kind === 'cash'
+			? atlas.coins
+			: atlas.pods
+		const img = frames[
+			Math.floor(p.frame) % frames.length]
+		blit(ctx, img, p.x, p.y, 1)
+	}
 }
 
 function drawFlame(ctx, atlas, ship) {
@@ -160,7 +177,23 @@ function drawBanner(ctx, state) {
 	ctx.shadowColor = '#4ad6ff'
 	ctx.shadowBlur = 22
 	ctx.fillStyle = '#eaf6ff'
-	ctx.fillText(b.text, W / 2, H / 2 - 10)
+	ctx.fillText(b.text, W / 2, H / 2 - 52)
+	ctx.restore()
+}
+
+function drawReady(ctx, state) {
+	if (state.phase !== 'ready') return
+	const left = Math.ceil(state.ready)
+	const text = left > 0 ? String(left) : 'Go!'
+	const k = 1 - (state.ready - Math.floor(state.ready))
+	ctx.save()
+	ctx.textAlign = 'center'
+	ctx.font = 'bold 96px system-ui, sans-serif'
+	ctx.shadowColor = '#4ad6ff'
+	ctx.shadowBlur = 26
+	ctx.globalAlpha = 0.35 + 0.65 * (1 - k)
+	ctx.fillStyle = '#f2faff'
+	ctx.fillText(text, W / 2, H / 2 + 66)
 	ctx.restore()
 }
 
@@ -195,6 +228,7 @@ function drawField(ctx, atlas, state) {
 	ctx.drawImage(state.backdrop, 0, 0)
 	drawRocks(ctx, atlas, state)
 	if (state.phase === 'boss') drawBoss(ctx, atlas, state)
+	drawPickups(ctx, atlas, state)
 	drawShots(ctx, atlas, state)
 	drawShip(ctx, atlas, state)
 	drawParts(
@@ -213,5 +247,6 @@ export function draw(ctx, atlas, state) {
 	}
 	ctx.setTransform(1, 0, 0, 1, 0, 0)
 	drawBanner(ctx, state)
+	drawReady(ctx, state)
 	drawOver(ctx, state)
 }

@@ -7,7 +7,7 @@
 import {
 	W, SHIP, SHOT, near, driveShip, fire, updateShots,
 	burst, updateParts, updateRespawn, killShip, addScore,
-	foeShot,
+	foeShot, updatePickups,
 } from './common.js'
 import { BOSS_R } from './craft.js'
 import {
@@ -180,6 +180,7 @@ export function updateBoss(state, dt, fx) {
 	moveRocks(state, dt)
 	updateShots(state, dt)
 	updateParts(state, dt)
+	updatePickups(state, dt, fx)
 	updateRespawn(state, dt)
 	if (b.hp <= 0) {
 		state.shots = state.shots.filter((s) => !s.foe)

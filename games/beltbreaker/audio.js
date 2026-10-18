@@ -39,6 +39,15 @@ const SEQS = {
 		[[392, 0.12], [523, 0.12], [659, 0.3]],
 		'triangle', 0.07, 110,
 	],
+	countdown: [[[660, 0.12]], 'square', 0.07, 0],
+	go: [
+		[[880, 0.1], [1320, 0.22]], 'square', 0.07, 90,
+	],
+	upgrade: [
+		[[523, 0.08], [698, 0.08], [880, 0.08],
+			[1175, 0.2]],
+		'square', 0.07, 60,
+	],
 	gameOver: [
 		[[330, 0.3], [262, 0.3], [196, 0.4], [131, 0.7]],
 		'triangle', 0.09, 230,
@@ -58,6 +67,7 @@ const ONESHOTS = {
 	bossHit: ['bossHit', 0.5],
 	bossDie: ['bossDie', 0.8],
 	warp: ['warp', 0.45],
+	coin: ['coin', 0.5],
 }
 
 // The bank is built on first use, not at setup: building it

@@ -14,7 +14,7 @@ export const SHIP = {
 }
 
 export const SHOT = {
-	speed: 560, life: 0.85, cool: 0.15, max: 5, r: 3,
+	speed: 560, life: 0.85, cool: 0.15, max: 4, r: 3,
 }
 
 // Varieties differ in more than colour: gold is armoured and
@@ -25,6 +25,36 @@ export const KINDS = {
 	gold: { hp: [1, 2, 3], split: 2, speed: 0.78, score: 45 },
 	red: { hp: [1, 1, 1], split: 3, speed: 1.65, score: 30 },
 }
+
+// What the smallest rock of each variety leaves behind when it
+// finally breaks: [what, how often]. Silver is the common one
+// and drops nothing; gold pays; red arms you.
+//
+// The odds matter more than they look. A large red splits into
+// three, and each of those into three again, so a single rock
+// ends as nine fragments — at a certainty every one of them
+// would drop a pod and the gun would be maxed before the first
+// belt was clear.
+export const DROPS = {
+	silver: null,
+	gold: ['cash', 0.5],
+	red: ['upgrade', 0.26],
+}
+
+export const CASH_PER_COIN = 30
+export const SHIP_COST = 500
+export const MAX_GUN = 4
+export const PICKUP_LIFE = 13
+export const PICKUP_R = 13
+
+// Barrels per gun level: [angle offset, offset across the
+// hull]. Level 1 is the single forward gun you start with.
+const GUNS = [
+	[[0, 0]],
+	[[0, -6], [0, 6]],
+	[[-0.14, -7], [0, 0], [0.14, 7]],
+	[[-0.21, -9], [-0.07, -3], [0.07, 3], [0.21, 9]],
+]
 
 export function rockRadius(size) {
 	return ROCK_R[size] * 0.88
@@ -83,20 +113,36 @@ export function driveShip(ship, keys, dt) {
 	ship.warp = Math.max(0, ship.warp - dt)
 }
 
+function emitShot(state, da, side) {
+	const s = state.ship
+	const a = s.a + da
+	const across = s.a + Math.PI / 2
+	state.shots.push({
+		x: s.x + Math.cos(a) * 17 +
+			Math.cos(across) * side,
+		y: s.y + Math.sin(a) * 17 +
+			Math.sin(across) * side,
+		vx: s.vx + Math.cos(a) * SHOT.speed,
+		vy: s.vy + Math.sin(a) * SHOT.speed,
+		t: 0, life: SHOT.life, foe: false,
+	})
+}
+
 export function fire(state, fx) {
 	const s = state.ship
 	if (s.dead || s.cool > 0) return
+	const barrels = GUNS[state.gun - 1]
 	let mine = 0
 	for (const x of state.shots) if (!x.foe) mine++
-	if (mine >= SHOT.max) return
+	// The cap scales with the gun, or a wider spread would
+	// just mean each barrel firing a third as often.
+	if (mine + barrels.length > SHOT.max * state.gun) {
+		return
+	}
 	s.cool = SHOT.cool
-	state.shots.push({
-		x: s.x + Math.cos(s.a) * 17,
-		y: s.y + Math.sin(s.a) * 17,
-		vx: s.vx + Math.cos(s.a) * SHOT.speed,
-		vy: s.vy + Math.sin(s.a) * SHOT.speed,
-		t: 0, life: SHOT.life, foe: false,
-	})
+	for (const [da, side] of barrels) {
+		emitShot(state, da, side)
+	}
 	fx.shoot()
 }
 
@@ -165,12 +211,70 @@ export function addScore(state, n, fx) {
 	fx.extraLife()
 }
 
+export function spawnDrop(state, rock) {
+	const drop = DROPS[rock.kind]
+	if (!drop || Math.random() > drop[1]) return
+	state.pickups.push({
+		x: rock.x, y: rock.y,
+		vx: rock.vx * 0.35 + (Math.random() - 0.5) * 34,
+		vy: rock.vy * 0.35 + (Math.random() - 0.5) * 34,
+		kind: drop[0], t: 0, frame: Math.random() * 8,
+	})
+}
+
+export function addCash(state, n, fx) {
+	state.cash += n
+	if (state.cash < state.nextShip) return
+	state.nextShip += SHIP_COST
+	state.lives += 1
+	fx.extraLife()
+}
+
+function collect(state, p, fx) {
+	if (p.kind === 'cash') {
+		addCash(state, CASH_PER_COIN, fx)
+		fx.coin()
+		return
+	}
+	if (state.gun < MAX_GUN) {
+		state.gun += 1
+		fx.upgrade()
+	} else {
+		// Nothing left to fit: pay out instead, so a pod
+		// is never a wasted pickup.
+		addCash(state, CASH_PER_COIN * 4, fx)
+		fx.coin()
+	}
+}
+
+export function updatePickups(state, dt, fx) {
+	state.pickups = state.pickups.filter((p) => {
+		p.t += dt
+		p.x += p.vx * dt
+		p.y += p.vy * dt
+		p.vx *= 0.995
+		p.vy *= 0.995
+		p.frame += dt * 9
+		wrap(p)
+		if (state.ship.dead) return p.t < PICKUP_LIFE
+		if (near(p, state.ship, PICKUP_R + SHIP.r)) {
+			collect(state, p, fx)
+			return false
+		}
+		return p.t < PICKUP_LIFE
+	})
+}
+
 export function killShip(state, fx) {
 	const s = state.ship
 	if (s.dead || s.invuln > 0) return false
 	s.dead = true
 	s.thrust = false
 	s.respawn = SHIP.respawn
+	// Losing a ship costs one level of gun, not the lot:
+	// wiping the upgrades out entirely turns one mistake
+	// into a spiral.
+	state.gun = Math.max(1, state.gun - 1)
 	state.lives -= 1
 	burst(state, s.x, s.y, 30, 1.4)
 	fx.shipDie()

@@ -8,7 +8,8 @@ import { rng, centred, makeCanvas } from './art.js'
 import { buildRocks } from './rocks.js'
 import {
 	buildShip, buildFlame, buildFoe, buildBoss,
-	buildShots, buildPuffs, buildShield,
+	buildShots, buildPuffs, buildShield, buildCoins,
+	buildPods,
 } from './craft.js'
 
 const RING_R = 256
@@ -58,6 +59,8 @@ export function getAtlas() {
 		shots: buildShots(),
 		puffs: buildPuffs(),
 		shield: buildShield(),
+		coins: buildCoins(),
+		pods: buildPods(),
 		ring: buildRing(),
 	}
 	return atlas

@@ -128,5 +128,7 @@ export function buildSfx(ctx) {
 		bossHit: toBuffer(ctx, boom(r, 0.6, 1500, 90, 3.5)),
 		bossDie: toBuffer(ctx, boom(r, 2, 3000, 110, 1.6)),
 		warp: toBuffer(ctx, swoosh(r, 0.5)),
+		coin: toBuffer(
+			ctx, laser(r, 0.22, 1050, 2100, 5)),
 	}
 }
