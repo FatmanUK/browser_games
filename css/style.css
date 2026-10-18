@@ -122,3 +122,42 @@ main {
   gap: 0.75rem;
   flex-wrap: wrap;
 }
+
+/* Belt Breaker, like Dash, puts its title/buttons/meters in a
+   translucent bar over the canvas rather than in the side
+   panel, so the playfield can fill the window. */
+.belt-window {
+  position: relative;
+  display: inline-block;
+}
+
+.belt-window canvas {
+  display: block;
+  background: #02030a;
+}
+
+.belt-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(2, 6, 18, 0.55);
+  color: #dceaff;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.4rem 0.6rem;
+}
+
+.belt-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.belt-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}

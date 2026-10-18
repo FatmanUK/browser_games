@@ -7,5 +7,8 @@
 import tetrisGame from '../games/tetris/game.js'
 import pacmanGame from '../games/pacman/game.js'
 import racerGame from '../games/racer/game.js'
+import beltGame from '../games/beltbreaker/game.js'
 
-export const games = [tetrisGame, pacmanGame, racerGame]
+export const games = [
+	tetrisGame, pacmanGame, racerGame, beltGame,
+]
