@@ -19,7 +19,9 @@ const CORE_R = BOSS_R * 0.32
 const MODES = 3
 
 export function startBoss(state) {
-	const hp = 34 + state.level * 16
+	// Capped: past level 8 the fight would be long rather
+	// than hard, and the attacks are already escalating.
+	const hp = 34 + Math.min(state.level, 8) * 16
 	state.rocks = []
 	state.shots = []
 	state.boss = {
@@ -48,7 +50,11 @@ function moveBoss(b, dt, level) {
 		b.vx = -Math.abs(b.vx)
 	}
 	b.y = restY + Math.sin(b.t * 1.3) * 26
-	b.vx += Math.sign(b.vx) * level * 0.4 * dt
+	// Winds up over the fight, but to a ceiling: an
+	// unbounded ramp eventually tunnels through the walls.
+	if (Math.abs(b.vx) < 230) {
+		b.vx += Math.sign(b.vx) * level * 0.4 * dt
+	}
 }
 
 function spread(state, fx) {
@@ -89,7 +95,7 @@ function attack(state, dt, fx) {
 	b.timer -= dt
 	if (b.timer > 0) return
 	const rage = b.hp / b.max < 0.4 ? 0.65 : 1
-	b.timer = (2.4 - state.level * 0.08) * rage
+	b.timer = Math.max(0.9, 2.4 - state.level * 0.08) * rage
 	b.mode = (b.mode + 1) % MODES
 	if (b.mode === 0) spread(state, fx)
 	else if (b.mode === 1) aimed(state, fx)

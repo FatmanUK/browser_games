@@ -128,7 +128,9 @@ function drawTShip(ctx, atlas, tn, cx, cy) {
 		Math.floor(tn.t * 24) % atlas.flame.length]
 	ctx.save()
 	ctx.translate(p.x, p.y)
-	ctx.rotate(Math.PI / 2 + tn.bank * 0.5)
+	// Same heading as the hull frame, so the plume sits
+	// behind the ship rather than ahead of it.
+	ctx.rotate(-Math.PI / 2 + tn.bank * 0.5)
 	ctx.scale(SHIP_SCALE, SHIP_SCALE)
 	ctx.drawImage(
 		fl, -fl.width / 2 - SHIP_R * 0.95,
