@@ -913,6 +913,20 @@ export const TREE_LINE = [
 	{ x: 656.8, y: -53.0, r: 14.5 },
 ]
 
+export const CORNERS = [
+	{ angle: 0.8583, spread: 0.0924 },
+	{ angle: 1.1053, spread: 0.1059 },
+	{ angle: 1.8129, spread: 0.1405 },
+	{ angle: 2.5435, spread: 0.0613 },
+	{ angle: 2.7262, spread: 0.0849 },
+	{ angle: 3.0439, spread: 0.1222 },
+	{ angle: 3.7221, spread: 0.0782 },
+	{ angle: 4.2213, spread: 0.0779 },
+	{ angle: 5.23, spread: 0.1049 },
+	{ angle: 5.5562, spread: 0.0775 },
+	{ angle: 5.8358, spread: 0.1042 },
+]
+
 export const START = {
 	x: -182.32, y: -494.69, angle: 0.2195,
 }

@@ -38,6 +38,8 @@ LINE_SETBACK = CAR_LENGTH * 1.2
 
 SAND_WEDGE_COUNT = 3
 SAND_WEDGE_SPREAD = math.radians(14)
+CORNER_TURN_THRESHOLD = math.radians(1.1)
+CORNER_MIN_RUN = 10
 HAZARD_MIN_FRAC = 0.22
 HAZARD_MAX_FRAC = 0.78
 HAZARD_CLEAR_ANGLE = math.radians(20)
@@ -248,13 +250,53 @@ def heading_run_lengths(dense):
 	return headings
 
 
-def find_longest_straight(dense, turn_threshold=math.radians(2.2)):
-	headings = heading_run_lengths(dense)
+def turn_rates(headings):
 	n = len(headings)
-	turn = [
+	return [
 		abs(wrap_delta(headings[i - 1], headings[i]))
 		for i in range(n)
 	]
+
+
+# Contiguous stretches that bend hard enough to count as a
+# corner, exported so the game can put its oil where losing
+# steering actually costs the player something.
+def corner_runs(turn):
+	n = len(turn)
+	runs = []
+	i = 0
+	while i < n:
+		if turn[i] < CORNER_TURN_THRESHOLD:
+			i += 1
+			continue
+		start = i
+		while i < n and turn[i] >= CORNER_TURN_THRESHOLD:
+			i += 1
+		if i - start >= CORNER_MIN_RUN:
+			runs.append((start, i - 1))
+	return runs
+
+
+def build_corners(dense, headings):
+	corners = []
+	for start, end in corner_runs(turn_rates(headings)):
+		a0 = math.atan2(dense[start][1], dense[start][0])
+		a1 = math.atan2(dense[end][1], dense[end][0])
+		span = wrap_delta(a0, a1)
+		if span <= 0:
+			continue
+		center = (a0 + span / 2) % (2 * math.pi)
+		corners.append({
+			'angle': round(center, 4),
+			'spread': round(span / 2, 4),
+		})
+	return corners
+
+
+def find_longest_straight(dense, turn_threshold=math.radians(2.2)):
+	headings = heading_run_lengths(dense)
+	n = len(headings)
+	turn = turn_rates(headings)
 	best_start, best_len = 0, 0
 	i = 0
 	while i < n:
@@ -518,6 +560,13 @@ def render_hazards(obstacles, water, wedges, trees):
 		'\n]\n\n')
 
 
+def render_corners(corners):
+	return (
+		'export const CORNERS = [\n' +
+		js_object_array(corners, ['angle', 'spread']) +
+		'\n]\n\n')
+
+
 def render_start(start, slots):
 	return (
 		'export const START = {\n'
@@ -531,11 +580,12 @@ def render_start(start, slots):
 
 def render(
 		seed, outer, inner, bound, obstacles, water,
-		wedges, trees, start, slots):
+		wedges, trees, corners, start, slots):
 	return (
 		render_header(seed) +
 		render_tables(outer, inner, bound) +
 		render_hazards(obstacles, water, wedges, trees) +
+		render_corners(corners) +
 		render_start(start, slots))
 
 
@@ -561,10 +611,14 @@ def generate(seed):
 		tables, rng, grid_angle)
 	wedges = build_sand_wedges(rng, grid_angle)
 	trees = build_tree_line(bound)
+	corners = build_corners(dense, headings)
+	if not corners:
+		raise RuntimeError(
+			'no corners found; try another --seed')
 
 	return render(
 		seed, outer, inner, bound, obstacles, water, wedges,
-		trees, start, slots)
+		trees, corners, start, slots)
 
 
 def main():

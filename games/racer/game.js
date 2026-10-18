@@ -74,11 +74,23 @@ function nearGridZone(angle) {
 		GRID_CLEAR_ANGLE
 }
 
+// Oil goes on the corners (CORNERS comes from the generator's
+// own curvature pass), where losing the steering and brakes to
+// it actually costs you something — a slick on a straight is
+// just scenery you drive through.
+function cornerAngle() {
+	const corners = TRACK.CORNERS
+	const corner = corners[
+		Math.floor(Math.random() * corners.length)]
+	return corner.angle +
+		(Math.random() * 2 - 1) * corner.spread
+}
+
 function randomOilAngle() {
-	let angle
-	do {
-		angle = Math.random() * Math.PI * 2
-	} while (nearGridZone(angle))
+	let angle = cornerAngle()
+	for (let i = 0; nearGridZone(angle) && i < 50; i++) {
+		angle = cornerAngle()
+	}
 	return angle
 }
 
@@ -127,6 +139,7 @@ function createState() {
 		// sliding along its actual heading.
 		angle: pole.angle,
 		facing: pole.angle,
+		spin: 0,
 		speed: 0,
 		totalAngle: 0,
 		elapsed: 0,
@@ -222,15 +235,21 @@ function dragFor(state, terrain) {
 }
 
 function turnMultiplier(terrain) {
-	if (terrain === 'oil') return 0.3
+	// Zero on oil: no grip, so the wheel does nothing at all.
+	if (terrain === 'oil') return 0
 	if (terrain === 'sand') return 0.8
 	if (terrain === 'water') return 0.6
 	return 1
 }
 
 function applyControls(state, dt, terrain) {
+	const onOil = terrain === 'oil'
 	if (state.keys.has('accel')) state.speed += ACCEL * dt
-	if (state.keys.has('brake')) state.speed -= BRAKE * dt
+	// Oil takes the brakes away along with the steering — all
+	// you can do is ride it out and wait for grip to return.
+	if (state.keys.has('brake') && !onOil) {
+		state.speed -= BRAKE * dt
+	}
 
 	const drag = dragFor(state, terrain)
 	state.speed -= state.speed * drag * dt
@@ -244,30 +263,30 @@ function applyControls(state, dt, terrain) {
 
 	// Oil spins the sprite's facing, not the heading — the car
 	// keeps sliding along whatever line it was already on
-	// (slippery, barely any drag) while it visibly spins out of
-	// control on top of that slide. Off oil, facing always snaps
-	// straight back to the real heading.
-	if (terrain === 'oil') {
-		state.facing +=
-			(Math.random() - 0.5) * OIL_WOBBLE * dt
+	// (slippery, barely any drag) while it visibly spins on top
+	// of that slide. Off oil, facing snaps back to the real
+	// heading and the spin stops.
+	if (onOil) {
+		state.facing += state.spin * dt
 	} else {
 		state.facing = state.angle
+		state.spin = 0
 	}
 }
 
-// A sudden spin-out kick applied the instant the car enters oil
-// (see integrate, which fires this on the terrain edge rather
-// than every frame) — a sharp, random half-to-full-turn jolt on
-// top of the continuous wobble applyControls adds for as long as
-// the car sits in the puddle. Only ever touches `facing`, never
-// the real heading — see createState.
-const SPIN_MIN = deg(60)
-const SPIN_RANGE = deg(120)
-const OIL_WOBBLE = 6
+// Hitting oil sets the car spinning at a steady rate for as long
+// as it stays on the slick (applied by applyControls above, and
+// started here from integrate's terrain edge). A constant rate
+// reads as a spin; the per-frame random wobble this replaces
+// just looked like jitter. Only ever touches `facing`, never the
+// real heading — see createState.
+const SPIN_RATE_MIN = deg(220)
+const SPIN_RATE_RANGE = deg(300)
 
-function applySpinOut(state) {
+function startSpin(state) {
 	const dir = Math.random() < 0.5 ? -1 : 1
-	state.facing += dir * (SPIN_MIN + Math.random() * SPIN_RANGE)
+	state.spin = dir *
+		(SPIN_RATE_MIN + Math.random() * SPIN_RATE_RANGE)
 }
 
 function bounceOff(state, normalAngle, damping) {
@@ -337,7 +356,7 @@ function integrate(state, dt, audio) {
 	const newTerrain = terrainAt(state)
 	if (newTerrain !== state.terrain) {
 		playTerrainSound(newTerrain, audio)
-		if (newTerrain === 'oil') applySpinOut(state)
+		if (newTerrain === 'oil') startSpin(state)
 	}
 	state.terrain = newTerrain
 
@@ -666,7 +685,7 @@ function revealBeam(ctx, worldCanvas, origin, facing) {
 	ctx.beginPath()
 	beamPath(ctx, origin, facing)
 	ctx.clip()
-	ctx.drawImage(worldCanvas, 0, 0)
+	blitWorld(ctx, worldCanvas)
 	const grad = ctx.createRadialGradient(
 		origin.x, origin.y, BEAM_LENGTH * 0.4,
 		origin.x, origin.y, BEAM_LENGTH)
@@ -686,13 +705,18 @@ function drawDusk(ctx, worldCanvas, facing) {
 }
 
 // Renders world-space (true daylight colors) to its own
-// viewport-sized offscreen canvas so drawDusk can paste pieces
-// of it back in per-beam — see revealBeam.
+// offscreen canvas so drawDusk can paste pieces of it back in
+// per-beam — see revealBeam. It's a full-size canvas with
+// VIEW_SCALE baked in, exactly like the visible one: rendering
+// it at viewport units instead and letting the blit magnify it
+// would throw away VIEW_SCALE's worth of detail and pixellate
+// the whole scene.
 function renderWorldToOffscreen(world, state) {
 	const wctx = world.ctx
+	wctx.save()
+	wctx.scale(VIEW_SCALE, VIEW_SCALE)
 	wctx.fillStyle = '#3e8e41'
 	wctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
-	wctx.save()
 	wctx.translate(
 		VIEWPORT_WIDTH / 2 - state.x,
 		VIEWPORT_HEIGHT / 2 - state.y)
@@ -700,12 +724,18 @@ function renderWorldToOffscreen(world, state) {
 	wctx.restore()
 }
 
+// Drawn back at viewport units, which the caller's VIEW_SCALE
+// turns into a 1:1 pixel copy — no resampling, nothing softened.
+function blitWorld(ctx, worldCanvas) {
+	ctx.drawImage(
+		worldCanvas, 0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+}
+
 function draw(ctx, world, state) {
 	renderWorldToOffscreen(world, state)
 	ctx.save()
 	ctx.scale(VIEW_SCALE, VIEW_SCALE)
-	ctx.imageSmoothingEnabled = false
-	ctx.drawImage(world.canvas, 0, 0)
+	blitWorld(ctx, world.canvas)
 	drawDusk(ctx, world.canvas, state.facing)
 	ctx.restore()
 }
@@ -782,8 +812,8 @@ function createInput(ref, audio) {
 
 function createWorldCanvas() {
 	const canvas = document.createElement('canvas')
-	canvas.width = VIEWPORT_WIDTH
-	canvas.height = VIEWPORT_HEIGHT
+	canvas.width = CANVAS_WIDTH
+	canvas.height = CANVAS_HEIGHT
 	return { canvas, ctx: canvas.getContext('2d') }
 }
 

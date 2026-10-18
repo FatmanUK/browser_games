@@ -71,10 +71,11 @@ per browser) and has its own "New game" button next to its title.
   scattered off the track surface — either in the infield or out
   past the rumble strips — and water hazards that drag rather
   than block. Tyres bounce the car off; everything else stops it
-  dead. Small randomly-placed oil blobs are the only hazard on
-  the track surface itself (never on the starting grid, a new
-  layout each game) and send the car into a sudden spin that
-  slides it sideways rather than bouncing it off; sand traps sit
+  dead. Oil blobs are the only hazard on the track surface
+  itself: they're scattered over the corners (never the starting
+  grid, and a new layout each game), and hitting one takes away
+  your steering and brakes entirely while the car spins and
+  slides on through the bend; sand traps sit
   off-track in the verge (higher friction than anything else,
   hauling the car down to a stop fast but not instantly), so you
   only hit one by running wide. Each generated track keeps its
