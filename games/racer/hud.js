@@ -13,6 +13,7 @@ import {
 	LAP_TARGET, ordinal, orderOf, allGates,
 } from './race.js'
 import { PLAYER_NAME, PLAYER_COLOURS } from './car.js'
+import { MAX_AMMO, LIVES } from './missiles.js'
 
 function countBits(n) {
 	let c = 0
@@ -120,6 +121,7 @@ function drawLights(ctx, race) {
 }
 
 function resultLine(state, race) {
+	if (state.out) return 'OUT OF LIVES — PRESS NEW GAME'
 	if (race.place !== 1) {
 		return 'WIN IT TO OPEN THE NEXT TRACK'
 	}
@@ -175,9 +177,30 @@ function drawMeters(ctx, state, best, maxSpeed, place) {
 		'right')
 
 	readout(
-		ctx, 20, H - 46, 'SPEED',
+		ctx, 185, H - 46, 'SPEED',
 		Math.round(state.speed), 26)
-	speedBar(ctx, state.speed, maxSpeed, 20, H - 16, 150)
+	speedBar(ctx, state.speed, maxSpeed, 185, H - 16, 150)
+}
+
+// Lives and ammo as pips rather than numbers: both are small
+// counts that change suddenly, and a row you can take in
+// without reading beats a digit you have to.
+function pips(ctx, x, y, n, of, on, off) {
+	for (let i = 0; i < of; i++) {
+		ctx.fillStyle = i < n ? on : off
+		ctx.fillRect(x + i * 12, y, 8, 8)
+	}
+}
+
+function drawStores(ctx, state) {
+	label(ctx, 20, H - 62, 'LIVES')
+	pips(
+		ctx, 20, H - 58, state.lives, LIVES,
+		'#ff8a7a', 'rgba(120,70,70,0.45)')
+	label(ctx, 90, H - 62, 'MISSILES')
+	pips(
+		ctx, 90, H - 58, state.ammo, MAX_AMMO,
+		'#ffce54', 'rgba(110,95,60,0.45)')
 }
 
 export function drawHud(ctx, state, best, maxSpeed, place) {
@@ -186,11 +209,12 @@ export function drawHud(ctx, state, best, maxSpeed, place) {
 	ctx.textBaseline = 'alphabetic'
 
 	drawMeters(ctx, state, best, maxSpeed, place)
+	drawStores(ctx, state)
 	drawBoard(ctx, state)
 	ctx.fillStyle = DIM
 	label(
 		ctx, W - 20, H - 18,
-		'ARROWS / WASD TO DRIVE', 'right')
+		'ARROWS / WASD TO DRIVE · SPACE TO FIRE', 'right')
 
 	drawLights(ctx, state.race)
 	drawResult(ctx, state, state.race)

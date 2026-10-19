@@ -79,7 +79,12 @@ export function trackGates(track, car) {
 		const passed = now >= prev
 			? g > prev && g <= now
 			: g > prev || g <= now
-		if (passed) car.gates |= 1 << i
+		if (!passed) continue
+		car.gates |= 1 << i
+		// Where a wrecked car comes back. Tracked here
+		// because this is the one place that already knows
+		// which gate was just gone through.
+		car.lastGate = i
 	}
 }
 
@@ -140,12 +145,21 @@ export function placeOf(track, race, player, rivals) {
 // finished, so the tally is exact without sorting anything.
 export function checkFinishes(track, race, player, rivals) {
 	for (const rival of rivals) {
-		if (rival.finished) continue
+		// A rival out of lives never finishes, so it must
+		// not be counted as ahead of anyone either.
+		if (rival.finished || rival.out) continue
 		if (lapsOf(track, rival) < LAP_TARGET) continue
 		rival.finished = true
 		race.finishedAhead++
 	}
 	if (race.phase !== 'racing') return false
+	// Out of lives ends your race where you are: last, behind
+	// everyone still running as well as everyone home.
+	if (player.out) {
+		race.phase = 'finished'
+		race.place = 1 + rivals.filter((r) => !r.out).length
+		return true
+	}
 	if (lapsOf(track, player) < LAP_TARGET) return false
 	race.phase = 'finished'
 	race.place = race.finishedAhead + 1

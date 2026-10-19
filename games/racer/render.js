@@ -317,6 +317,44 @@ function drawArrows(ctx, track) {
 	}
 }
 
+// A pickup: a ring with a dot in it, pulsing so it reads as
+// something to collect rather than as another painted mark.
+// Greyed while it is on cooldown, so an empty one does not
+// look like one you missed.
+function drawPickups(ctx, state, cam) {
+	const pts = state.track.PICKUPS
+	for (let i = 0; i < pts.length; i++) {
+		const p = pts[i]
+		if (!onScreen(p.x, p.y, cam)) continue
+		const live = state.pickups[i] <= 0
+		ctx.strokeStyle = live
+			? 'rgba(255, 224, 130, 0.9)'
+			: 'rgba(120, 130, 140, 0.4)'
+		ctx.lineWidth = 2
+		ctx.beginPath()
+		ctx.arc(p.x, p.y, 7, 0, Math.PI * 2)
+		ctx.stroke()
+		if (!live) continue
+		ctx.fillStyle = 'rgba(255, 206, 84, 0.95)'
+		ctx.beginPath()
+		ctx.arc(p.x, p.y, 2.5, 0, Math.PI * 2)
+		ctx.fill()
+	}
+}
+
+function drawMissiles(ctx, state) {
+	for (const m of state.missiles) {
+		const back = 0.03
+		ctx.strokeStyle = 'rgba(255, 170, 90, 0.9)'
+		ctx.lineWidth = 2.5
+		ctx.lineCap = 'round'
+		ctx.beginPath()
+		ctx.moveTo(m.x, m.y)
+		ctx.lineTo(m.x - m.vx * back, m.y - m.vy * back)
+		ctx.stroke()
+	}
+}
+
 function drawWorld(ctx, state, atlas, cam) {
 	const track = state.track
 	const rb = rumbles(track)
@@ -334,8 +372,15 @@ function drawWorld(ctx, state, atlas, cam) {
 	// taller than the kerb it overhangs.
 	drawTreeLine(ctx, track, atlas.scenery, cam)
 	drawObstacles(ctx, track, atlas.scenery, cam)
-	drawRivals(ctx, state.rivals, drawCarSprite)
-	drawCarSprite(ctx, state, PLAYER_COLOURS)
+	drawPickups(ctx, state, cam)
+	// Cars that are out are off the road entirely; a wrecked
+	// one is still there, spinning, and has to be visible or
+	// you cannot avoid it.
+	drawRivals(
+		ctx, state.rivals.filter((r) => !r.out),
+		drawCarSprite)
+	if (!state.out) drawCarSprite(ctx, state, PLAYER_COLOURS)
+	drawMissiles(ctx, state)
 }
 
 // Dusky evening: dim everything down except two headlight cones

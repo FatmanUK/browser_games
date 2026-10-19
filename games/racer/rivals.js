@@ -44,7 +44,7 @@ export function createRivals(track) {
 			speed: 0,
 			name: driver.name,
 			lane: driver.lane,
-			skill: driver.skill,
+			skill: { pace: driver.skill, nerve: driver.nerve },
 			colours: driver.colours,
 			totalAngle: 0,
 			finished: false,
@@ -69,7 +69,7 @@ function aimAngle(track, rival) {
 function wantedSpeed(rival, sharp, drag) {
 	const k = Math.min(1, sharp / FULL_SHARP)
 	const pace = 1 - (1 - CORNER_SPEED) * k
-	return MAX_SPEED * rival.skill * pace * (drag > 1 ? 0.5 : 1)
+	return MAX_SPEED * rival.skill.pace * pace * (drag > 1 ? 0.5 : 1)
 }
 
 function steer(rival, dt, sharp, aim) {

@@ -71,7 +71,14 @@ files in its own `music/` folder — see
   pace, so the field strings out instead of running as a
   block, and leaning on one through a corner costs you both
   speed. They have names and a standings board, so the blue one
-  is Voss rather than the blue one. Twelve checkpoint gates are
+  is Voss rather than the blue one, and each has its own nerve
+  for taking a missile shot. Every car has three lives and
+  carries up to three dumbfire missiles, picked up off the
+  racing line; a missile does not steer, so a shot is a
+  judgement about where a car will be. Being hit wrecks you —
+  a spin, a couple of seconds, then back in at the last
+  checkpoint a life down and a long way back. At zero lives
+  your race is over where you stand. Twelve checkpoint gates are
   painted across the road, and a lap only counts if every one
   of them was passed *on* the road — swept angle alone cannot
   tell a lap from a straight line across the infield, because
@@ -167,7 +174,8 @@ games/racer/            Dash (+ audio.js, same pattern;
                         view.js the camera, models.js +
                         sprites.js the baked art, track.js +
                         spline.js + hazards.js the generator,
-                        progress.js the track ladder)
+                        progress.js the track ladder,
+                        missiles.js the weapons and lives)
 games/beltbreaker/      Belt Breaker (rocks.js/craft.js/
                         sprites.js pre-render the art over
                         games/_shared/mesh.js;

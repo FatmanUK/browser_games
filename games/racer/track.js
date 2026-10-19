@@ -230,6 +230,26 @@ function buildArrows(corners, travel) {
 		}))
 }
 
+// Missile pickups, spread round the lap and offset side to
+// side so collecting them is a line choice rather than
+// something that happens to you on the way past.
+const PICKUP_COUNT = 8
+
+function buildPickups(track, start, travel) {
+	const base = Math.atan2(start.y, start.x)
+	const out = []
+	for (let i = 1; i <= PICKUP_COUNT; i++) {
+		const f = i / (PICKUP_COUNT + 1)
+		const a = base + travel * f * TWO_PI
+		const lane = 0.3 + (i % 3) * 0.2
+		const inner = lerpArray(track.inner, a)
+		const outer = lerpArray(track.outer, a)
+		const r = inner + (outer - inner) * lane
+		out.push({ x: Math.cos(a) * r, y: Math.sin(a) * r })
+	}
+	return out
+}
+
 function assemble(seed, dense) {
 	const centre = radiusLookup(dense)
 	const t = {
@@ -263,6 +283,7 @@ function assemble(seed, dense) {
 		GRID_SLOTS: grid.slots,
 		TRAVEL_DIR: travel,
 		GATES: buildGates(grid.start, travel),
+		PICKUPS: buildPickups(t, grid.start, travel),
 		ARROWS: buildArrows(corners, travel),
 	}
 }

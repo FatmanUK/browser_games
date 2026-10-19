@@ -39,6 +39,18 @@ function effects(audio) {
 				'sine', 0.08, 70),
 		slow: () => audio.tone(140, 0.2, 'triangle', 0.08),
 		lap: () => audio.tone(660, 0.12, 'square', 0.08),
+		pickup: () =>
+			audio.toneSequence(
+				[[880, 0.06], [1320, 0.1]],
+				'square', 0.07, 40),
+		missile: () =>
+			audio.toneSequence(
+				[[520, 0.06], [300, 0.14]],
+				'sawtooth', 0.09, 30),
+		wreck: () =>
+			audio.toneSequence(
+				[[180, 0.12], [120, 0.18], [80, 0.26]],
+				'sawtooth', 0.11, 40),
 		countdown: () =>
 			audio.tone(440, 0.18, 'square', 0.09),
 		go: () => audio.tone(880, 0.22, 'square', 0.11),

@@ -28,6 +28,10 @@ import {
 	createRace, isRunning, isOver, tickCountdown, lapsOf,
 	placeOf, checkFinishes, trackGates,
 } from './race.js'
+import {
+	armCar, createPickups, updatePickups, updateMissiles,
+	updateWrecks, rivalsFire, fire,
+} from './missiles.js'
 import { drawHud } from './hud.js'
 import { buildTrack } from './track.js'
 import {
@@ -57,7 +61,8 @@ const LEVEL_KEYS = { '[': -1, ']': 1 }
 
 function createState(track, level, unlocked) {
 	const pole = track.GRID_SLOTS[0]
-	return {
+	const rivals = createRivals(track).map(armCar)
+	return armCar({
 		track,
 		level,
 		unlocked,
@@ -78,10 +83,12 @@ function createState(track, level, unlocked) {
 		lastLapAt: 0,
 		terrain: null,
 		wasColliding: false,
-		rivals: createRivals(track),
+		rivals,
 		race: createRace(),
+		pickups: createPickups(track),
+		missiles: [],
 		keys: new Set(),
-	}
+	})
 }
 
 function waterAt(track, x, y) {
@@ -224,6 +231,9 @@ function recordLap(state, best) {
 }
 
 function drivePlayer(state, dt, best, audio) {
+	// A wrecked car is spinning where it stopped; it does not
+	// steer, collide or set times until it is back.
+	if (state.wrecked > 0 || state.out) return
 	const terrain = terrainAt(state.track, state.x, state.y)
 	applyControls(state, dt, terrain)
 	integrate(state, dt, audio)
@@ -239,6 +249,16 @@ function drivePlayer(state, dt, best, audio) {
 	}
 }
 
+// The missile layer, which runs whether or not anyone is in a
+// state to drive: a wreck has to tick down even while the car
+// it belongs to is doing nothing else.
+function updateWeapons(state, dt, audio) {
+	updateWrecks(state, dt)
+	updatePickups(state, dt, audio)
+	updateMissiles(state, dt, audio)
+	rivalsFire(state, dt, audio)
+}
+
 // The grid is held until the lights go out, so the countdown
 // ticks on its own before anything moves. The last lap's time
 // still has to be recorded, so the finish is checked after the
@@ -250,15 +270,26 @@ function update(state, dt, best, audio) {
 	}
 	if (!isRunning(race)) return
 	if (isOver(race)) state.keys.clear()
+	updateWeapons(state, dt, audio)
 	drivePlayer(state, dt, best, audio)
 	trackGates(state.track, state)
 	for (const rival of state.rivals) {
 		trackGates(state.track, rival)
 	}
 	updateRivals(
-		state.track, state.rivals, dt,
-		(x, y) => terrainAt(state.track, x, y))
-	if (resolveContacts(state, state.rivals)) audio.bump()
+		state.track,
+		state.rivals.filter(
+			(r) => !r.out && r.wrecked <= 0),
+		dt, (x, y) => terrainAt(state.track, x, y))
+	// A wrecked car is scenery until it comes back, and one
+	// that is out has left the race: neither should shove
+	// anybody, and a car cannot be shoved by a ghost.
+	const live = state.rivals.filter(
+		(r) => !r.out && r.wrecked <= 0)
+	if (state.wrecked <= 0 && !state.out &&
+			resolveContacts(state, live)) {
+		audio.bump()
+	}
 	if (checkFinishes(state.track, race, state, state.rivals)) {
 		audio.finish()
 		// Winning is what opens the next one. Finishing
@@ -278,6 +309,11 @@ function update(state, dt, best, audio) {
 function createInput(ref, audio, start) {
 	function onKeyDown(e) {
 		audio.unlock()
+		if (e.key === ' ') {
+			fire(ref.state, ref.state, audio)
+			e.preventDefault()
+			return
+		}
 		const step = LEVEL_KEYS[e.key]
 		if (step !== undefined) {
 			const to = stepLevel(
