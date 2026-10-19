@@ -53,18 +53,15 @@ export function createRivals(track) {
 			lane: driver.lane * track.halfWidth,
 			s: slot.s,
 			off: 0,
-			skill: {
-				pace: driver.skill,
-				nerve: driver.nerve,
-			},
+			skill: driver,
 			colours: driver.colours,
 				finished: false,
 		}
 	})
 }
 
-// Where this rival wants to be pointing: at its own line,
-// a lookahead further along the lap.
+// Where this rival wants to be pointing: at its own line, a
+// lookahead further along the lap.
 function aimAngle(track, rival) {
 	const look = LOOK_BASE +
 		Math.abs(rival.speed) * LOOK_PER_SPEED
@@ -79,15 +76,22 @@ function aimAngle(track, rival) {
 // by which time it was in the corner. Signed curvature along
 // the centreline means it can look at what is coming within
 // its own braking distance and arrive at the right speed.
+//
+// `look` scales the distance it looks over, so a driver with
+// a low one brakes late and runs wide, and `grip` is how hard
+// it will lean on the corner once there. Those two are what
+// make the field feel like different drivers rather than one
+// driver at five speeds.
 function wantedSpeed(track, rival, drag) {
+	const sk = rival.skill
 	const stop = (rival.speed * rival.speed) / (2 * BRAKE)
-	const { kMax } = curvAhead(track, rival.s, stop + 30)
+	const { kMax } = curvAhead(
+		track, rival.s, (stop + 30) * sk.look)
 	const corner = kMax > 1e-5
-		? Math.sqrt(GRIP * rival.skill.pace / kMax)
+		? Math.sqrt(GRIP * sk.grip / kMax)
 		: MAX_SPEED
 	const wet = drag > 1 ? 0.5 : 1
-	return Math.min(
-		MAX_SPEED * rival.skill.pace, corner) * wet
+	return Math.min(MAX_SPEED * sk.pace, corner) * wet
 }
 
 function steer(rival, dt, sharp, aim) {

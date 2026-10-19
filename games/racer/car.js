@@ -34,36 +34,61 @@ export const PLAYER_NAME = 'YOU'
 // The field, in grid order. One roster rather than three
 // parallel arrays keyed by index: a rival is a driver, and its
 // name, pace and line belong together where you can read them
-// as one. `skill` is its fraction of the field's pace, `lane`
-// the line it takes as a signed fraction of the half-width
-// (negative to the right of the road, positive to the left),
-// spread wide enough that two rivals on the same corner take
-// visibly different lines rather than grinding together all
-// lap, and `nerve` how readily it takes a missile shot. Marlo
-// will fire at anything; Drake mostly will not.
+// as one.
+//
+// Four knobs rather than one, because a field that varies only
+// in top speed is a field of one driver at five settings. They
+// are meant to be learnable:
+//
+//   pace  fraction of the field's top speed
+//   grip  how hard it will lean on a corner
+//   look  how far ahead it brakes — low is late and ragged
+//   nerve how readily it takes a missile shot
+//   lane  the line it takes, as a signed fraction of the
+//         half-width, negative to the right of the road
+//
+// So Voss is quick and tidy and brakes early, Marlo is slower
+// but hangs on to the corner and will shoot at anything, and
+// Drake brakes so late it keeps running wide.
+//
+// A fifth knob, a per-driver wobble on the steering, came back
+// out: it measured as doing nothing at all. The steering
+// controller corrects the wobble inside a frame, so every
+// driver strayed from its line by the same 1.4 units whatever
+// the setting said.
 //
 // Deliberately nothing red: the player's car has to be the one
 // you can pick out of a pack at a glance, in a beam, at speed.
 // Names are kept short so the standings column stays narrow.
 export const RIVALS = [
 	{
-		name: 'VOSS', nerve: 0.9, skill: 0.97, lane: -0.45,
+		name: 'VOSS',
+		pace: 0.97, grip: 1.05, look: 1.15,
+		nerve: 0.9, lane: -0.45,
 		colours: { shell: '#0d47a1', body: '#1e88e5' },
 	},
 	{
-		name: 'KESTREL', nerve: 0.6, skill: 0.94, lane: 0.3,
+		name: 'KESTREL',
+		pace: 0.94, grip: 0.92, look: 1.0,
+		nerve: 0.6, lane: 0.3,
 		colours: { shell: '#1b5e20', body: '#43a047' },
 	},
 	{
-		name: 'MARLO', nerve: 1.0, skill: 0.91, lane: -0.15,
+		name: 'MARLO',
+		pace: 0.9, grip: 1.08, look: 0.95,
+		nerve: 1.0, lane: -0.15,
 		colours: { shell: '#e65100', body: '#fb8c00' },
 	},
 	{
-		name: 'DRAKE', nerve: 0.45, skill: 0.88, lane: 0.5,
+		name: 'DRAKE',
+		pace: 0.92, grip: 0.84, look: 0.72,
+		nerve: 0.45, lane: 0.5,
 		colours: { shell: '#4a148c', body: '#8e24aa' },
 	},
 	{
-		name: 'IBBOTT', nerve: 0.75, skill: 0.85, lane: 0.05,
+		name: 'IBBOTT',
+		pace: 0.86, grip: 0.95, look: 1.1,
+		nerve: 0.75, lane: 0.05,
 		colours: { shell: '#37474f', body: '#78909c' },
 	},
 ]

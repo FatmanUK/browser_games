@@ -16,6 +16,26 @@
 
 import { offsetPoint, deltaS } from './path.js'
 
+// Nothing may sit on the road, and an offset from the
+// centreline is not enough to promise that. On the inside of
+// a tight corner a point 59 units off the line can be nearer
+// to a different stretch of the track altogether — and on a
+// track that crosses over itself, obviously so. 55 obstacles
+// in 4183 were overlapping the road this way, and one of them
+// wedged a rival for a whole race.
+//
+// So the test is against the whole centreline, which at build
+// time is affordable and at play time would not be.
+function clearOfRoad(track, x, y, r) {
+	const need = track.halfWidth + r + 4
+	for (let i = 0; i < track.n; i++) {
+		const dx = x - track.px[i]
+		const dy = y - track.py[i]
+		if (dx * dx + dy * dy < need * need) return false
+	}
+	return true
+}
+
 export const SAND_COUNT = 3
 export const SAND_SPREAD = 90
 
@@ -45,11 +65,21 @@ const BIG = [
 
 const WATER_RADII = [18, 16]
 
-// Lateral bands, as multiples of the half-width. Small things
-// near the road, big things well back.
-const SMALL_BAND = [1.15, 1.9]
-const BIG_BAND = [2.4, 4.2]
-const WATER_BAND = [2.2, 3.6]
+// Lateral bands, in world units out from the kerb rather than
+// as multiples of the half-width — and measured from the
+// item's near edge, not its centre.
+//
+// As multiples of the centre distance it looked fine and was
+// not: a building of radius 22 placed at 1.15 half-widths has
+// its centre 57 units out and its near edge 35, which is
+// inside a road 50 wide either side. A rival wedged against
+// one of those on level 10 and sat there at 2 units a second
+// for the rest of the race. This is the same mistake the old
+// generator made with its mutual spacing, made again in a
+// different place.
+const SMALL_BAND = [10, 55]
+const BIG_BAND = [30, 190]
+const WATER_BAND = [26, 150]
 
 const TREE_LAYERS = [
 	{ step: 44, out: 10, r: 9 },
@@ -73,23 +103,27 @@ function clearOf(x, y, r, placed, margin) {
 		Math.hypot(x - p.x, y - p.y) >= r + p.r + margin)
 }
 
-function spotIn(track, rand, s0, span, band) {
+function spotIn(track, rand, s0, span, band, r) {
 	for (let k = 0; k < 40; k++) {
 		const s = s0 + rand() * span
 		if (nearGrid(track, s)) continue
 		const side = rand() < 0.5 ? -1 : 1
-		const f = band[0] + rand() * (band[1] - band[0])
-		return { s, off: side * track.halfWidth * f }
+		const gap = band[0] + rand() * (band[1] - band[0])
+		return {
+			s,
+			off: side * (track.halfWidth + r + gap),
+		}
 	}
 	return null
 }
 
 function place(track, rand, s0, span, band, r, placed) {
 	for (let k = 0; k < 30; k++) {
-		const at = spotIn(track, rand, s0, span, band)
+		const at = spotIn(track, rand, s0, span, band, r)
 		if (!at) return null
 		const p = offsetPoint(track, at.s, at.off)
 		if (!clearOf(p.x, p.y, r, placed, 8)) continue
+		if (!clearOfRoad(track, p.x, p.y, r)) continue
 		return { x: p.x, y: p.y }
 	}
 	return null
@@ -124,6 +158,7 @@ function lineCorners(track, corners, placed) {
 			const off = c.dir * (track.halfWidth + 9)
 			const p = offsetPoint(track, s, off)
 			if (!clearOf(p.x, p.y, 3, placed, 3)) continue
+			if (!clearOfRoad(track, p.x, p.y, 3)) continue
 			placed.push({ x: p.x, y: p.y, r: 3 })
 			out.push({
 				x: p.x, y: p.y, r: 3,

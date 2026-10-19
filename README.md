@@ -75,8 +75,12 @@ files in its own `music/` folder — see
   pace, so the field strings out instead of running as a
   block, and leaning on one through a corner costs you both
   speed. They have names and a standings board, so the blue one
-  is Voss rather than the blue one, and each has its own nerve
-  for taking a missile shot. Every car has three lives and
+  is Voss rather than the blue one. Each drives differently
+  rather than just faster or slower: its own top speed, how
+  hard it leans on a corner, how late it brakes, and how
+  readily it takes a missile shot. Voss is quick and tidy,
+  Marlo hangs on to the corner and will shoot at anything,
+  Drake brakes so late it keeps running wide. Every car has three lives and
   carries up to three dumbfire missiles, picked up off the
   racing line; a missile does not steer, so a shot is a
   judgement about where a car will be. Being hit wrecks you —
