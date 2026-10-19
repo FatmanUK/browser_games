@@ -100,12 +100,26 @@ main {
   background: #02030a;
 }
 
+/* :focus, not only :focus-visible. A canvas focused by a mouse
+   click does not match :focus-visible, so with only that rule
+   a focused canvas and an unfocused one looked identical --
+   and the keys working or not was the only way to tell. */
+.game-window canvas:focus,
 .game-window canvas:focus-visible {
   outline: 1px solid rgba(127, 230, 255, 0.55);
   outline-offset: -1px;
 }
 
+/* The bar is an overlay across the full width of the canvas,
+   and only its buttons suppressed mousedown. A click on its
+   padding, the gaps between buttons, the title, or the empty
+   right-hand end landed on a non-focusable element, moved
+   focus to <body>, and the canvas stopped receiving keys.
+   Letting pointer events fall through does better than
+   suppressing them: the click reaches the canvas, which
+   focuses it. The buttons take their own events back. */
 .game-hud {
+  pointer-events: none;
   position: absolute;
   top: 0;
   left: 0;
@@ -140,6 +154,7 @@ main {
 /* Clipped corners and a hairline rule: enough to read as a
    console panel without needing an image. */
 .game-hud .game-side-button {
+  pointer-events: auto;
   font: inherit;
   font-size: 0.68rem;
   letter-spacing: 0.14em;

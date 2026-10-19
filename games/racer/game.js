@@ -733,7 +733,15 @@ function createInput(ref, audio) {
 		if (action) ref.state.keys.delete(action)
 	}
 
-	return { onKeyDown, onKeyUp }
+	// Without this, a keyup delivered to whatever took the
+	// focus leaves the action held forever and the car drives
+	// itself at full lock — which is what "the canvas loses
+	// focus" actually looked like from the driving seat.
+	function onBlur() {
+		ref.state.keys.clear()
+	}
+
+	return { onKeyDown, onKeyUp, onBlur }
 }
 
 function createWorldCanvas() {
@@ -788,6 +796,7 @@ function createRuntime(ctx, best, audio) {
 		},
 		onKeyDown: input.onKeyDown,
 		onKeyUp: input.onKeyUp,
+		onBlur: input.onBlur,
 		stop: () => {
 			loop.stop()
 			audio.stop()
@@ -809,7 +818,10 @@ export default {
 			container, {
 				title: this.title,
 				onBack: controls.back,
-				onNewGame: () => runtime.start(),
+				onNewGame: () => {
+					runtime.start()
+					canvas.focus()
+				},
 			})
 		const audio = setupSound(controlsRow)
 
@@ -819,6 +831,7 @@ export default {
 
 		canvas.addEventListener('keydown', runtime.onKeyDown)
 		canvas.addEventListener('keyup', runtime.onKeyUp)
+		window.addEventListener('blur', runtime.onBlur)
 		canvas.focus()
 		runtime.start()
 
@@ -828,6 +841,8 @@ export default {
 				'keydown', runtime.onKeyDown)
 			canvas.removeEventListener(
 				'keyup', runtime.onKeyUp)
+			window.removeEventListener(
+				'blur', runtime.onBlur)
 		}
 	},
 
