@@ -111,3 +111,106 @@ export function unwrapped(dense) {
 	}
 	return out
 }
+
+// Resample a dense closed curve to even spacing in arc length.
+//
+// This is the one decision the whole arc-length model rests
+// on. With the samples evenly spaced, s -> index is s/DS plus
+// a lerp: O(1), no search, structurally the same cheap lookup
+// the angle-indexed radius tables were. Resample unevenly and
+// every position query becomes a binary search over cumulative
+// distance, for no gain at all.
+export function resample(dense, step) {
+	const n = dense.length
+	const seg = []
+	let total = 0
+	for (let i = 0; i < n; i++) {
+		const a = dense[i]
+		const b = dense[(i + 1) % n]
+		const d = Math.hypot(b.x - a.x, b.y - a.y)
+		seg.push(d)
+		total += d
+	}
+	// Round the count so the loop closes exactly: a leftover
+	// fraction of a step at the seam puts a kink in the road
+	// at one arbitrary point of every track.
+	const count = Math.max(16, Math.round(total / step))
+	const ds = total / count
+	const out = []
+	let i = 0
+	let walked = 0
+	for (let k = 0; k < count; k++) {
+		const target = k * ds
+		while (walked + seg[i] < target && i < n - 1) {
+			walked += seg[i]
+			i++
+		}
+		const f = seg[i] > 0 ? (target - walked) / seg[i] : 0
+		const a = dense[i]
+		const b = dense[(i + 1) % n]
+		out.push({
+			x: a.x + (b.x - a.x) * f,
+			y: a.y + (b.y - a.y) * f,
+		})
+	}
+	return { pts: out, ds, length: total }
+}
+
+// Unit tangents and signed curvature at each sample, by
+// central difference. Curvature is per unit length, so a
+// corner's radius is 1/|k| and the speed it can be taken at
+// is sqrt(grip / |k|) — which is what lets a rival brake for
+// a corner it has not reached yet.
+export function differentiate(pts, ds) {
+	const n = pts.length
+	const ux = [], uy = [], k = []
+	for (let i = 0; i < n; i++) {
+		const a = pts[(i - 1 + n) % n]
+		const b = pts[(i + 1) % n]
+		let dx = (b.x - a.x) / (2 * ds)
+		let dy = (b.y - a.y) / (2 * ds)
+		const m = Math.hypot(dx, dy) || 1
+		dx /= m
+		dy /= m
+		ux.push(dx)
+		uy.push(dy)
+	}
+	for (let i = 0; i < n; i++) {
+		const p = (i - 1 + n) % n
+		const q = (i + 1) % n
+		const dtx = (ux[q] - ux[p]) / (2 * ds)
+		const dty = (uy[q] - uy[p]) / (2 * ds)
+		// Signed: the cross product of the tangent with its
+		// own derivative. Positive is one way round a bend,
+		// negative the other, and an arrow needs to know.
+		k.push(ux[i] * dty - uy[i] * dtx)
+	}
+	return { ux, uy, k }
+}
+
+// One pass of a closed-loop smoothing filter. Pulls each point
+// toward the average of its neighbours, which is what takes
+// the curvature out of a corner.
+export function smoothOnce(pts, alpha) {
+	const n = pts.length
+	const out = []
+	for (let i = 0; i < n; i++) {
+		const a = pts[(i - 1 + n) % n]
+		const b = pts[(i + 1) % n]
+		out.push({
+			x: pts[i].x * (1 - alpha) +
+				((a.x + b.x) / 2) * alpha,
+			y: pts[i].y * (1 - alpha) +
+				((a.y + b.y) / 2) * alpha,
+		})
+	}
+	return out
+}
+
+export function minRadius(k) {
+	let kMax = 0
+	for (let i = 0; i < k.length; i++) {
+		kMax = Math.max(kMax, Math.abs(k[i]))
+	}
+	return kMax > 0 ? 1 / kMax : Infinity
+}

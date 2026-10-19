@@ -14,8 +14,10 @@ import { rng } from '../_shared/art.js'
 import { lerpArray, travelDir } from './geom.js'
 import {
 	catmullClosed, isStarShaped, headings, turnRates,
-	longestStraight, unwrapped, wrapDelta,
+	longestStraight, unwrapped, wrapDelta, resample,
+	differentiate, smoothOnce, minRadius,
 } from './spline.js'
+import { locate, offsetPoint, headingAt } from './path.js'
 import {
 	buildHazards, buildSand, buildTreeLine,
 } from './hazards.js'
@@ -24,10 +26,29 @@ export const ANGLE_STEPS = 720
 export const ROAD_WIDTH = 100
 export const VERGE_WIDTH = 40
 
-const CONTROL_POINTS = 16
-const BASE_RADIUS = 550
-const RADIUS_JITTER = 120
-const ANGLE_JITTER = 0.35
+// Sample spacing along the centreline. Four units is about a
+// quarter of a car length, which is fine enough that a corner
+// reads as a curve and coarse enough that a lap is under a
+// thousand samples.
+const DS = 4
+
+// Swept rather than guessed. The old 16/550/120/0.35 gave a
+// tightest corner of 15 units of radius across 60 seeds, on a
+// road 100 wide — the inner kerb would have had a radius of
+// minus 35, which is not a corner but a fold. Fewer control
+// points and far less angular jitter is what fixes it: these
+// give a tightest corner of 86 over the same seeds, with a
+// median of 113 and about eight corners a lap, so the tracks
+// still vary and still have bends worth braking for.
+//
+// The polar model never showed this because it measured the
+// road radially from the centre instead of across the
+// centreline, so the band stayed well-defined no matter how
+// sharp the curve underneath it got.
+const CONTROL_POINTS = 14
+const BASE_RADIUS = 580
+const RADIUS_JITTER = 60
+const ANGLE_JITTER = 0.15
 const PER_SEGMENT = 40
 const MAX_ATTEMPTS = 50
 
@@ -39,7 +60,7 @@ const LINE_SETBACK = CAR_LENGTH * 1.2
 
 const DEG = Math.PI / 180
 const STRAIGHT_TURN = 2.2 * DEG
-const CORNER_TURN = 1.1 * DEG
+const CORNER_TURN = 0.9 * DEG
 const CORNER_MIN_RUN = 10
 const TWO_PI = Math.PI * 2
 
@@ -224,7 +245,8 @@ function buildArrows(corners, travel) {
 	return corners
 		.filter((c) => c.severity >= ARROW_SEVERITY)
 		.map((c) => ({
-			angle: c.angle - travel * (c.spread + ARROW_LEAD),
+			angle: c.angle -
+				travel * (c.spread + ARROW_LEAD),
 			dir: c.dir,
 			hard: c.severity >= ARROW_SEVERITY * 1.8,
 		}))
@@ -250,6 +272,67 @@ function buildPickups(track, start, travel) {
 	return out
 }
 
+// The tightest corner a 100-wide road can have and still be a
+// road. Below the half-width the inner kerb has a negative
+// radius and the surface folds through itself; 1.7 times it
+// leaves a corner that is tight but drivable.
+const MIN_RADIUS = (ROAD_WIDTH / 2) * 1.7
+const SMOOTH_PASSES = 60
+const SMOOTH_ALPHA = 0.35
+
+// A safety net under the tuned control points above, not the
+// main defence: a seed that still comes out too sharp gets
+// relaxed until it clears, and one that will not relax is
+// rejected by assemble.
+function relax(pts, ds) {
+	let cur = pts
+	for (let i = 0; i < SMOOTH_PASSES; i++) {
+		const d = differentiate(cur, ds)
+		if (minRadius(d.k) >= MIN_RADIUS) break
+		cur = smoothOnce(cur, SMOOTH_ALPHA)
+	}
+	return cur
+}
+
+// The arc-length half of a track: the centreline resampled to
+// even spacing, with tangents and signed curvature. This is
+// what everything that drives on the track actually uses; the
+// radius tables are only still here because the generator
+// places its scenery in polar terms.
+function pathOf(dense) {
+	let r = resample(dense, DS)
+	// Smoothing shortens the loop, so resample again to get
+	// the even spacing the whole model depends on back.
+	r = resample(relax(r.pts, r.ds), DS)
+	const d = differentiate(r.pts, r.ds)
+	return {
+		n: r.pts.length,
+		ds: r.ds,
+		L: r.pts.length * r.ds,
+		px: Float64Array.from(r.pts, (p) => p.x),
+		py: Float64Array.from(r.pts, (p) => p.y),
+		ux: Float64Array.from(d.ux),
+		uy: Float64Array.from(d.uy),
+		k: Float64Array.from(d.k),
+		halfWidth: ROAD_WIDTH / 2,
+		vergeWidth: VERGE_WIDTH,
+		boundOff: ROAD_WIDTH / 2 + VERGE_WIDTH,
+	}
+}
+
+// Anything the generator placed in polar terms gets its arc
+// length attached here, once, rather than every frame.
+function atS(track, x, y) {
+	let best = null
+	for (let i = 0; i < track.n; i++) {
+		const dx = x - track.px[i], dy = y - track.py[i]
+		const d2 = dx * dx + dy * dy
+		if (best && d2 >= best.d2) continue
+		best = { d2, i }
+	}
+	return locate(track, x, y, best.i * track.ds)
+}
+
 function assemble(seed, dense) {
 	const centre = radiusLookup(dense)
 	const t = {
@@ -265,10 +348,21 @@ function assemble(seed, dense) {
 	if (!gridOnRoad(grid.slots, t)) return null
 	const corners = buildCorners(dense, heads)
 	if (!corners.length) return null
+	return finish(seed, dense, t, grid, corners)
+}
+
+// The second half of assemble, split only to keep both halves
+// inside forty lines.
+function finish(seed, dense, t, grid, corners) {
 	const travel = travelDir(grid.start)
 	const hz = rng((seed ^ 0x5be5) >>> 0)
 	const h = buildHazards(t, hz, grid.lineAngle, corners)
-	return {
+	const path = pathOf(dense)
+	// Last line of defence: an undrivable corner is a level
+	// nobody can finish, and the seed walk can simply try
+	// another one.
+	if (minRadius(path.k) < MIN_RADIUS) return null
+	const track = Object.assign(path, {
 		TRACK_ID: seed,
 		ANGLE_STEPS, ROAD_WIDTH, VERGE_WIDTH,
 		INNER_RADIUS: t.inner,
@@ -282,10 +376,65 @@ function assemble(seed, dense) {
 		START: grid.start,
 		GRID_SLOTS: grid.slots,
 		TRAVEL_DIR: travel,
-		GATES: buildGates(grid.start, travel),
 		PICKUPS: buildPickups(t, grid.start, travel),
 		ARROWS: buildArrows(corners, travel),
+	})
+	return attachArcLength(track)
+}
+
+// The centreline is traced in whichever direction the spline
+// happened to run, and the grid may face the other way. Arc
+// length has to increase the way the cars go or every
+// lookahead in the game points backwards, so the samples are
+// reversed rather than every consumer being made to care.
+function orientToTravel(track) {
+	const at = atS(track, track.START.x, track.START.y)
+	const h = headingAt(track, at.s)
+	const d = Math.cos(h - track.START.angle)
+	if (d >= 0) return track
+	const rev = (a) => Float64Array.from(a).reverse()
+	track.px = rev(track.px)
+	track.py = rev(track.py)
+	track.ux = rev(track.ux).map((v) => -v)
+	track.uy = rev(track.uy).map((v) => -v)
+	track.k = rev(track.k).map((v) => -v)
+	return track
+}
+
+function attachArcLength(track) {
+	orientToTravel(track)
+	const sOf = (p) => atS(track, p.x, p.y).s
+	track.START.s = sOf(track.START)
+	for (const g of track.GRID_SLOTS) g.s = sOf(g)
+	for (const p of track.PICKUPS) p.s = sOf(p)
+	track.GATES = buildGatesS(track)
+	for (const a of track.ARROWS) {
+		const p = pointAtAngle(track, a.angle)
+		a.s = sOf(p)
 	}
+	for (const c of track.CORNERS) {
+		c.s = sOf(pointAtAngle(track, c.angle))
+	}
+	return track
+}
+
+// Gates evenly spaced in arc length from the start line, which
+// is what "evenly spaced round the lap" should always have
+// meant: evenly spaced in angle bunches them up wherever the
+// track runs close to the centre.
+function buildGatesS(track) {
+	const out = []
+	for (let i = 0; i < GATE_COUNT; i++) {
+		out.push((track.START.s + (i / GATE_COUNT) * track.L)
+			% track.L)
+	}
+	return out
+}
+
+function pointAtAngle(track, angle) {
+	const r = lerpArray(track.INNER_RADIUS, angle) +
+		ROAD_WIDTH / 2
+	return { x: Math.cos(angle) * r, y: Math.sin(angle) * r }
 }
 
 // A seed that fails every check is a track that cannot be

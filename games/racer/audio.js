@@ -27,18 +27,9 @@ const MUSIC = {
 }
 
 
-// The effects, kept apart from the wiring: the palette is what
-// grows when the game grows (a countdown, a chequered flag) and
-// setupSound itself should not grow with it.
-function effects(audio) {
+// The weapons: picking one up, firing it, and being hit by it.
+function weaponFx(audio) {
 	return {
-		bump: () => audio.tone(90, 0.12, 'square', 0.1),
-		splash: () =>
-			audio.toneSequence(
-				[[300, 0.1], [180, 0.15]],
-				'sine', 0.08, 70),
-		slow: () => audio.tone(140, 0.2, 'triangle', 0.08),
-		lap: () => audio.tone(660, 0.12, 'square', 0.08),
 		pickup: () =>
 			audio.toneSequence(
 				[[880, 0.06], [1320, 0.1]],
@@ -49,8 +40,27 @@ function effects(audio) {
 				'sawtooth', 0.09, 30),
 		wreck: () =>
 			audio.toneSequence(
-				[[180, 0.12], [120, 0.18], [80, 0.26]],
+				[
+					[180, 0.12], [120, 0.18],
+					[80, 0.26],
+				],
 				'sawtooth', 0.11, 40),
+	}
+}
+
+// The effects, kept apart from the wiring: the palette is what
+// grows when the game grows (a countdown, a chequered flag) and
+// setupSound itself should not grow with it.
+function effects(audio) {
+	return {
+		...weaponFx(audio),
+		bump: () => audio.tone(90, 0.12, 'square', 0.1),
+		splash: () =>
+			audio.toneSequence(
+				[[300, 0.1], [180, 0.15]],
+				'sine', 0.08, 70),
+		slow: () => audio.tone(140, 0.2, 'triangle', 0.08),
+		lap: () => audio.tone(660, 0.12, 'square', 0.08),
 		countdown: () =>
 			audio.tone(440, 0.18, 'square', 0.09),
 		go: () => audio.tone(880, 0.22, 'square', 0.11),
