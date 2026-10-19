@@ -672,11 +672,13 @@ function drawWorld(ctx, state, atlas, cam) {
 // a third rendering path — it is the absence of the fill, and
 // costs nothing at all.
 //
-// Evening is 0.45, not the 0.55 it was when everything on the
-// ground was a flat fill. A baked mesh carries its own light
-// and shade, and dimming it by more than half flattens that
-// back out — the whole point of the sprites is the contrast
-// across a surface, and the dusk was eating it.
+// Evening sat at 0.45 for a while, out of a worry that
+// dimming a baked mesh by more than half flattens the shading
+// that is the whole point of the sprites. True, but 0.45 is
+// not dusk, it is an overcast afternoon — and the beams now
+// restore the full daylight colours wherever they fall, so
+// the contrast is there to be seen in the place you are
+// actually looking.
 //
 // Night is 0.88 of something much nearer black, which is dark
 // enough that the beams are the only way to read the road.
@@ -692,7 +694,7 @@ function drawWorld(ctx, state, atlas, cam) {
 const LIGHT = {
 	morning: null,
 	evening: {
-		fill: 'rgba(18, 22, 48, 0.45)',
+		fill: 'rgba(18, 22, 48, 0.58)',
 		wash: 'rgba(255, 214, 140, 0.05)',
 		glow: 'rgba(255, 236, 186, 0.12)',
 	},
@@ -739,10 +741,32 @@ const POOL_AHEAD = 28
 const POOL_R = 13
 const SPLAY = 0.28
 
-// As wide at the end as the circle is: the wedge runs out to
-// meet its own circle rather than stopping short of it.
-const BEAM_SPREAD = Math.atan(POOL_R / POOL_AHEAD)
-const HEADLIGHT_OFFSET = 2.5
+// Wide enough to touch the circle, which is asin and not
+// atan. The far end of a wedge is an arc of radius
+// POOL_AHEAD, not a straight line across it, so at atan the
+// arc's ends come in to about twelve where the circle is
+// thirteen — the beam arrived a little narrower than the
+// circle it was supposed to be opening into. asin(r/d) is
+// the angle of the tangent from the lamp to the circle, so
+// the wedge now just contains it.
+const BEAM_SPREAD = Math.asin(POOL_R / POOL_AHEAD)
+
+// Both wedges start from the middle of the nose, and that is
+// not laziness about where a headlamp is.
+//
+// Set them five units apart, where the lamps actually are,
+// and each one aims away from the other: the strip straight
+// ahead of the car is then outside the left lamp's cone and
+// outside the right lamp's too, and stays outside both until
+// twelve units out, where the splay finally wins. That strip
+// is a dark wedge sitting between the two beams, which is
+// what reads as one headlight shadowing the other. No spread
+// closes it either — the angle to the centreline goes to a
+// right angle as you approach the lamp.
+//
+// The lamps themselves are still drawn out on the corners
+// (drawLamps), which is the part you actually see.
+const NOSE = CAR_LENGTH / 2
 
 // The lamps are on the nose, and the beams start there. They
 // used to start at the middle of the car so that the car sat
@@ -750,7 +774,6 @@ const HEADLIGHT_OFFSET = 2.5
 // problem — the car is marked by its own lamps now (see
 // drawLamps), so the beams can come off the front where they
 // belong.
-const LAMP_BACK = CAR_LENGTH / 2
 
 // Where a car's lamps are, in viewport units. The player sits
 // at the centre of the window and a rival is wherever it is
@@ -760,15 +783,11 @@ function lampsOf(car, cam) {
 	const sx = VIEWPORT_WIDTH / 2 + (car.x - cam.x)
 	const sy = VIEWPORT_HEIGHT / 2 + (car.y - cam.y)
 	const f = car.facing
-	const nose = LAMP_BACK
-	const px = Math.cos(f + Math.PI / 2) * HEADLIGHT_OFFSET
-	const py = Math.sin(f + Math.PI / 2) * HEADLIGHT_OFFSET
-	const cx = sx + Math.cos(f) * nose
-	const cy = sy + Math.sin(f) * nose
+	const cx = sx + Math.cos(f) * NOSE
+	const cy = sy + Math.sin(f) * NOSE
+	// One origin, two aims: see the note on the nose above.
 	return [-1, 1].map((side) => ({
-		x: cx + px * side,
-		y: cy + py * side,
-		aim: f + SPLAY * side,
+		x: cx, y: cy, aim: f + SPLAY * side,
 	}))
 }
 
@@ -789,10 +808,10 @@ function lampPath(ctx, lamp) {
 	return { cx, cy }
 }
 
-// Only the part of the world the lamp can reach, so six cars
-// with two lamps each is twelve small blits rather than
-// twelve full-canvas ones. The wedge is widest where it meets
-// the circle, so the circle's box contains it.
+// The box a lamp can reach into, so a frame blits the part
+// of the world that is lit rather than all of it. The wedge
+// is widest where it meets the circle, so the circle's box
+// contains it.
 function lampBox(lamp, c) {
 	const x0 = Math.min(lamp.x, c.cx - POOL_R) - 2
 	const y0 = Math.min(lamp.y, c.cy - POOL_R) - 2
@@ -801,41 +820,22 @@ function lampBox(lamp, c) {
 	return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
 }
 
+function growBox(a, b) {
+	if (!a) return b
+	const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y)
+	return {
+		x, y,
+		w: Math.max(a.x + a.w, b.x + b.w) - x,
+		h: Math.max(a.y + a.h, b.y + b.h) - y,
+	}
+}
+
 function blitPatch(ctx, world, b) {
 	ctx.drawImage(
 		world,
 		b.x * VIEW_SCALE, b.y * VIEW_SCALE,
 		b.w * VIEW_SCALE, b.h * VIEW_SCALE,
 		b.x, b.y, b.w, b.h)
-}
-
-// Clips to one lamp's reach and pastes the daylight world
-// back in over the fill, undimmed and with a hard edge — the
-// circle is meant to be sharp, so nothing fades it back out
-// at the rim. Confined entirely to its own clip, so a second
-// lamp's reveal just lays over this one wherever they
-// overlap: always correct however much they intersect, unlike
-// cutting both out of one fill, where the even-odd rule
-// toggles the overlap back to "outside".
-function revealLamp(ctx, world, lamp, light) {
-	ctx.save()
-	ctx.beginPath()
-	const c = lampPath(ctx, lamp)
-	ctx.clip()
-	const b = lampBox(lamp, c)
-	blitPatch(ctx, world, b)
-	ctx.globalCompositeOperation = 'lighter'
-	ctx.fillStyle = light.wash
-	ctx.fillRect(b.x, b.y, b.w, b.h)
-	// Brighter in the circle than along the wedge: the lamp
-	// is pointed at it.
-	const g = ctx.createRadialGradient(
-		c.cx, c.cy, 0, c.cx, c.cy, POOL_R)
-	g.addColorStop(0, light.glow)
-	g.addColorStop(1, 'rgba(255, 228, 170, 0)')
-	ctx.fillStyle = g
-	ctx.fillRect(b.x, b.y, b.w, b.h)
-	ctx.restore()
 }
 
 // Off the window by more than a lamp can reach, so nothing it
@@ -855,14 +855,62 @@ function litCars(state) {
 	return all
 }
 
+function allLamps(state) {
+	const out = []
+	for (const car of litCars(state)) {
+		out.push(...lampsOf(car, state))
+	}
+	return out
+}
+
+// Every lamp into one path, then one clip and one paste of
+// the daylight world, then the light added on top.
+//
+// A lamp at a time was wrong, and wrong in a way that showed:
+// each reveal pasted opaque daylight over its own clip, so
+// wherever two beams crossed, the second one wiped out the
+// first one's glow and replaced it with whatever its own glow
+// happened to be there — which, out at the edge of a beam, is
+// nothing. Two beams crossing therefore came out darker than
+// either beam alone. They looked like shadows cast by one
+// headlight onto another, and that is what they were.
+//
+// Pasted once and lit afterwards, the lights add up instead,
+// which is what lights do. It is also fewer blits.
 function drawNightfall(ctx, world, state, light) {
 	ctx.fillStyle = light.fill
 	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
-	for (const car of litCars(state)) {
-		for (const lamp of lampsOf(car, state)) {
-			revealLamp(ctx, world, lamp, light)
-		}
-	}
+	const lamps = allLamps(state)
+	if (!lamps.length) return
+	ctx.save()
+	ctx.beginPath()
+	let box = null
+	const eyes = lamps.map((l) => {
+		const c = lampPath(ctx, l)
+		box = growBox(box, lampBox(l, c))
+		return c
+	})
+	// Overlapping subpaths all wind the same way, so nonzero
+	// unions them. Even-odd would toggle the overlaps back to
+	// "outside" and cut holes where the beams cross.
+	ctx.clip()
+	blitPatch(ctx, world, box)
+	ctx.globalCompositeOperation = 'lighter'
+	ctx.fillStyle = light.wash
+	ctx.fillRect(box.x, box.y, box.w, box.h)
+	for (const c of eyes) glow(ctx, c, box, light)
+	ctx.restore()
+}
+
+// Brighter in the circle than along the wedge: the lamp is
+// pointed at it.
+function glow(ctx, c, box, light) {
+	const g = ctx.createRadialGradient(
+		c.cx, c.cy, 0, c.cx, c.cy, POOL_R)
+	g.addColorStop(0, light.glow)
+	g.addColorStop(1, 'rgba(255, 228, 170, 0)')
+	ctx.fillStyle = g
+	ctx.fillRect(box.x, box.y, box.w, box.h)
 }
 
 // Renders world-space (true daylight colors) to its own
