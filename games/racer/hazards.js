@@ -1,36 +1,33 @@
 // Where the scenery goes: obstacles, water, sand and the
-// treeline.
+// treeline, all placed as (arc length, lateral offset).
 //
-// Everything off the track surface is scattered one per
-// angular sector rather than at random, so a straight-line cut
-// across the infield risks hitting something whichever way it
-// is taken. That is the whole reason the infield is not empty.
+// This used to work in polar terms — an angle about the centre
+// and a fraction of the way in toward it — which meant the
+// "infield" was whatever lay inside the inner kerb. A track
+// that crosses over itself has no infield: the inside of the
+// loop at one point is the outside at another, and the ray
+// from the centre meets the road more than once. Off the road
+// to the left and off the road to the right is the same idea
+// without the assumption.
+//
+// Everything is scattered one per stretch of the lap rather
+// than at random, so a straight-line cut risks hitting
+// something whichever way it is taken.
 
-import { lerpArray } from './geom.js'
-import { wrapDelta } from './spline.js'
-
-const TWO_PI = Math.PI * 2
-const DEG = Math.PI / 180
-
-// 26 rather than the script's 20: the zone has to cover the
-// whole six-row grid plus room to get off the line, and the
-// grid alone is about 18 degrees of arc at this radius.
-const CLEAR_ANGLE = 26 * DEG
-const MIN_FRAC = 0.22
-const MAX_FRAC = 0.78
+import { offsetPoint, deltaS } from './path.js'
 
 export const SAND_COUNT = 3
-export const SAND_SPREAD = 14 * DEG
+export const SAND_SPREAD = 90
 
-// Tyres bounce; everything else stops the car dead. Tyres and
-// barrels are car-sized or smaller and can land in the infield
-// or out in the verge; trees and buildings are big and stay
-// infield, filling out the middle of a track large enough to
-// feel empty without them.
-//
-// Far more of the small ones than the generator used to place,
-// and `edge` marks the ones that line the inside of a corner —
-// that band is what makes cutting cost something.
+// How far from a grid slot nothing may be placed, in world
+// units along the lap. The grid is 172 units of road, and a
+// car needs room to get away from it.
+const GRID_CLEAR = 260
+
+// Tyres bounce; everything else stops the car dead. The small
+// ones sit just off the kerb where running wide finds them;
+// the big ones stand well back, filling out the space the
+// track loops around.
 const SMALL = [
 	['tyre', 3, 'bounce'], ['tyre', 3.5, 'bounce'],
 	['tyre', 3, 'bounce'], ['tyre', 3.5, 'bounce'],
@@ -48,123 +45,85 @@ const BIG = [
 
 const WATER_RADII = [18, 16]
 
+// Lateral bands, as multiples of the half-width. Small things
+// near the road, big things well back.
+const SMALL_BAND = [1.15, 1.9]
+const BIG_BAND = [2.4, 4.2]
+const WATER_BAND = [2.2, 3.6]
+
 const TREE_LAYERS = [
-	{ spacing: 40, offset: 0, r: 9 },
-	{ spacing: 32, offset: 15, r: 11 },
-	{ spacing: 38, offset: 30, r: 10 },
-	{ spacing: 48, offset: 45, r: 12 },
-	{ spacing: 55, offset: 62, r: 13 },
+	{ step: 44, out: 10, r: 9 },
+	{ step: 36, out: 28, r: 11 },
+	{ step: 42, out: 46, r: 10 },
+	{ step: 52, out: 66, r: 12 },
+	{ step: 60, out: 88, r: 13 },
 ]
 
-function infieldPoint(t, angle, frac) {
-	const r = lerpArray(t.inner, angle) * frac
-	return { x: Math.cos(angle) * r, y: Math.sin(angle) * r }
+function nearGrid(track, s) {
+	return track.GRID_SLOTS.some(
+		(g) => Math.abs(deltaS(track, g.s, s)) < GRID_CLEAR)
 }
 
-function vergePoint(t, angle, frac) {
-	const o = lerpArray(t.outer, angle)
-	const b = lerpArray(t.bound, angle)
-	const r = o + (b - o) * frac
-	return { x: Math.cos(angle) * r, y: Math.sin(angle) * r }
-}
-
-function nearGrid(angle, gridAngle) {
-	return Math.abs(wrapDelta(gridAngle, angle)) < CLEAR_ANGLE
-}
-
-// Both of the generator's spacing weaknesses are fixed here.
-// It compared centre to centre against a gap derived from the
-// NEW item's radius only, so a small tyre could be dropped
-// almost touching a building while the reverse was rejected —
-// placement order decided the result, and the spec table
-// happened to list the unfavourable order. Radii of both, plus
-// a fixed margin, is symmetric and means what it says.
+// Symmetric, unlike the gap the old generator used: that took
+// the gap from the new item's radius alone, so a small tyre
+// could be dropped almost touching a building while the
+// reverse was rejected, and placement order decided which.
 function clearOf(x, y, r, placed, margin) {
 	return placed.every((p) =>
 		Math.hypot(x - p.x, y - p.y) >= r + p.r + margin)
 }
 
-function sectorAngle(rand, i, count, gridAngle) {
-	const width = TWO_PI / count
-	for (let k = 0; k < 50; k++) {
-		const a = i * width + rand() * width
-		if (!nearGrid(a, gridAngle)) return a
-	}
-	for (let k = 0; k < 200; k++) {
-		const a = rand() * TWO_PI
-		if (!nearGrid(a, gridAngle)) return a
+function spotIn(track, rand, s0, span, band) {
+	for (let k = 0; k < 40; k++) {
+		const s = s0 + rand() * span
+		if (nearGrid(track, s)) continue
+		const side = rand() < 0.5 ? -1 : 1
+		const f = band[0] + rand() * (band[1] - band[0])
+		return { s, off: side * track.halfWidth * f }
 	}
 	return null
 }
 
-function place(t, zone, rand, i, count, gridAngle, placed, r) {
-	for (let k = 0; k < 100; k++) {
-		const a = sectorAngle(rand, i, count, gridAngle)
-		if (a === null) return null
-		// The old test used the centre and ignored the item's
-		// own radius, so a verge obstacle at the near edge
-		// could poke back onto the rumble strips. Insetting
-		// the band by the radius keeps the whole thing clear.
-		const span = MAX_FRAC - MIN_FRAC
-		const frac = MIN_FRAC + rand() * span
-		const p = zone === 'infield'
-			? infieldPoint(t, a, frac)
-			: vergePoint(t, a, frac)
-		if (clearOf(p.x, p.y, r, placed, 6)) return p
+function place(track, rand, s0, span, band, r, placed) {
+	for (let k = 0; k < 30; k++) {
+		const at = spotIn(track, rand, s0, span, band)
+		if (!at) return null
+		const p = offsetPoint(track, at.s, at.off)
+		if (!clearOf(p.x, p.y, r, placed, 8)) continue
+		return { x: p.x, y: p.y }
 	}
 	return null
 }
 
-function shuffled(rand, n) {
-	const a = [...Array(n).keys()]
-	for (let i = n - 1; i > 0; i--) {
-		const j = Math.floor(rand() * (i + 1))
-		const t = a[i]; a[i] = a[j]; a[j] = t
-	}
-	return a
-}
-
-function scatter(t, rand, gridAngle, placed) {
-	const specs = [...SMALL, ...BIG]
-	const slots = specs.length + WATER_RADII.length
-	const order = shuffled(rand, slots)
+function scatter(track, rand, specs, band, placed) {
 	const out = []
+	const span = track.L / specs.length
 	specs.forEach(([type, r, behavior], i) => {
-		const zone = BIG.includes(specs[i]) ? 'infield'
-			: (rand() < 0.5 ? 'infield' : 'verge')
 		const p = place(
-			t, zone, rand, order[i], slots, gridAngle,
-			placed, r)
+			track, rand, i * span, span, band, r, placed)
 		if (!p) return
 		placed.push({ x: p.x, y: p.y, r })
 		out.push({ x: p.x, y: p.y, r, type, behavior })
 	})
-	return { obstacles: out, order, slots, specs }
+	return out
 }
 
-// A dense band of tyres just off the kerb on the inside of
-// every corner. Cutting a corner is the cheapest way to go
-// faster on a track whose only boundary is a treeline a long
-// way out, and this is what makes it cost something.
-function lineCorners(t, corners, placed, gridAngle) {
+// A band of tyres just off the kerb through every corner, on
+// the inside. Cutting a corner is the cheapest way to go
+// faster on a track whose only hard boundary is a long way
+// out, and this is what makes it cost something.
+function lineCorners(track, corners, placed) {
 	const out = []
 	for (const c of corners) {
-		const steps = Math.max(3, Math.round(c.spread * 26))
-		for (let i = 0; i <= steps; i++) {
-			const a = c.angle - c.spread +
-				(2 * c.spread * i) / steps
-			// The band obeys the grid clearance too. A
-			// corner can fall inside the cleared
-			// angle even though the grid sits on a
-			// straight, and a wall of tyres across
-			// the first corner is not the idea.
-			if (nearGrid(a, gridAngle)) continue
-			const r = lerpArray(t.inner, a) - 7
-			const p = {
-				x: Math.cos(a) * r,
-				y: Math.sin(a) * r,
-			}
-			if (!clearOf(p.x, p.y, 3, placed, 2)) continue
+		const n = Math.max(2, Math.round(c.len / 14))
+		for (let i = 0; i <= n; i++) {
+			const s = c.s - c.len / 2 + (c.len * i) / n
+			if (nearGrid(track, s)) continue
+			// `dir` is the way the corner bends, so the
+			// inside of it is that side of the road.
+			const off = c.dir * (track.halfWidth + 9)
+			const p = offsetPoint(track, s, off)
+			if (!clearOf(p.x, p.y, 3, placed, 3)) continue
 			placed.push({ x: p.x, y: p.y, r: 3 })
 			out.push({
 				x: p.x, y: p.y, r: 3,
@@ -175,64 +134,63 @@ function lineCorners(t, corners, placed, gridAngle) {
 	return out
 }
 
-function water(t, rand, gridAngle, placed, order, slots, n) {
-	const out = []
-	WATER_RADII.forEach((r, i) => {
-		const p = place(
-			t, 'infield', rand, order[n + i], slots,
-			gridAngle, placed, r)
-		if (!p) return
-		placed.push({ x: p.x, y: p.y, r })
-		out.push({ x: p.x, y: p.y, r })
-	})
-	return out
-}
-
-export function buildHazards(t, rand, gridAngle, corners) {
+export function buildHazards(track, rand, corners) {
 	const placed = []
-	const s = scatter(t, rand, gridAngle, placed)
+	const small = scatter(
+		track, rand, SMALL, SMALL_BAND, placed)
+	const big = scatter(track, rand, BIG, BIG_BAND, placed)
+	const wet = scatter(
+		track, rand,
+		WATER_RADII.map((r) => ['water', r, 'drag']),
+		WATER_BAND, placed)
 	return {
-		obstacles: s.obstacles.concat(
-			lineCorners(t, corners, placed, gridAngle)),
-		water: water(
-			t, rand, gridAngle, placed, s.order, s.slots,
-			s.specs.length),
+		obstacles: small
+			.concat(big)
+			.concat(lineCorners(track, corners, placed)),
+		water: wet.map((w) => ({ x: w.x, y: w.y, r: w.r })),
 	}
 }
 
-export function buildSand(rand, gridAngle) {
+export function buildSand(track, rand) {
 	const out = []
 	for (let k = 0; k < 200 && out.length < SAND_COUNT; k++) {
-		const angle = rand() * TWO_PI
-		if (nearGrid(angle, gridAngle)) continue
-		const clash = out.some((w) =>
-			Math.abs(wrapDelta(w.angle, angle)) <
-				SAND_SPREAD * 2.2)
+		const s = rand() * track.L
+		if (nearGrid(track, s)) continue
+		const clash = out.some(
+			(w) => Math.abs(deltaS(track, w.s, s)) <
+				SAND_SPREAD * 3)
 		if (clash) continue
-		out.push({ angle, spread: SAND_SPREAD })
+		out.push({
+			s,
+			half: SAND_SPREAD,
+			side: rand() < 0.5 ? -1 : 1,
+		})
 	}
 	return out
 }
 
-// Count per layer comes from the track's own perimeter rather
-// than a fixed number: a fixed count went visibly thin once
-// tracks got large.
-export function buildTreeLine(bound) {
-	const avg = bound.reduce((a, b) => a + b, 0) / bound.length
+// Down both sides of the ribbon rather than round a ring. A
+// ring only made sense while the track was a loop about a
+// centre with an inside and an outside; a treeline is what
+// lies beyond the verge, and the verge has two edges.
+export function buildTreeLine(track) {
 	const trees = []
 	for (const layer of TREE_LAYERS) {
-		const perim = TWO_PI * (avg + layer.offset)
-		const count = Math.max(
-			12, Math.round(perim / layer.spacing))
-		for (let i = 0; i < count; i++) {
-			const a = (i / count) * TWO_PI
-			const r = lerpArray(bound, a) + layer.offset
-			trees.push({
-				x: Math.cos(a) * r,
-				y: Math.sin(a) * r,
-				r: layer.r + ((i % 3) - 1) * 1.5,
-			})
-		}
+		treeLayer(track, layer, trees)
 	}
 	return trees
+}
+
+function treeLayer(track, layer, out) {
+	const count = Math.max(
+		12, Math.round(track.L / layer.step))
+	const off = track.boundOff + layer.out
+	for (let i = 0; i < count; i++) {
+		const s = (i / count) * track.L
+		const r = layer.r + ((i % 3) - 1) * 1.5
+		for (const side of [-1, 1]) {
+			const p = offsetPoint(track, s, side * off)
+			out.push({ x: p.x, y: p.y, r })
+		}
+	}
 }
