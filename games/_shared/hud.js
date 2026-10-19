@@ -82,6 +82,17 @@ export function brackets(ctx, x, y, w, h) {
 	ctx.stroke()
 }
 
+// A dark outline under everything. The glow alone is enough
+// over a starfield, but Dash's HUD sits over grass and
+// sunlit tarmac, where cyan-on-light is barely there.
+function outlined(ctx, text, x, y, width) {
+	ctx.lineWidth = width
+	ctx.lineJoin = 'round'
+	ctx.strokeStyle = 'rgba(2,8,16,0.8)'
+	ctx.strokeText(text, x, y)
+	ctx.fillText(text, x, y)
+}
+
 // A labelled value: small dim label, big glowing number under
 // it. `align` is 'left' (default) or 'right', in which case x
 // is the right-hand edge.
@@ -89,12 +100,12 @@ export function readout(ctx, x, y, label, value, size, align) {
 	ctx.textAlign = align || 'left'
 	ctx.fillStyle = DIM
 	ctx.font = `10px ${FONT}`
-	ctx.fillText(label, x, y)
+	outlined(ctx, label, x, y, 2.5)
 	ctx.fillStyle = LIVE
 	ctx.font = `bold ${size}px ${FONT}`
 	ctx.shadowColor = 'rgba(80,200,255,0.75)'
 	ctx.shadowBlur = 10
-	ctx.fillText(String(value), x, y + size + 2)
+	outlined(ctx, String(value), x, y + size + 2, 3.5)
 	ctx.shadowBlur = 0
 	ctx.textAlign = 'left'
 }
@@ -103,7 +114,7 @@ export function label(ctx, x, y, text, align, colour) {
 	ctx.textAlign = align || 'left'
 	ctx.fillStyle = colour || DIM
 	ctx.font = `11px ${FONT}`
-	ctx.fillText(text, x, y)
+	outlined(ctx, text, x, y, 2.5)
 	ctx.textAlign = 'left'
 }
 

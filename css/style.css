@@ -85,49 +85,11 @@ main {
   font-size: 0.9rem;
 }
 
-/* Dash overlays its title/buttons/meters directly on top of the
-   canvas, instead of putting them in the side panel or a bar
-   that takes up space beside/above it. */
-.dash-window {
-  position: relative;
-  display: inline-block;
-}
-
-.dash-window canvas {
-  display: block;
-}
-
-.dash-header {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  box-sizing: border-box;
-  background: rgba(0, 0, 0, 0.45);
-  color: #fff;
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  padding: 0.4rem 0.6rem;
-}
-
-.dash-header h2 {
-  margin: 0;
-  font-size: 1.1rem;
-}
-
-.dash-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
 /* The shared game window: a fixed-size canvas with the
    controls laid over the top of it rather than beside it, and
    the meters drawn on the canvas itself (games/_shared/hud.js)
-   rather than as sidebar stat lines. Dash has its own .dash-*
-   version of this below, which predates it. */
+   rather than as sidebar stat lines. Every game uses it; Dash's
+   own .dash-* rules, which this generalised, are gone. */
 .game-window {
   position: relative;
   display: inline-block;

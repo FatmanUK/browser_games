@@ -43,12 +43,10 @@ make pod-push  # push to ghcr.io/fatmanuk/browser_games (used by CI)
 Each game keeps a high score / best time in `localStorage` (per game,
 per browser) and has its own "New game" button next to its title.
 
-Blockfall, Maze Muncher and Belt Breaker share one window size, draw
-their meters on the canvas rather than in a sidebar, and take their
-music from replaceable `.mod` files in their own `music/` folder —
-see [games/README.md](games/README.md) for the helpers that do it.
-Dash still uses the older sidebar-free-but-text-based bar and
-synthesized music; it is the one left to convert.
+Every game shares one window size, draws its meters on the canvas
+rather than in a sidebar, and takes its music from replaceable `.mod`
+files in its own `music/` folder — see
+[games/README.md](games/README.md) for the helpers that do it.
 
 - **Blockfall** — a Tetris-style falling block game with a 7-bag
   randomizer and a next-piece preview. Arrow keys to move/rotate,
@@ -70,10 +68,10 @@ synthesized music; it is the one left to convert.
   setting, with the camera zoomed in and following the car (you
   can't see the whole track at once) and twin headlight beams
   cutting through the dim to light up whatever's ahead with its
-  true colours, not a white wash. Title, buttons and the
-  Laps/Speed/Best lap meters overlay the top of the canvas
-  itself (a translucent bar) rather than sitting beside it in
-  the side panel, so the canvas can fill the window. Bounded by
+  true colours, not a white wash. Title and buttons overlay the
+  top of the canvas rather than sitting beside it, and the
+  Lap/Speed/Best lap meters are drawn on the canvas itself as a
+  dashboard, so the canvas can fill the window. Bounded by
   a thick treeline that stops the car dead if you plough into
   it, with hard obstacles (small tyres/barrels, smaller than the
   car; big trees; and solid buildings filling out the middle)
@@ -89,7 +87,9 @@ synthesized music; it is the one left to convert.
   hauling the car down to a stop fast but not instantly), so you
   only hit one by running wide. Each generated track keeps its
   own best-lap time. Arrow keys / WASD to drive; the lap counter
-  never decreases. Has its own "Sound"/"Music" toggles.
+  never decreases. Has its own "Sound"/"Music" toggles, with a
+  replaceable ProTracker module in `games/racer/music/` for the
+  music.
 - **Belt Breaker** — an Asteroids-style rock shoot with a
   pre-rendered, fake-3D look. Three ships, a 3-2-1 countdown at
   the start of each level, then three phases per level: clear a

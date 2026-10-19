@@ -6,9 +6,12 @@
 // oval used, generalized from a closed-form ellipse formula to a
 // lookup table.
 
-import { createStat } from '../_shared/chrome.js'
+import {
+	buildWindow, WIDTH, HEIGHT,
+} from '../_shared/hud.js'
 import { loadNumber, saveNumber } from '../_shared/storage.js'
 import { setupSound } from './audio.js'
+import { drawHud } from './hud.js'
 import * as TRACK from './track-data.js'
 
 const CENTER = { x: 0, y: 0 }
@@ -19,13 +22,17 @@ const INNER_RUMBLE = offsetTable(TRACK.INNER_RADIUS, 4)
 // The camera follows the car and only shows a window onto the
 // world — tall enough to always show the full width of the
 // track's road surface rather than the whole track at once.
-// VIEW_SCALE blows that up to a sensible on-screen window size
-// without changing how much of the track it actually shows.
+// VIEW_SCALE blows that up to the shared window size without
+// changing how much of the track it actually shows.
+//
+// The window is the suite's (games/_shared/hud.js), and the
+// scale is derived from it rather than the other way round:
+// the canvas used to be sized from the track's road width, so
+// regenerating the track with a different ROAD_WIDTH would
+// have quietly changed how big this game's window was.
 const VIEWPORT_HEIGHT = TRACK.ROAD_WIDTH
-const VIEWPORT_WIDTH = Math.round(VIEWPORT_HEIGHT * 2.4)
-const VIEW_SCALE = 4
-const CANVAS_WIDTH = VIEWPORT_WIDTH * VIEW_SCALE
-const CANVAS_HEIGHT = VIEWPORT_HEIGHT * VIEW_SCALE
+const VIEW_SCALE = HEIGHT / VIEWPORT_HEIGHT
+const VIEWPORT_WIDTH = WIDTH / VIEW_SCALE
 
 const ACCEL = 220
 const BRAKE = 260
@@ -619,10 +626,6 @@ function drawCar(ctx, state) {
 	ctx.restore()
 }
 
-function formatBest(value) {
-	return value === 0 ? '–' : `${value.toFixed(1)}s`
-}
-
 function drawWorld(ctx, state) {
 	drawTreeLine(ctx)
 	drawTrackRing(ctx, TRACK.OUTER_RADIUS, '#555')
@@ -740,59 +743,10 @@ function draw(ctx, world, state) {
 	ctx.restore()
 }
 
-function createCanvas() {
-	const canvas = document.createElement('canvas')
-	canvas.width = CANVAS_WIDTH
-	canvas.height = CANVAS_HEIGHT
-	canvas.tabIndex = 0
-	return canvas
-}
-
-function createButton(label, onClick) {
-	const btn = document.createElement('button')
-	btn.type = 'button'
-	btn.className = 'game-side-button'
-	btn.textContent = label
-	// Don't let clicking this button steal keyboard focus from
-	// the game canvas — it needs to stay focused for the arrow
-	// keys to keep driving.
-	btn.addEventListener(
-		'mousedown', (e) => e.preventDefault())
-	btn.addEventListener('click', onClick)
-	return btn
-}
-
 // Builds the game window: title, New game/Back buttons,
 // Sound/Music toggles and the Laps/Speed/Best lap meters sit in
 // a translucent bar overlaid on top of the canvas itself — not
 // beside or above it — so the canvas can be the whole window.
-function buildWindow(container, title, controls, onNewGame) {
-	const dashWindow = document.createElement('div')
-	dashWindow.className = 'dash-window'
-
-	const header = document.createElement('div')
-	header.className = 'dash-header'
-
-	const controlsRow = document.createElement('div')
-	controlsRow.className = 'dash-row'
-	const statsRow = document.createElement('div')
-	statsRow.className = 'dash-row'
-
-	const heading = document.createElement('h2')
-	heading.textContent = title
-	controlsRow.append(
-		heading,
-		createButton('New game', onNewGame),
-		createButton('← Back to games', controls.back))
-
-	const canvas = createCanvas()
-	header.append(controlsRow, statsRow)
-	dashWindow.append(canvas, header)
-	container.appendChild(dashWindow)
-
-	return { canvas, controlsRow, statsRow }
-}
-
 function createInput(ref, audio) {
 	function onKeyDown(e) {
 		audio.unlock()
@@ -812,21 +766,19 @@ function createInput(ref, audio) {
 
 function createWorldCanvas() {
 	const canvas = document.createElement('canvas')
-	canvas.width = CANVAS_WIDTH
-	canvas.height = CANVAS_HEIGHT
+	canvas.width = WIDTH
+	canvas.height = HEIGHT
 	return { canvas, ctx: canvas.getContext('2d') }
 }
 
-function createRuntime(ctx, stats, best, audio) {
+function createRuntime(ctx, best, audio) {
 	const ref = { state: null }
 	const world = createWorldCanvas()
 	let handle = null, last = null
 
 	function render() {
 		draw(ctx, world, ref.state)
-		stats.setLaps(ref.state.lapsShown)
-		stats.setSpeed(Math.round(ref.state.speed))
-		stats.setBest(formatBest(best.value))
+		drawHud(ctx, ref.state, best, MAX_SPEED)
 	}
 
 	function frame(time) {
@@ -868,20 +820,17 @@ export default {
 
 	init(container, controls) {
 		let runtime = null
-		const { canvas, controlsRow, statsRow } = buildWindow(
-			container, this.title, controls,
-			() => runtime.start())
-
-		const stats = {
-			setLaps: createStat(statsRow, 'Laps'),
-			setSpeed: createStat(statsRow, 'Speed'),
-			setBest: createStat(statsRow, 'Best lap'),
-		}
+		const { canvas, controlsRow } = buildWindow(
+			container, {
+				title: this.title,
+				onBack: controls.back,
+				onNewGame: () => runtime.start(),
+			})
 		const audio = setupSound(controlsRow)
 
 		const best = { value: loadNumber(BEST_KEY, 0) }
 		runtime = createRuntime(
-			canvas.getContext('2d'), stats, best, audio)
+			canvas.getContext('2d'), best, audio)
 
 		canvas.addEventListener('keydown', runtime.onKeyDown)
 		canvas.addEventListener('keyup', runtime.onKeyUp)

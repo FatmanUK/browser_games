@@ -1,20 +1,43 @@
 // Dash's own sound palette, built on the shared engine in
-// games/_shared/audio.js. Swap MELODY and the tone() calls
-// below for real tracks/samples later without touching the
-// engine or games/racer/game.js.
+// games/_shared/audio.js. This is the only place Dash-specific
+// audio choices live.
+//
+// The effects are still synthesized tones. The music is not:
+// it is a ProTracker module in music/, so it can be replaced
+// without touching any code — drop a .mod in there and name it
+// in TRACKS below.
 
 import {
 	createAudio, createAudioToggles,
 } from '../_shared/audio.js'
+import { createMusic } from '../_shared/music.js'
+import { MOD_BASE64 } from './music-data.js'
 
-const MELODY = [
-	330, 392, 440, 392, 330, 294, 330, 392,
-	349, 415, 466, 415, 349, 311, 349, 415,
-]
+// The shared engine wants a melody to loop; the music comes
+// from the tracker module instead, so this single rest is
+// never heard.
+const SILENT = [null]
+
+export const TRACKS = ['dash.mod']
+
+const MUSIC = {
+	baseUrl: new URL('music/', import.meta.url),
+	tracks: TRACKS,
+	fallback: MOD_BASE64,
+}
+
 
 export function setupSound(side) {
-	const audio = createAudio(MELODY, 200)
-	createAudioToggles(side, audio)
+	const audio = createAudio(SILENT, 500)
+	const music = createMusic(audio.context, MUSIC)
+	// A façade, not the engine itself: Sound stays the
+	// engine's, Music belongs to the tracker player.
+	createAudioToggles(side, {
+		isSoundOn: audio.isSoundOn,
+		setSoundOn: audio.setSoundOn,
+		isMusicOn: music.isOn,
+		setMusicOn: music.setOn,
+	})
 
 	return {
 		bump: () => audio.tone(90, 0.12, 'square', 0.1),
@@ -36,6 +59,9 @@ export function setupSound(side) {
 				],
 				'square', 0.09, 90),
 		unlock: audio.unlock,
-		stop: audio.stop,
+		stop() {
+			music.stop()
+			audio.stop()
+		},
 	}
 }
