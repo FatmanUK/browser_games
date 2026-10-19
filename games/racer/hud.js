@@ -6,9 +6,11 @@
 // line that eats into the road.
 
 import {
-	WIDTH as W, HEIGHT as H, DIM, brackets, readout, label,
+	WIDTH as W, HEIGHT as H, DIM, LIVE, brackets, readout,
+	label,
 } from '../_shared/hud.js'
-import { LAP_TARGET, ordinal } from './race.js'
+import { LAP_TARGET, ordinal, orderOf } from './race.js'
+import { PLAYER_NAME, PLAYER_COLOURS } from './car.js'
 
 export function formatLap(value) {
 	return value === 0 ? '--.-' : value.toFixed(1)
@@ -43,6 +45,48 @@ function banner(ctx, text, size, y, colour) {
 	ctx.fillStyle = colour
 	ctx.fillText(text, W / 2, y)
 	ctx.restore()
+}
+
+// The field, furthest round the lap first. A race against five
+// cars you can only tell apart by colour is a race against
+// scenery; a name and a place turns the blue one into the one
+// who beat you last time.
+//
+// Drawn down the right-hand side under BEST LAP, where there is
+// nothing else and the road is rarely interesting — the player
+// is at the centre of the window, and the standings must not
+// compete with it. The player's own row is LIVE, the rest DIM,
+// which is the suite's existing live/inactive distinction
+// rather than a new colour.
+const ROW_H = 15
+const BOARD_X = W - 150
+const BOARD_Y = 108
+
+function boardRow(ctx, car, place, mine, y) {
+	const colour = mine ? LIVE : DIM
+	label(ctx, BOARD_X, y, ordinal(place), 'left', colour)
+	label(
+		ctx, BOARD_X + 34, y,
+		mine ? PLAYER_NAME : car.name, 'left', colour)
+	// A swatch rather than more words: it is the only thing
+	// that ties a row to the car you can see on the road.
+	// The player's livery is not on the player's state — it
+	// is passed to drawCar as a separate argument — so the
+	// row has to reach for it rather than read it off the car.
+	ctx.fillStyle =
+		(mine ? PLAYER_COLOURS : car.colours).body
+	ctx.fillRect(BOARD_X + 112, y - 7, 16, 7)
+}
+
+function drawBoard(ctx, state) {
+	const field = orderOf(state, state.rivals)
+	brackets(ctx, BOARD_X - 10, BOARD_Y - 14, 148, 100)
+	label(ctx, BOARD_X, BOARD_Y - 3, 'STANDINGS')
+	field.forEach((car, i) => {
+		boardRow(
+			ctx, car, i + 1, car === state,
+			BOARD_Y + 14 + i * ROW_H)
+	})
 }
 
 // Above the middle, not on it: unlike Belt Breaker's ship, the
@@ -97,6 +141,8 @@ export function drawHud(ctx, state, best, maxSpeed, place) {
 	readout(
 		ctx, W - 20, 54, 'BEST LAP',
 		formatLap(best.value), 22, 'right')
+
+	drawBoard(ctx, state)
 
 	readout(
 		ctx, 20, H - 46, 'SPEED',

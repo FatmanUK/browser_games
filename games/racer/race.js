@@ -47,17 +47,22 @@ export function lapsOf(car) {
 	return Math.max(0, Math.floor(progressOf(car.totalAngle)))
 }
 
-// Position is just how many rivals are further round the lap.
-// Laps run off swept angle (geom.js), so progress is already a
-// single monotonic number per car and there is no order to
-// maintain — nothing to get out of step with the field.
+// The whole field, furthest round the lap first. Progress is a
+// single monotonic number per car (geom.js), so the order is
+// just a sort and there is nothing to keep in step.
+//
+// This exists for the standings board, but it also earns its
+// keep for position: counting rivals ahead and sorting the
+// field are the same question asked twice, and two answers
+// that can disagree is one more than is wanted.
+export function orderOf(player, rivals) {
+	return [player, ...rivals].sort(
+		(a, b) => progressOf(b.totalAngle) -
+			progressOf(a.totalAngle))
+}
+
 export function positionOf(player, rivals) {
-	const mine = progressOf(player.totalAngle)
-	let ahead = 0
-	for (const rival of rivals) {
-		if (progressOf(rival.totalAngle) > mine) ahead++
-	}
-	return ahead + 1
+	return orderOf(player, rivals).indexOf(player) + 1
 }
 
 // What the HUD shows. Once the flag is out the place is the

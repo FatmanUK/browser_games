@@ -71,7 +71,8 @@ files in its own `music/` folder — see
   lap, each on its own line across the road and at its own
   pace, so the field strings out instead of running as a
   block, and leaning on one through a corner costs you both
-  speed. Their lamps are drawn over the dusk rather than
+  speed. They have names and a standings board, so the blue one
+  is Voss rather than the blue one. Their lamps are drawn over the dusk rather than
   under it, so a car outside your headlights is still
   something you can see coming. Crossing the line for the
   third time ends your race with a finishing place. Dusk

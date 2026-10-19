@@ -13,14 +13,14 @@
 
 import {
 	CAR_LENGTH, CAR_WIDTH, ACCEL, BRAKE, MAX_SPEED, TURN_RATE,
-	FRICTION, drawCar, RIVAL_COLOURS,
+	FRICTION, drawCar, RIVALS,
 } from './car.js'
 import {
 	TRAVEL_DIR, angleOf, angleDelta, trackBandPoint, bandFrac,
 } from './geom.js'
 import * as TRACK from './track-data.js'
 
-export const RIVAL_COUNT = 5
+export const RIVAL_COUNT = RIVALS.length
 
 // Lookahead in radians: a fixed minimum so a stopped car still
 // has something to aim at, plus a speed term so a fast car
@@ -34,33 +34,23 @@ const LOOK_PER_SPEED = 0.00042
 const FULL_SHARP = 0.55
 const CORNER_SPEED = 0.42
 
-// Each rival's own fraction of the field's pace, by grid order,
-// so the pack strings out instead of running as one block.
-const SKILLS = [0.97, 0.94, 0.91, 0.88, 0.85]
-
-// Lanes across the road band (0 inner, 1 outer). Spread wide
-// enough that two rivals on the same corner take visibly
-// different lines and don't spend the lap grinding together.
-const LANES = [0.38, 0.58, 0.3, 0.68, 0.48]
-
 export function createRivals() {
-	const rivals = []
-	for (let i = 0; i < RIVAL_COUNT; i++) {
+	return RIVALS.map((driver, i) => {
 		const slot = TRACK.GRID_SLOTS[i + 1]
-		rivals.push({
+		return {
 			x: slot.x,
 			y: slot.y,
 			angle: slot.angle,
 			facing: slot.angle,
 			speed: 0,
-			lane: LANES[i],
-			skill: SKILLS[i],
-			colours: RIVAL_COLOURS[i],
+			name: driver.name,
+			lane: driver.lane,
+			skill: driver.skill,
+			colours: driver.colours,
 			totalAngle: 0,
 			finished: false,
-		})
-	}
-	return rivals
+		}
+	})
 }
 
 // Where this rival wants to be pointing: at its lane, a
