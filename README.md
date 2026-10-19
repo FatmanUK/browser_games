@@ -83,6 +83,9 @@ files in its own `music/` folder — see
   is Voss rather than the blue one, with the current top three
   shown across the top of the window as faces and names, and
   the whole field down the side with the same faces smaller.
+  Both stop moving once they have nothing left to say: the top
+  three settles when three cars are home, and the board when
+  the whole field is home or out.
   The rivals are drawn rather than modelled — flat colour
   inside an ink line, the way a comic panel is — because a
   face is a set of marks rather than a solid: Voss behind his

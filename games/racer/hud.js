@@ -10,7 +10,7 @@ import {
 	label,
 } from '../_shared/hud.js'
 import {
-	LAP_TARGET, ordinal, orderOf, allGates,
+	LAP_TARGET, ordinal, podiumOf, boardOf, allGates,
 } from './race.js'
 import { PLAYER_NAME, PLAYER_COLOURS } from './car.js'
 import { MAX_AMMO, LIVES } from './missiles.js'
@@ -93,7 +93,8 @@ function boardRow(ctx, car, place, mine, y) {
 }
 
 function drawBoard(ctx, state) {
-	const field = orderOf(state.track, state, state.rivals)
+	const field = boardOf(
+		state.track, state.race, state, state.rivals)
 	brackets(ctx, BOARD_X - 10, BOARD_Y - 14, 158, 168)
 	label(ctx, BOARD_X, BOARD_Y - 3, 'STANDINGS')
 	field.forEach((car, i) => {
@@ -211,8 +212,8 @@ function podiumEntry(ctx, car, place, mine, x) {
 }
 
 function drawPodium(ctx, state) {
-	const top = orderOf(state.track, state, state.rivals)
-		.slice(0, 3)
+	const top = podiumOf(
+		state.track, state.race, state, state.rivals)
 	top.forEach((car, i) => {
 		podiumEntry(
 			ctx, car, i + 1, car === state,

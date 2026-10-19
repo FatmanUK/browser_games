@@ -21,6 +21,11 @@ export function createRace() {
 		place: 0,
 		finishedAhead: 0,
 		time: 0,
+		// Who is home, in the order they got there, and the
+		// two readouts once they have nothing left to say.
+		home: [],
+		podium: null,
+		board: null,
 	}
 }
 
@@ -177,22 +182,32 @@ export function progressOf(track, car) {
 		fromLine(track, car.s) / track.L
 }
 
-// The whole field, furthest round the lap first. Progress is a
-// single monotonic number per car (geom.js), so the order is
-// just a sort and there is nothing to keep in step.
+// The whole field: everyone who is home, in the order they
+// got there, then everyone still out there by how far round
+// they are.
+//
+// The finishers cannot be sorted by progress along with the
+// rest. A car that has finished keeps coasting, so its
+// progress keeps climbing, and two cars home a second apart
+// would be ranked by which rolled further afterwards. The
+// line decides that, and the line has already decided it.
 //
 // This exists for the standings board, but it also earns its
 // keep for position: counting rivals ahead and sorting the
 // field are the same question asked twice, and two answers
 // that can disagree is one more than is wanted.
-export function orderOf(track, player, rivals) {
-	return [player, ...rivals].sort(
-		(a, b) => progressOf(track, b) -
+export function orderOf(track, race, player, rivals) {
+	const home = race.home
+	const rest = [player, ...rivals]
+		.filter((c) => !home.includes(c))
+		.sort((a, b) => progressOf(track, b) -
 			progressOf(track, a))
+	return home.concat(rest)
 }
 
-export function positionOf(track, player, rivals) {
-	return orderOf(track, player, rivals).indexOf(player) + 1
+export function positionOf(track, race, player, rivals) {
+	return orderOf(track, race, player, rivals)
+		.indexOf(player) + 1
 }
 
 // What the HUD shows. Once the flag is out the place is the
@@ -202,7 +217,48 @@ export function positionOf(track, player, rivals) {
 // disagreed with the result banner beside it.
 export function placeOf(track, race, player, rivals) {
 	return isOver(race) ?
-		race.place : positionOf(track, player, rivals)
+		race.place : positionOf(track, race, player, rivals)
+}
+
+// A readout stops moving once what it says can no longer
+// change. Three cars home settles the podium: nobody behind
+// them can get in front of a car that has already crossed the
+// line, and a car out of lives is not going to either. The
+// board settles when the whole field is decided.
+//
+// Without this the top three kept shuffling after the flag,
+// because the cars on it were still rolling and a car still
+// racing was still gaining on them.
+//
+// The snapshot is taken once and kept. Recomputing it every
+// frame from a condition that is still true would be the same
+// answer, right up until a car that had finished rolled over
+// a line and stopped being the same answer.
+function settled(player, rivals) {
+	return [player, ...rivals].every((c) => c.finished || c.out)
+}
+
+function freeze(track, race, player, rivals) {
+	const all = settled(player, rivals)
+	if (!race.podium && (race.home.length >= 3 || all)) {
+		const o = orderOf(track, race, player, rivals)
+		race.podium = o.slice(0, 3)
+	}
+	if (!race.board && all) {
+		race.board = orderOf(track, race, player, rivals)
+	}
+}
+
+// What the two readouts show: the frozen order once there is
+// one, and the live order until then.
+export function podiumOf(track, race, player, rivals) {
+	return race.podium ||
+		orderOf(track, race, player, rivals).slice(0, 3)
+}
+
+export function boardOf(track, race, player, rivals) {
+	return race.board ||
+		orderOf(track, race, player, rivals)
 }
 
 // A rival crossing the line for the last time is retired from
@@ -217,8 +273,10 @@ export function checkFinishes(track, race, player, rivals) {
 		if (rival.finished || rival.out) continue
 		if (lapsOf(track, rival) < LAP_TARGET) continue
 		rival.finished = true
+		race.home.push(rival)
 		race.finishedAhead++
 	}
+	freeze(track, race, player, rivals)
 	if (race.phase !== 'racing') return false
 	// Out of lives ends your race where you are: last, behind
 	// everyone still running as well as everyone home.
@@ -230,6 +288,9 @@ export function checkFinishes(track, race, player, rivals) {
 	if (lapsOf(track, player) < LAP_TARGET) return false
 	race.phase = 'finished'
 	race.place = race.finishedAhead + 1
+	player.finished = true
+	race.home.push(player)
+	freeze(track, race, player, rivals)
 	return true
 }
 
