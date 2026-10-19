@@ -9,8 +9,16 @@ import {
 	WIDTH as W, HEIGHT as H, DIM, LIVE, brackets, readout,
 	label,
 } from '../_shared/hud.js'
-import { LAP_TARGET, ordinal, orderOf } from './race.js'
+import {
+	LAP_TARGET, ordinal, orderOf, allGates,
+} from './race.js'
 import { PLAYER_NAME, PLAYER_COLOURS } from './car.js'
+
+function countBits(n) {
+	let c = 0
+	while (n) { c += n & 1; n >>= 1 }
+	return c
+}
 
 export function formatLap(value) {
 	return value === 0 ? '--.-' : value.toFixed(1)
@@ -123,32 +131,44 @@ function drawResult(ctx, race) {
 		'PRESS NEW GAME TO RACE AGAIN', 'center')
 }
 
-export function drawHud(ctx, state, best, maxSpeed, place) {
-	ctx.save()
-	ctx.setTransform(1, 0, 0, 1, 0, 0)
-	ctx.textBaseline = 'alphabetic'
-
+// The top-left cluster plus the speed block. Split out of
+// drawHud only to keep it inside forty lines.
+function drawMeters(ctx, state, best, maxSpeed, place) {
 	readout(
 		ctx, 20, 54, 'LAP',
 		`${Math.min(state.lapsShown + 1, LAP_TARGET)}/` +
 			LAP_TARGET, 26)
-	brackets(ctx, 14, 42, 250, 50)
+	brackets(ctx, 14, 42, 350, 50)
 
 	// Beside LAP rather than mid-window: the middle column is
 	// where the lights and the chequered flag go.
 	readout(ctx, 150, 54, 'POS', ordinal(place), 26)
 
+	// How many gates are still outstanding this lap. The lap
+	// will not count without them, so the count has to be
+	// somewhere a driver can see it.
+	const n = state.track.GATES.length
+	const left = countBits(
+		allGates(state.track) & ~(state.gates || 0))
+	readout(ctx, 268, 54, 'GATES', `${n - left}/${n}`, 26)
+
 	readout(
 		ctx, W - 20, 54, 'BEST LAP',
 		formatLap(best.value), 22, 'right')
-
-	drawBoard(ctx, state)
 
 	readout(
 		ctx, 20, H - 46, 'SPEED',
 		Math.round(state.speed), 26)
 	speedBar(ctx, state.speed, maxSpeed, 20, H - 16, 150)
+}
 
+export function drawHud(ctx, state, best, maxSpeed, place) {
+	ctx.save()
+	ctx.setTransform(1, 0, 0, 1, 0, 0)
+	ctx.textBaseline = 'alphabetic'
+
+	drawMeters(ctx, state, best, maxSpeed, place)
+	drawBoard(ctx, state)
 	ctx.fillStyle = DIM
 	label(
 		ctx, W - 20, H - 18,

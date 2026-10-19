@@ -233,6 +233,90 @@ function drawWedges(ctx, track) {
 // and markings are flat surfaces seen from directly above, and
 // a solid would give them nothing a fill does not. Only the
 // things that stand up off it are sprites.
+// A gate: a band painted across the road, with a post each
+// side so it reads from a distance in the dusk. Lit once the
+// player has it, dim until then — the rule is only fair if
+// you can see which ones you are missing.
+const GATE_DIM = 'rgba(126, 186, 210, 0.3)'
+const GATE_LIT = 'rgba(143, 233, 255, 0.72)'
+const POST_DIM = '#3a5a68'
+const POST_LIT = '#8fe9ff'
+
+function drawGate(ctx, track, angle, got) {
+	const inner = lerpArray(track.INNER_RADIUS, angle)
+	const outer = lerpArray(track.OUTER_RADIUS, angle)
+	const cos = Math.cos(angle), sin = Math.sin(angle)
+	ctx.strokeStyle = got ? GATE_LIT : GATE_DIM
+	ctx.lineWidth = 2.5
+	ctx.setLineDash([6, 6])
+	ctx.beginPath()
+	ctx.moveTo(cos * inner, sin * inner)
+	ctx.lineTo(cos * outer, sin * outer)
+	ctx.stroke()
+	ctx.setLineDash([])
+	ctx.fillStyle = got ? POST_LIT : POST_DIM
+	for (const r of [inner, outer]) {
+		ctx.beginPath()
+		ctx.arc(cos * r, sin * r, 3, 0, Math.PI * 2)
+		ctx.fill()
+	}
+}
+
+function drawGates(ctx, track, state) {
+	const got = state.gates || 0
+	track.GATES.forEach((angle, i) => {
+		// Gate 0 is the start line, which is already painted.
+		if (i === 0) return
+		drawGate(ctx, track, angle, (got & (1 << i)) !== 0)
+	})
+}
+
+// A chevron on the road pointing the way the corner bends.
+// Two of them for a hard one, which is the only difference a
+// driver needs at the speed they go past.
+//
+// Canted 45 degrees off the direction of travel, not 90. A
+// quarter turn points the arrow straight across the road,
+// which reads as "go that way now" rather than as "the road
+// bends that way"; half of that keeps the forward sense in it.
+const ARROW_CANT = Math.PI / 4
+
+function chevron(ctx, x, y, face, dir, size, alpha) {
+	ctx.save()
+	ctx.translate(x, y)
+	ctx.rotate(face + (dir > 0 ? 1 : -1) * ARROW_CANT)
+	ctx.strokeStyle = `rgba(255, 206, 84, ${alpha})`
+	ctx.lineWidth = 3.5
+	ctx.lineJoin = 'round'
+	ctx.lineCap = 'round'
+	ctx.beginPath()
+	ctx.moveTo(-size, -size * 0.8)
+	ctx.lineTo(size * 0.5, 0)
+	ctx.lineTo(-size, size * 0.8)
+	ctx.stroke()
+	ctx.restore()
+}
+
+function drawArrows(ctx, track) {
+	for (const a of track.ARROWS) {
+		const inner = lerpArray(track.INNER_RADIUS, a.angle)
+		const outer = lerpArray(track.OUTER_RADIUS, a.angle)
+		const r = inner + (outer - inner) * 0.5
+		const x = Math.cos(a.angle) * r
+		const y = Math.sin(a.angle) * r
+		// Along the road, which on a star-shaped track is the
+		// tangent at this angle turned by the travel sense.
+		const face = a.angle +
+			track.TRAVEL_DIR * Math.PI / 2
+		chevron(ctx, x, y, face, a.dir, 13, 0.8)
+		if (!a.hard) continue
+		const back = a.angle - track.TRAVEL_DIR * 0.03
+		chevron(
+			ctx, Math.cos(back) * r, Math.sin(back) * r,
+			face, a.dir, 13, 0.55)
+	}
+}
+
 function drawWorld(ctx, state, atlas, cam) {
 	const track = state.track
 	const rb = rumbles(track)
@@ -241,6 +325,8 @@ function drawWorld(ctx, state, atlas, cam) {
 	drawRumbleRing(ctx, rb.outer)
 	drawRumbleRing(ctx, rb.inner)
 	drawWedges(ctx, track)
+	drawArrows(ctx, track)
+	drawGates(ctx, track, state)
 	drawStartGrid(ctx, track)
 	drawStartLine(ctx, track)
 	// The treeline stands outside the boundary, so it goes

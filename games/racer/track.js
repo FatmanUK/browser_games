@@ -195,6 +195,41 @@ function buildCorners(dense, heads) {
 	return out
 }
 
+// Twelve gates evenly spaced round the lap, each a point on
+// the road's centreline. A lap counts only if every one of
+// them was passed ON the road, which is the whole anti-cut
+// rule: swept angle alone cannot tell a lap from a straight
+// line across the infield, because the shortcut sweeps the
+// same angle the long way round does.
+const GATE_COUNT = 12
+
+function buildGates(start, travel) {
+	const base = Math.atan2(start.y, start.x)
+	const gates = []
+	for (let i = 0; i < GATE_COUNT; i++) {
+		const a = base + travel * (i / GATE_COUNT) * TWO_PI
+		gates.push(((a % TWO_PI) + TWO_PI) % TWO_PI)
+	}
+	return gates
+}
+
+// A chevron painted on the road before a corner, pointing the
+// way it bends. Only for the ones worth warning about: the
+// curvature pass finds eleven-odd runs a lap and most are
+// kinks you drive straight through.
+const ARROW_SEVERITY = 2.6 * DEG
+const ARROW_LEAD = 0.1
+
+function buildArrows(corners, travel) {
+	return corners
+		.filter((c) => c.severity >= ARROW_SEVERITY)
+		.map((c) => ({
+			angle: c.angle - travel * (c.spread + ARROW_LEAD),
+			dir: c.dir,
+			hard: c.severity >= ARROW_SEVERITY * 1.8,
+		}))
+}
+
 function assemble(seed, dense) {
 	const centre = radiusLookup(dense)
 	const t = {
@@ -210,6 +245,7 @@ function assemble(seed, dense) {
 	if (!gridOnRoad(grid.slots, t)) return null
 	const corners = buildCorners(dense, heads)
 	if (!corners.length) return null
+	const travel = travelDir(grid.start)
 	const hz = rng((seed ^ 0x5be5) >>> 0)
 	const h = buildHazards(t, hz, grid.lineAngle, corners)
 	return {
@@ -225,7 +261,9 @@ function assemble(seed, dense) {
 		CORNERS: corners,
 		START: grid.start,
 		GRID_SLOTS: grid.slots,
-		TRAVEL_DIR: travelDir(grid.start),
+		TRAVEL_DIR: travel,
+		GATES: buildGates(grid.start, travel),
+		ARROWS: buildArrows(corners, travel),
 	}
 }
 

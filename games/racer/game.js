@@ -26,7 +26,7 @@ import {
 } from './rivals.js'
 import {
 	createRace, isRunning, isOver, tickCountdown, lapsOf,
-	placeOf, checkFinishes,
+	placeOf, checkFinishes, trackGates,
 } from './race.js'
 import { drawHud } from './hud.js'
 import { buildTrack } from './track.js'
@@ -245,6 +245,10 @@ function update(state, dt, best, audio) {
 	if (!isRunning(race)) return
 	if (isOver(race)) state.keys.clear()
 	drivePlayer(state, dt, best, audio)
+	trackGates(state.track, state)
+	for (const rival of state.rivals) {
+		trackGates(state.track, rival)
+	}
 	updateRivals(
 		state.track, state.rivals, dt,
 		(x, y) => terrainAt(state.track, x, y))

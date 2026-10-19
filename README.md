@@ -71,7 +71,12 @@ files in its own `music/` folder — see
   pace, so the field strings out instead of running as a
   block, and leaning on one through a corner costs you both
   speed. They have names and a standings board, so the blue one
-  is Voss rather than the blue one. Their lamps are drawn over the dusk rather than
+  is Voss rather than the blue one. Twelve checkpoint gates are
+  painted across the road, and a lap only counts if every one
+  of them was passed *on* the road — swept angle alone cannot
+  tell a lap from a straight line across the infield, because
+  the shortcut sweeps exactly the same angle. Amber chevrons
+  warn of the sharper corners, pointing the way they bend. Their lamps are drawn over the dusk rather than
   under it, so a car outside your headlights is still
   something you can see coming. Crossing the line for the
   third time ends your race with a finishing place. Dusk

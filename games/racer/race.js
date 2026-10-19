@@ -3,7 +3,7 @@
 // a track against the clock until you stopped, which is a
 // driving toy rather than the game its siblings are.
 
-import { progressOf } from './geom.js'
+import { progressOf, bandFrac } from './geom.js'
 
 export const LAP_TARGET = 3
 
@@ -43,9 +43,66 @@ export function tickCountdown(race, dt, audio) {
 	if (race.ready <= -GO_HOLD) race.phase = 'racing'
 }
 
+// Where a car is round the lap, 0..1, from swept angle.
+function lapFrac(track, car) {
+	const p = progressOf(track, car.totalAngle)
+	return p - Math.floor(p)
+}
+
+// How far off the centreline a car may be and still be
+// credited with a gate. The road is 0..1 across, so this
+// allows a wheel over the kerb and nothing more.
+const GATE_WIDTH = 0.62
+
+// Gates are credited as the car sweeps past them, and only if
+// it is on the road at the time. That is the whole rule:
+// cutting across the infield sweeps exactly the same angle the
+// long way round does, so swept angle alone can never tell the
+// two apart — being there is what has to be checked.
+export function trackGates(track, car) {
+	if (car.gates === undefined) {
+		car.gates = 0
+		car.gateAt = lapFrac(track, car)
+		return
+	}
+	const now = lapFrac(track, car)
+	const prev = car.gateAt
+	car.gateAt = now
+	// Only forward progress counts, and a wrap is forward.
+	const moved = now >= prev ? now - prev : now + 1 - prev
+	if (moved > 0.5) return
+	const off = Math.abs(bandFrac(track, car.x, car.y) - 0.5)
+	if (off > GATE_WIDTH) return
+	const n = track.GATES.length
+	for (let i = 0; i < n; i++) {
+		const g = i / n
+		const passed = now >= prev
+			? g > prev && g <= now
+			: g > prev || g <= now
+		if (passed) car.gates |= 1 << i
+	}
+}
+
+export function allGates(track) {
+	return (1 << track.GATES.length) - 1
+}
+
+// The lap count is still swept angle, but a lap only lands
+// when every gate was collected on the way round. Crossing the
+// line with a gap in the mask does nothing at all.
 export function lapsOf(track, car) {
-	return Math.max(
+	const raw = Math.max(
 		0, Math.floor(progressOf(track, car.totalAngle)))
+	if (car.lapsDone === undefined) {
+		car.lapsDone = 0
+		car.lapRaw = raw
+	}
+	if (raw > car.lapRaw) {
+		car.lapRaw = raw
+		if (car.gates === allGates(track)) car.lapsDone++
+		car.gates = 0
+	}
+	return car.lapsDone
 }
 
 // The whole field, furthest round the lap first. Progress is a
