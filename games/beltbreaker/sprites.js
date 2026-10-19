@@ -4,7 +4,7 @@
 // module when the launcher page loads, and baking a few hundred
 // canvases for a game nobody has picked yet would stall it.
 
-import { rng, centred, makeCanvas } from './art.js'
+import { rng, centred, makeCanvas } from '../_shared/art.js'
 import { buildRocks } from './rocks.js'
 import {
 	buildShip, buildFlame, buildFoe, buildBoss,

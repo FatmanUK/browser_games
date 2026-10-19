@@ -65,6 +65,23 @@ games should too, for a consistent look:
   `games/_shared/modplayer.js` renders a module to a buffer and
   `modfx.js` documents which ProTracker effects it supports.
   `tools/generate_mod.py` generates the bundled modules.
+- `games/_shared/mesh.js`, `art.js`, `bake.js` — the fake-3D
+  art pipeline, first built for Belt Breaker's rocks and now
+  shared. `mesh.js` is pure maths: a solid is the intersection
+  of half-spaces (`box`, `prism`, `cone`, `wedge` build the
+  plane lists, `convex` turns any of them into faces), which
+  is what makes every solid convex and therefore makes hidden
+  -surface removal a backface test with no depth sort.
+  `shadeFace` lights one face against a fixed key/fill/specular
+  rig. `art.js` holds the 2.5D helpers and a seeded `rng`.
+  `bake.js` is the canvas side: `model()` unions convex parts,
+  `paintModel` draws one, `bakeOne`/`ringOf` bake a sprite or a
+  ring of headings, `frameFor` picks one at runtime. Shading
+  uses the *rotated* normal against a fixed light, so a turned
+  sprite is not a turned picture — anything that turns must be
+  baked per heading rather than `ctx.rotate()`d. Bake lazily,
+  never at module load: `js/registry.js` imports every game's
+  module when the launcher page opens.
 - `games/_shared/storage.js` — `loadNumber(key, fallback)` /
   `saveNumber(key, value)` wrap `localStorage` (with try/catch) for
   persisting a high score or best time across visits.

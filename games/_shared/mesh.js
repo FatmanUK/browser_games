@@ -1,22 +1,31 @@
-// A tiny flat-shading triangle renderer, used to bake the rock
-// sprites (see rocks.js).
+// A tiny flat-shading renderer. It began life baking Belt
+// Breaker's rocks (games/beltbreaker/rocks.js) and now also
+// bakes Dash's cars and scenery, which is why it lives here.
 //
 // The first version of the rocks was a lumpy silhouette filled
 // with a radial gradient. That reads as a cartoon: a gradient
 // is a smooth ball no matter what outline you clip it to, and
 // real rock is faceted, grainy and anything but smooth. So the
-// rocks are now actual geometry — a subdivided icosahedron with
-// its vertices pushed around — lit per face with a fixed light,
-// which is what makes them look crystalline and cut rather than
-// drawn. It is all still baked once into sprites; nothing here
-// runs during play.
+// rocks are actual geometry, lit per face against a fixed
+// light, which is what makes them look cut rather than drawn.
+// It is all baked once into sprites; nothing here runs during
+// play.
+//
+// A solid is defined as the intersection of half-spaces rather
+// than as a list of triangles. That sounds like the exotic
+// choice and is in fact the plain one: a plane's face is
+// exactly flat and meets its neighbour on a hard edge, and —
+// the part that matters most — the result is always convex, so
+// hidden-surface removal is `if (n[2] <= 0) continue` and there
+// is no depth sort anywhere. Everything below exists to build
+// plane lists; convex() turns any of them into faces.
 
-function unit(v) {
+export function unit(v) {
 	const d = Math.hypot(v[0], v[1], v[2]) || 1
 	return [v[0] / d, v[1] / d, v[2] / d]
 }
 
-function cross(a, b) {
+export function cross(a, b) {
 	return [
 		a[1] * b[2] - a[2] * b[1],
 		a[2] * b[0] - a[0] * b[2],
@@ -25,13 +34,13 @@ function cross(a, b) {
 }
 
 // Two axes across a plane, for laying out its face.
-function basis(n) {
+export function basis(n) {
 	const t = Math.abs(n[0]) < 0.8 ? [1, 0, 0] : [0, 1, 0]
 	const u = unit(cross(t, n))
 	return [u, cross(n, u)]
 }
 
-function planeSquare(n, d, size) {
+export function planeSquare(n, d, size) {
 	const [u, v] = basis(n)
 	const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]]
 	return corners.map(([a, b]) => [
@@ -42,7 +51,7 @@ function planeSquare(n, d, size) {
 }
 
 // Sutherland-Hodgman against one half-space.
-function clipPoly(poly, n, d) {
+export function clipPoly(poly, n, d) {
 	const out = []
 	for (let i = 0; i < poly.length; i++) {
 		const a = poly[i]
@@ -138,11 +147,23 @@ function squash(faces, rand) {
 	return faces
 }
 
-export function crystal(rand, count, rough) {
-	const planes = planeSet(rand, count, rough)
+// Any plane list to faces. Each plane gets an oversized quad
+// lying in it, clipped against every other plane; what survives
+// is that plane's face. `rand` is optional — a rock wants the
+// per-face albedo jitter and the odd glinting facet, a car's
+// door does not, and passing nothing gives flat, even panels.
+//
+// `span` is how oversized that starting quad is, and it has to
+// comfortably clear the solid: a plane set that does not close
+// on its own leaves the quad's own edge as the face boundary,
+// and then this number silently becomes the model's size. It
+// also sets where Sutherland-Hodgman starts walking the loop,
+// so changing it rotates the vertex list even when the polygon
+// is identical. 3 is what the rocks were built against.
+export function convex(planes, rand, span = 3) {
 	const faces = []
 	for (const p of planes) {
-		let poly = planeSquare(p.n, p.d, 3)
+		let poly = planeSquare(p.n, p.d, span)
 		for (const q of planes) {
 			if (q === p) continue
 			poly = clipPoly(poly, q.n, q.d)
@@ -151,11 +172,75 @@ export function crystal(rand, count, rough) {
 		if (poly.length < 3) continue
 		faces.push({
 			n: p.n, poly,
-			mul: 0.86 + rand() * 0.3,
-			glint: rand() < 0.16,
+			mul: rand ? 0.86 + rand() * 0.3 : 1,
+			glint: rand ? rand() < 0.16 : false,
 		})
 	}
-	return squash(faces, rand)
+	return faces
+}
+
+export function crystal(rand, count, rough) {
+	return squash(
+		convex(planeSet(rand, count, rough), rand), rand)
+}
+
+// A rectangular block, centred on the origin. Six planes.
+export function box(hx, hy, hz) {
+	return [
+		{ n: [1, 0, 0], d: hx }, { n: [-1, 0, 0], d: hx },
+		{ n: [0, 1, 0], d: hy }, { n: [0, -1, 0], d: hy },
+		{ n: [0, 0, 1], d: hz }, { n: [0, 0, -1], d: hz },
+	]
+}
+
+// A prism about the Y axis — a wheel lying on its side, a
+// barrel stood up. `sides` planes round the rim plus two caps.
+// Eight is plenty at the size a wheel is drawn; more planes
+// cost bake time and buy nothing.
+export function prism(r, hy, sides) {
+	const planes = [
+		{ n: [0, 1, 0], d: hy }, { n: [0, -1, 0], d: hy },
+	]
+	for (let i = 0; i < sides; i++) {
+		const a = (i / sides) * Math.PI * 2
+		planes.push({
+			n: [Math.cos(a), 0, Math.sin(a)], d: r,
+		})
+	}
+	return planes
+}
+
+// A cone about the Y axis, for a treetop. The slant is what
+// makes it a cone rather than a prism: each side plane is
+// tilted up toward the apex.
+export function cone(r, h, sides) {
+	const slant = Math.atan2(r, h)
+	const planes = [{ n: [0, -1, 0], d: 0 }]
+	for (let i = 0; i < sides; i++) {
+		const a = (i / sides) * Math.PI * 2
+		planes.push({
+			n: unit([
+				Math.cos(a) * Math.cos(slant),
+				Math.sin(slant),
+				Math.sin(a) * Math.cos(slant),
+			]),
+			d: r * Math.cos(slant),
+		})
+	}
+	return planes
+}
+
+// A box with its top sliced away along +X: a ramp, high at
+// -X and falling to `rise` of its height by +X. The slant
+// replaces the box's top plane rather than joining it, or the
+// two would fight over the same surface.
+export function wedge(hx, hy, hz, rise) {
+	const planes = box(hx, hy, hz).filter(
+		(p) => !(p.n[2] === 1))
+	const drop = hz * (1 - rise)
+	const n = unit([drop, 0, 2 * hx])
+	planes.push({ n, d: -n[0] * hx + n[2] * hz })
+	return planes
 }
 
 // Key light up and to the left (the same direction art.js
@@ -167,7 +252,7 @@ const KEY = unit([-0.6, -0.55, 0.45])
 const FILL = unit([0.55, 0.5, 0.35])
 const HALF = unit([KEY[0], KEY[1], KEY[2] + 1])
 
-function dot(a, b) {
+export function dot(a, b) {
 	return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 

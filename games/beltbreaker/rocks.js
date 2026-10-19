@@ -12,8 +12,13 @@
 // All of it bakes to canvases once, at init: a 60fps loop with
 // thirty rocks on screen should only ever be blitting.
 
-import { rng, centred, makeCanvas } from './art.js'
-import { crystal, makeRotate, shadeFace } from './mesh.js'
+import { rng, centred } from '../_shared/art.js'
+import { crystal, makeRotate } from '../_shared/mesh.js'
+import {
+	grainTile, dustGrain, frameFor, paintModel, model,
+} from '../_shared/bake.js'
+
+export { frameFor }
 
 export const ROCK_R = [13, 23, 38]
 
@@ -52,96 +57,30 @@ const KIND = {
 
 export const ROCK_KINDS = Object.keys(KIND)
 
-function blotch(ctx, rand, strength, big) {
-	const r = big ? 1 + rand() * 1.8 : 0.4 + rand() * 0.8
-	const a = strength * (big ? 0.1 + rand() * 0.22
-		: 0.1 + rand() * 0.3)
-	ctx.fillStyle = rand() < 0.56
-		? `rgba(14,10,8,${a})`
-		: `rgba(255,246,230,${a * 0.6})`
-	ctx.beginPath()
-	ctx.arc(rand() * 128, rand() * 128, r, 0, Math.PI * 2)
-	ctx.fill()
-}
-
-// Mottled patches with a dusting of speckle over them, rather
-// than per-pixel static: at this size film grain reads as a
-// dirty lens and blotches read as stone.
-function grainTile(rand, strength) {
-	const canvas = makeCanvas(128, 128)
-	const ctx = canvas.getContext('2d')
-	for (let i = 0; i < 420; i++) {
-		blotch(ctx, rand, strength, true)
-	}
-	for (let i = 0; i < 2200; i++) {
-		blotch(ctx, rand, strength, false)
-	}
-	return canvas
-}
-
 function buildBody(kind, size, rand) {
 	const spec = KIND[kind]
 	// More planes on the big ones: a facet has to be worth
 	// more than a pixel or two to read as a facet at all.
 	const planes = spec.planes + (size === 2 ? 4 : 0)
-	const faces = crystal(rand, planes, spec.rough)
-	let reach = 0
-	for (const f of faces) {
-		for (const p of f.poly) {
-			reach = Math.max(
-				reach, Math.hypot(p[0], p[1], p[2]))
-		}
-	}
+	// A rock is a single convex part, which is the simple
+	// end of what model() handles.
+	const mdl = model([{
+		faces: crystal(rand, planes, spec.rough),
+		pal: spec,
+	}])
 	return {
-		faces, reach, spec,
+		mdl, spec,
 		tiltX: (rand() - 0.5) * 1.5,
 		tiltZ: (rand() - 0.5) * 1.5,
 		grain: grainTile(rand, spec.grain),
 	}
 }
 
-// The solid is convex, so facing away from the viewer is the
-// whole of the hidden-surface problem — no sorting needed.
-function paintFaces(ctx, body, rotate, r) {
-	for (const f of body.faces) {
-		const n = rotate(f.n)
-		if (n[2] <= 0) continue
-		const colour = shadeFace(
-			n, body.spec, f.mul, f.glint)
-		ctx.fillStyle = colour
-		ctx.strokeStyle = colour
-		ctx.beginPath()
-		f.poly.forEach((p, i) => {
-			const q = rotate(p)
-			if (i === 0) ctx.moveTo(q[0] * r, q[1] * r)
-			else ctx.lineTo(q[0] * r, q[1] * r)
-		})
-		ctx.closePath()
-		ctx.fill()
-		ctx.stroke()
-	}
-}
-
-// source-atop keeps the grain inside whatever the faces
-// already covered, so no separate silhouette path is needed.
-function dustGrain(ctx, body, span, spin) {
-	ctx.save()
-	ctx.globalCompositeOperation = 'source-atop'
-	ctx.rotate(spin)
-	const g = body.grain
-	for (let x = -span; x < span; x += g.width) {
-		for (let y = -span; y < span; y += g.height) {
-			ctx.drawImage(g, x, y)
-		}
-	}
-	ctx.restore()
-}
-
 function buildKindSize(kind, size) {
 	const seed = kind.charCodeAt(0) * 7919 + size * 104729
 	const rand = rng(seed)
 	const body = buildBody(kind, size, rand)
-	const r = ROCK_R[size] / body.reach
+	const r = ROCK_R[size] / body.mdl.reach
 	const span = Math.ceil(ROCK_R[size] * 2) + 6
 	const frames = []
 	for (let i = 0; i < FRAMES; i++) {
@@ -151,8 +90,8 @@ function buildKindSize(kind, size) {
 			body.tiltX, body.tiltZ, spin)
 		ctx.lineJoin = 'round'
 		ctx.lineWidth = 1
-		paintFaces(ctx, body, rotate, r)
-		dustGrain(ctx, body, span, spin)
+		paintModel(ctx, body.mdl, rotate, r)
+		dustGrain(ctx, body.grain, span, spin)
 		frames.push(canvas)
 	}
 	return frames
@@ -169,9 +108,3 @@ export function buildRocks() {
 	return out
 }
 
-export function frameFor(frames, angle) {
-	const turn = Math.PI * 2
-	const norm = ((angle % turn) + turn) % turn
-	const i = Math.floor((norm / turn) * frames.length)
-	return frames[i % frames.length]
-}

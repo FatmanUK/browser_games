@@ -7,7 +7,7 @@
 import {
 	centred, rng, makeLumps, lumpPath, bodyGradient,
 	limbStroke, specular, glow,
-} from './art.js'
+} from '../_shared/art.js'
 
 export const SHIP_R = 17
 export const SHIP_FRAMES = 48
