@@ -422,30 +422,54 @@ function drawGates(ctx, track, state) {
 	})
 }
 
-// A chevron on the road pointing the way the corner bends.
-// Two of them for a hard one, which is the only difference a
-// driver needs at the speed they go past.
+// A painted arrow on the road, pointing the way the corner
+// bends. White and flat on the tarmac, the way a real one is
+// — the amber chevrons this replaces read as signage hanging
+// over the road rather than as paint on it.
 //
-// Canted 45 degrees off the direction of travel, not 90. A
-// quarter turn points the arrow straight across the road,
-// which reads as "go that way now" rather than as "the road
-// bends that way"; half of that keeps the forward sense in it.
-const ARROW_CANT = Math.PI / 4
+// Drawn in the road's own frame: down the lane, then bending
+// off toward the inside, so it follows the camber instead of
+// sitting on top of it at an angle.
+const ARROW_LEN = 46
+const ARROW_PAINT = 'rgba(244, 248, 255, 0.82)'
 
-function chevron(ctx, x, y, face, dir, size, alpha) {
-	ctx.save()
-	ctx.translate(x, y)
-	ctx.rotate(face + (dir > 0 ? 1 : -1) * ARROW_CANT)
-	ctx.strokeStyle = `rgba(255, 206, 84, ${alpha})`
-	ctx.lineWidth = 3.5
-	ctx.lineJoin = 'round'
-	ctx.lineCap = 'round'
+function arrowShape(ctx, track, s, dir, scale) {
+	const lane = dir * track.halfWidth * 0.42
+	const tail = offsetPoint(track, s - ARROW_LEN, 0)
+	const mid = offsetPoint(track, s, lane * 0.45)
+	const head = offsetPoint(track, s + ARROW_LEN * 0.5, lane)
 	ctx.beginPath()
-	ctx.moveTo(-size, -size * 0.8)
-	ctx.lineTo(size * 0.5, 0)
-	ctx.lineTo(-size, size * 0.8)
+	ctx.moveTo(tail.x, tail.y)
+	ctx.quadraticCurveTo(mid.x, mid.y, head.x, head.y)
+	ctx.lineWidth = 7 * scale
+	ctx.lineCap = 'round'
+	ctx.strokeStyle = ARROW_PAINT
 	ctx.stroke()
-	ctx.restore()
+	return head
+}
+
+function arrowHead(ctx, track, s, dir, head) {
+	const back = offsetPoint(
+		track, s + ARROW_LEN * 0.14,
+		dir * track.halfWidth * 0.42)
+	const ang = Math.atan2(head.y - back.y, head.x - back.x)
+	const wing = 13
+	ctx.beginPath()
+	ctx.moveTo(head.x, head.y)
+	for (const side of [-1, 1]) {
+		const a = ang + Math.PI + side * 0.6
+		ctx.lineTo(
+			head.x + Math.cos(a) * wing,
+			head.y + Math.sin(a) * wing)
+	}
+	ctx.closePath()
+	ctx.fillStyle = ARROW_PAINT
+	ctx.fill()
+}
+
+function paintArrow(ctx, track, s, dir, scale) {
+	const head = arrowShape(ctx, track, s, dir, scale)
+	arrowHead(ctx, track, s, dir, head)
 }
 
 function drawArrows(ctx, track, cam) {
@@ -453,12 +477,12 @@ function drawArrows(ctx, track, cam) {
 		if (Math.abs(deltaS(track, a.s, cam.s)) > 320) {
 			continue
 		}
-		const p = sampleAt(track, a.s)
-		const face = Math.atan2(p.uy, p.ux)
-		chevron(ctx, p.x, p.y, face, a.dir, 13, 0.8)
-		if (!a.hard) continue
-		const q = sampleAt(track, a.s - 22)
-		chevron(ctx, q.x, q.y, face, a.dir, 13, 0.55)
+		paintArrow(ctx, track, a.s, a.dir, 1)
+		// A second, smaller one further back for the ones
+		// worth slowing down for.
+		if (a.hard) {
+			paintArrow(ctx, track, a.s - 78, a.dir, 0.8)
+		}
 	}
 }
 

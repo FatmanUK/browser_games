@@ -21,7 +21,9 @@
 // that follows (TOP_DOWN in sprites.js) brings +Y round to
 // face the viewer.
 
-import { box, prism, cone, convex } from '../_shared/mesh.js'
+import {
+	box, prism, cone, convex, unit,
+} from '../_shared/mesh.js'
 import { model } from '../_shared/bake.js'
 
 // The liveries are CSS hex (they are also what the standings
@@ -47,15 +49,29 @@ function paint(base) {
 }
 
 const GLASS = {
-	base: [0.07, 0.1, 0.16], tint: [0.8, 0.9, 1],
-	sky: [0.4, 0.55, 0.8], amb: 0.06, fill: 0.5,
-	kd: 0.25, shine: 90, ks: 2.1, rim: 0.9,
+	base: [0.05, 0.07, 0.12], tint: [0.8, 0.9, 1],
+	sky: [0.34, 0.46, 0.7], amb: 0.05, fill: 0.42,
+	kd: 0.2, shine: 90, ks: 2.4, rim: 1,
 }
 
+// The glasshouse and the sills: near-black, so the cabin
+// reads against the paint instead of being a second shade of
+// it. The first car used the livery's own two tones for body
+// and cabin, and at this size that is one flat rectangle.
+const TRIM = {
+	base: [0.04, 0.045, 0.05], tint: [1, 1, 1],
+	sky: [0.2, 0.26, 0.36], amb: 0.1, fill: 0.2,
+	kd: 0.9, shine: 20, ks: 0.3, rim: 0.2,
+}
+
+// Rubber was coming out mid-grey, because a shine of 7 is a
+// specular so broad it lights the whole tyre: the highlight
+// term alone was contributing more than the albedo. Tight and
+// weak is what makes it read as black.
 const RUBBER = {
-	base: [0.1, 0.1, 0.11], tint: [1, 1, 1],
-	sky: [0.22, 0.28, 0.38], amb: 0.14, fill: 0.2,
-	kd: 1, shine: 7, ks: 0.16, rim: 0.12,
+	base: [0.03, 0.03, 0.035], tint: [1, 1, 1],
+	sky: [0.2, 0.26, 0.36], amb: 0.05, fill: 0.12,
+	kd: 0.9, shine: 22, ks: 0.1, rim: 0.08,
 }
 
 // The hub: bright enough that a tyre reads as a tyre from
@@ -97,42 +113,75 @@ const LIT = {
 	kd: 0.3, shine: 12, ks: 0.3, rim: 0.2,
 }
 
-// A car: body, cabin, screen, four wheels. Seen from straight
-// above, a plain box is a uniformly lit rectangle — every
-// upward face shares one normal, so there is nothing for the
-// light to do. The cabin and the sloped screen exist as much
-// to break that up as to look like a car.
-const BODY_L = 1, BODY_H = 0.17, BODY_W = 0.5
-const WHEEL_R = 0.19, WHEEL_HALF = 0.07
-const WHEEL_X = 0.6, WHEEL_Z = BODY_W + 0.02
+// A car.
+//
+// The first one was a box with a second box on it, both in
+// the livery's own two tones, and from directly above that is
+// one flat red rectangle with a sliver of blue on it. Three
+// things had to change. The cabin went near-black, so it
+// reads against the paint rather than blending into it. The
+// wheels moved outboard of the body, because a wheel tucked
+// under it is a wheel you cannot see from above. And the
+// bonnet slopes, because every upward face sharing one normal
+// means a uniformly lit shape with nothing on it — the slope
+// is the only reason the nose is a different brightness from
+// the roof.
+const BODY_L = 1, BODY_H = 0.2, BODY_W = 0.42
+const WHEEL_R = 0.2, WHEEL_HALF = 0.09
+const WHEEL_X = 0.62, WHEEL_Z = BODY_W + 0.14
+
+// A box with the front corners sliced off and the top sloping
+// away toward the nose. The slices give the silhouette a
+// direction you can read at a glance; the slope gives the
+// light something to do.
+function shellPlanes() {
+	const p = box(BODY_L, BODY_H, BODY_W)
+		.filter((q) => !(q.n[1] === 1))
+	// Roof deck, then the bonnet falling away from it.
+	p.push({ n: [0, 1, 0], d: BODY_H })
+	const nose = unit([0.5, 1, 0])
+	p.push({ n: nose, d: BODY_H * 0.86 + BODY_L * 0.2 })
+	for (const side of [-1, 1]) {
+		const n = unit([1, 0, side])
+		const corner = (BODY_L + BODY_W) / Math.SQRT2
+		p.push({ n, d: corner - 0.13 })
+	}
+	return p
+}
 
 function wheel(x, z) {
 	return {
 		// Axis Z: the axle lies across the car.
-		faces: convex(prism(WHEEL_R, WHEEL_HALF, 8, 2)),
+		faces: convex(prism(WHEEL_R, WHEEL_HALF, 10, 2)),
 		pal: RUBBER,
-		offset: [x, -BODY_H * 0.3, z],
+		offset: [x, -BODY_H * 0.25, z],
 	}
 }
 
 export function carModel(colours) {
+	const shell = paint(linear(colours.shell))
 	return model([
 		wheel(WHEEL_X, WHEEL_Z), wheel(WHEEL_X, -WHEEL_Z),
 		wheel(-WHEEL_X, WHEEL_Z), wheel(-WHEEL_X, -WHEEL_Z),
 		{
-			faces: convex(box(BODY_L, BODY_H, BODY_W)),
-			pal: paint(linear(colours.shell)),
-			offset: [0, 0, 0],
+			faces: convex(shellPlanes()),
+			pal: shell, offset: [0, 0, 0],
+		},
+		// The glasshouse: a dark band across the middle with
+		// the roof panel sitting inside it, which from above
+		// is the whole of what says "there is a cabin here".
+		{
+			faces: convex(box(0.44, 0.1, 0.37)),
+			pal: TRIM, offset: [-0.1, BODY_H + 0.02, 0],
 		},
 		{
-			faces: convex(box(0.4, 0.15, 0.4)),
+			faces: convex(box(0.3, 0.06, 0.29)),
 			pal: paint(linear(colours.body)),
-			offset: [-0.14, BODY_H + 0.1, 0],
+			offset: [-0.18, BODY_H + 0.1, 0],
 		},
 		{
-			faces: convex(box(0.12, 0.12, 0.33)),
-			pal: GLASS,
-			offset: [0.28, BODY_H + 0.07, 0],
+			faces: convex(box(0.1, 0.07, 0.3)),
+			pal: GLASS, offset: [0.21, BODY_H + 0.07, 0],
 		},
 	])
 }
