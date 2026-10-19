@@ -15,7 +15,9 @@ import {
 	CAR_LENGTH, CAR_WIDTH, ACCEL, BRAKE, MAX_SPEED, TURN_RATE,
 	FRICTION, RIVALS,
 } from './car.js'
-import { updateAir, isAirborne, MIN_SPEED } from './jump.js'
+import {
+	updateAir, isAirborne, speedToClear,
+} from './jump.js'
 import { angleDelta } from './geom.js'
 import {
 	locate, offsetPoint, onRoad, wrapS, deltaS, curvAhead,
@@ -102,25 +104,34 @@ function steer(rival, dt, sharp, aim) {
 	rival.facing = rival.angle
 }
 
-const RUN_UP = 180
+// How far before a ramp a rival starts thinking about it.
+const RUN_UP = 220
 
-function inJumpRun(track, rival) {
-	return track.JUMPS.some((j) => {
+// The speed the nearest ramp ahead actually needs, or zero if
+// there is not one. Coming up short is survivable now — the
+// car drops onto the road below and loses the stretch — so
+// this is about not throwing a lap away rather than about
+// avoiding a deadlock.
+function jumpTarget(track, rival) {
+	let want = 0
+	for (const j of track.JUMPS) {
 		const d = deltaS(track, rival.s, j.s0)
-		return d > 0 && d < RUN_UP
-	})
+		if (d <= 0 || d > RUN_UP) continue
+		want = Math.max(want, speedToClear(j) * 1.08)
+	}
+	return want
 }
 
 function drive(track, rival, dt, drag) {
 	const aim = aimAngle(track, rival)
 	const sharp = Math.abs(angleDelta(rival.angle, aim))
-	// Floor it into a ramp. A rival that arrives under the
-	// launch speed stops at the face, and one that keeps
-	// arriving under it never finishes — see jump.js for the
-	// other two guards against the same deadlock.
+	// Floor it into a ramp, with a margin over what the gap
+	// needs. A rival that lifts off for the corner beyond the
+	// jump arrives too slowly, drops through, and loses half
+	// a lap for it.
 	const want = Math.max(
 		wantedSpeed(track, rival, drag),
-		inJumpRun(track, rival) ? MIN_SPEED + 25 : 0)
+		jumpTarget(track, rival))
 	if (rival.speed < want) rival.speed += ACCEL * dt
 	else rival.speed -= BRAKE * dt
 	rival.speed -= rival.speed * drag * dt

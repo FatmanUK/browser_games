@@ -26,7 +26,7 @@ import { offsetPoint, deltaS } from './path.js'
 //
 // So the test is against the whole centreline, which at build
 // time is affordable and at play time would not be.
-function clearOfRoad(track, x, y, r) {
+export function clearOfRoad(track, x, y, r) {
 	const need = track.halfWidth + r + 4
 	for (let i = 0; i < track.n; i++) {
 		const dx = x - track.px[i]
@@ -216,6 +216,14 @@ export function buildTreeLine(track) {
 	return trees
 }
 
+// Trees are laid out from the centreline like everything
+// else, and like everything else that is not enough on its
+// own: an offset of 90 units lands on the road anyway wherever
+// the track bends tighter than that or runs back past itself.
+// 640 of 8906 were sitting on the tarmac, some of them 62
+// units onto it — the green blobs in the middle of the road.
+// One lost tree out of a treeline nobody counts is cheaper
+// than any cleverness about where to put it instead.
 function treeLayer(track, layer, out) {
 	const count = Math.max(
 		12, Math.round(track.L / layer.step))
@@ -225,6 +233,7 @@ function treeLayer(track, layer, out) {
 		const r = layer.r + ((i % 3) - 1) * 1.5
 		for (const side of [-1, 1]) {
 			const p = offsetPoint(track, s, side * off)
+			if (!clearOfRoad(track, p.x, p.y, r)) continue
 			out.push({ x: p.x, y: p.y, r })
 		}
 	}

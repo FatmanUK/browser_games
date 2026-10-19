@@ -28,51 +28,117 @@ function deg(d) {
 }
 
 // The road as a ribbon along the centreline, not as a band of
-// radii about a centre. This is the drawing half of the move
-// to arc length, and it is not optional: a radial band and a
-// perpendicular band are different shapes wherever the
-// centreline is not square to the radius, so leaving the paint
-// polar would have put the painted road somewhere other than
-// the road the car is driving on.
+// radii about a centre: a radial band and a perpendicular band
+// are different shapes wherever the centreline is not square
+// to the radius, so a polar road would be painted somewhere
+// other than the road the car drives on.
 //
-// Only the stretch near the camera is traced. The whole lap is
-// about 950 samples and the window shows 240 by 100 units of
-// it, so almost all of them are behind you.
-function ribbonRun(ctx, track, cam, off) {
-	const half = Math.ceil(300 / track.ds)
-	const i0 = Math.floor(cam.s / track.ds)
+// Which stretches get traced is decided by what is actually in
+// the window, not by arc length either side of the car. A
+// fixed window leaves the road ending in mid-air wherever the
+// lap folds back into view, which it does at about one camera
+// position in six — the edge of the world sliding along with
+// you. Scanning all thousand samples every frame to find the
+// runs is nothing, and it is the only way that is right for a
+// track that doubles back or crosses itself.
+function visibleRuns(track, cam) {
+	const n = track.n
+	const padX = CULL_X + track.boundOff
+	const padY = CULL_Y + track.boundOff
+	const seen = []
+	for (let i = 0; i < n; i++) {
+		seen.push(
+			Math.abs(track.px[i] - cam.x) < padX &&
+			Math.abs(track.py[i] - cam.y) < padY)
+	}
+	const runs = []
+	for (let i = 0; i < n; i++) {
+		if (!seen[i] || seen[(i - 1 + n) % n]) continue
+		let len = 1
+		while (len < n && seen[(i + len) % n]) len++
+		runs.push([i - 2, len + 4])
+	}
+	// Every sample in view means no run ever starts, which is
+	// the whole lap rather than none of it.
+	if (!runs.length && seen[0]) runs.push([0, n])
+	return runs
+}
+
+function runEdge(ctx, track, run, off) {
+	const [i0, len] = run
 	ctx.beginPath()
-	for (let d = -half; d <= half; d++) {
+	for (let d = 0; d <= len; d++) {
 		const p = offsetPoint(track, (i0 + d) * track.ds, off)
-		if (d === -half) ctx.moveTo(p.x, p.y)
+		if (d === 0) ctx.moveTo(p.x, p.y)
 		else ctx.lineTo(p.x, p.y)
 	}
 }
 
-function ribbonBand(ctx, track, cam, a, b, reach) {
-	const half = Math.ceil((reach || 300) / track.ds)
-	const i0 = Math.floor(cam.s / track.ds)
+function runBand(ctx, track, run, a, b) {
+	const [i0, len] = run
 	ctx.beginPath()
-	for (let d = -half; d <= half; d++) {
+	for (let d = 0; d <= len; d++) {
 		const p = offsetPoint(track, (i0 + d) * track.ds, a)
-		if (d === -half) ctx.moveTo(p.x, p.y)
+		if (d === 0) ctx.moveTo(p.x, p.y)
 		else ctx.lineTo(p.x, p.y)
 	}
-	for (let d = half; d >= -half; d--) {
+	for (let d = len; d >= 0; d--) {
 		const p = offsetPoint(track, (i0 + d) * track.ds, b)
 		ctx.lineTo(p.x, p.y)
 	}
 	ctx.closePath()
 }
 
-function roadAt(ctx, track, s, surface) {
-	ribbonBand(
-		ctx, track, { s }, -track.halfWidth, track.halfWidth)
-	ctx.fillStyle = surface
-	ctx.fill()
+// A jump is a hole in the road: between the two ramps there is
+// no surface at all, only whatever the lap is doing underneath
+// at that point. So a run that reaches a gap is cut into the
+// pieces either side of it.
+function cutGaps(track, run) {
+	let parts = [run]
+	for (const j of track.JUMPS) {
+		const out = []
+		for (const [i0, len] of parts) {
+			const g0 = Math.round(j.s0 / track.ds)
+			const g1 = Math.round(j.s1 / track.ds)
+			out.push(...splitRun(track, i0, len, g0, g1))
+		}
+		parts = out
+	}
+	return parts
+}
+
+function splitRun(track, i0, len, g0, g1) {
+	const n = track.n
+	const rel = (i) => ((i - i0) % n + n) % n
+	const a = rel(g0)
+	const b = rel(g1)
+	if (a >= len && b >= len) return [[i0, len]]
+	const out = []
+	if (a > 0 && a < len) out.push([i0, a])
+	if (b < len) out.push([i0 + b, len - b])
+	return out.length ? out : []
+}
+
+const ROAD = '#555'
+
+function drawRoad(ctx, track, cam) {
+	for (const run of visibleRuns(track, cam)) {
+		for (const part of cutGaps(track, run)) {
+			if (part[1] < 1) continue
+			runBand(
+				ctx, track, part,
+				-track.halfWidth, track.halfWidth)
+			ctx.fillStyle = ROAD
+			ctx.fill()
+			kerbs(ctx, track, part)
+		}
+	}
+}
+
+function kerbs(ctx, track, run) {
 	for (const side of [-1, 1]) {
-		const kerb = side * (track.halfWidth - 4)
-		ribbonRun(ctx, track, { s }, kerb)
+		runEdge(
+			ctx, track, run, side * (track.halfWidth - 4))
 		ctx.save()
 		ctx.setLineDash([10, 10])
 		ctx.lineWidth = 6
@@ -85,102 +151,58 @@ function roadAt(ctx, track, s, surface) {
 	}
 }
 
-// Where the track crosses itself the two branches are far
-// apart in arc length but right on top of each other on the
-// map, so standing on one means the other has to be drawn too
-// — and drawn first, because it is the one underneath.
-function pairedS(track, cam) {
-	for (const j of track.JUMPS) {
-		const dOver = Math.abs(deltaS(track, j.mid, cam.s))
-		if (dOver < 340) return { s: j.under, over: false }
-		const dUnder = Math.abs(deltaS(track, j.under, cam.s))
-		if (dUnder < 340) return { s: j.mid, over: true }
-	}
-	return null
-}
-
-const DECK = '#6a6a72'
-const ROAD = '#555'
-
-function drawRoad(ctx, track, cam) {
-	const pair = pairedS(track, cam)
-	if (pair && !pair.over) {
-		// Standing on the bridge: the ground road goes down
-		// first, then the deck's shadow, then the deck.
-		roadAt(ctx, track, pair.s, ROAD)
-		deckShadow(ctx, track, cam.s)
-		roadAt(ctx, track, cam.s, DECK)
-		deckEdge(ctx, track, cam.s)
-		return
-	}
-	roadAt(ctx, track, cam.s, ROAD)
-	if (!pair) return
-	// Standing underneath: the deck passes overhead, and its
-	// shadow falls on the road you are on.
-	deckShadow(ctx, track, pair.s)
-	roadAt(ctx, track, pair.s, DECK)
-	deckEdge(ctx, track, pair.s)
-}
-
-// Seen from directly above, an elevated road and a flat one
-// are the same shape in the same place. A cast shadow is the
-// only thing that says which of the two is which, so the deck
-// gets one, thrown the way the baked sprites are lit — down
-// and to the right of the light that made them.
-const SHADOW_X = 9
-const SHADOW_Y = 11
-
-function deckShadow(ctx, track, s) {
-	ctx.save()
-	ctx.translate(SHADOW_X, SHADOW_Y)
-	ribbonBand(
-		ctx, track, { s },
-		-track.halfWidth - 3, track.halfWidth + 3)
-	ctx.fillStyle = 'rgba(4, 7, 14, 0.5)'
-	ctx.fill()
-	ctx.restore()
-}
-
-// A dark lip down each side of the deck, so the edge you must
-// not run off reads at speed.
-function deckEdge(ctx, track, s) {
-	for (const side of [-1, 1]) {
-		ribbonRun(ctx, track, { s }, side * track.halfWidth)
-		ctx.strokeStyle = 'rgba(8, 10, 18, 0.85)'
-		ctx.lineWidth = 5
-		ctx.stroke()
-	}
-}
-
 // The ramps, painted across the road at each end of a jump.
+// The take-off ramp and the landing on the far side of the
+// gap. The take-off is striped and the landing is not, so at
+// a glance you can tell which end of a jump you are looking
+// at — they sit a couple of hundred units apart with nothing
+// but fresh air between them.
+const RAMP_LEN = 30
+
 function drawRamps(ctx, track, cam) {
 	for (const j of track.JUMPS) {
-		for (const s of [j.s0, j.s1]) {
-			if (Math.abs(deltaS(track, s, cam.s)) > 320) {
-				continue
-			}
-			rampBand(ctx, track, s)
+		if (near(track, j.s0, cam, 340)) {
+			rampBand(ctx, track, j.s0, true)
+		}
+		if (near(track, j.s1, cam, 340)) {
+			rampBand(ctx, track, j.s1, false)
 		}
 	}
 }
 
-// Hazard stripes across the road. A plain band reads as a
-// patch of different tarmac; the stripes read as a thing the
-// track is telling you about.
-function rampBand(ctx, track, s) {
-	const len = 30
-	ribbonBand(
-		ctx, track, { s }, -track.halfWidth,
-		track.halfWidth, len)
+function near(track, s, cam, within) {
+	return Math.abs(deltaS(track, s, cam.s)) < within
+}
+
+function rampRun(track, s, takeoff) {
+	const i0 = Math.round(
+		(takeoff ? s - RAMP_LEN : s) / track.ds)
+	return [i0, Math.round(RAMP_LEN / track.ds)]
+}
+
+function rampBand(ctx, track, s, takeoff) {
+	const run = rampRun(track, s, takeoff)
+	runBand(
+		ctx, track, run, -track.halfWidth, track.halfWidth)
 	ctx.save()
 	ctx.clip()
-	ctx.fillStyle = '#8a8d99'
+	ctx.fillStyle = takeoff ? '#8a8d99' : '#6e7280'
 	ctx.fill()
+	if (takeoff) rampStripes(ctx, track, s)
+	ctx.restore()
+	runBand(
+		ctx, track, run, -track.halfWidth, track.halfWidth)
+	ctx.strokeStyle = 'rgba(12, 14, 22, 0.8)'
+	ctx.lineWidth = 2
+	ctx.stroke()
+}
+
+function rampStripes(ctx, track, s) {
+	const w = track.halfWidth
 	for (let i = -6; i <= 6; i++) {
 		const a = offsetPoint(
-			track, s - len + i * 13, -track.halfWidth)
-		const b = offsetPoint(
-			track, s + len + i * 13, track.halfWidth)
+			track, s - RAMP_LEN + i * 13, -w)
+		const b = offsetPoint(track, s + i * 13, w)
 		ctx.strokeStyle = '#e0bb4e'
 		ctx.lineWidth = 7
 		ctx.beginPath()
@@ -188,7 +210,6 @@ function rampBand(ctx, track, s) {
 		ctx.lineTo(b.x, b.y)
 		ctx.stroke()
 	}
-	ctx.restore()
 }
 
 function drawStartLine(ctx, track) {

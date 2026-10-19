@@ -163,7 +163,6 @@ function drawMeters(ctx, state, best, maxSpeed, place) {
 	const left = countBits(
 		allGates(state.track) & ~(state.gates || 0))
 	readout(ctx, 268, 54, 'GATES', `${n - left}/${n}`, 26)
-	drawJumpState(ctx, state)
 
 	readout(
 		ctx, W - 20, 54, 'BEST LAP',
@@ -191,17 +190,6 @@ function pips(ctx, x, y, n, of, on, off) {
 		ctx.fillStyle = i < n ? on : off
 		ctx.fillRect(x + i * 12, y, 8, 8)
 	}
-}
-
-// The flyover is a gate too, and the lap does not count
-// without it, so it needs saying as plainly as the rest.
-function drawJumpState(ctx, state) {
-	const jumps = state.track.JUMPS.length
-	if (!jumps) return
-	const made = countBits(state.jumps || 0) >= jumps
-	label(
-		ctx, 268, 92, made ? 'JUMP MADE' : 'JUMP OWED',
-		'left', made ? LIVE : '#ffce54')
 }
 
 function drawStores(ctx, state) {

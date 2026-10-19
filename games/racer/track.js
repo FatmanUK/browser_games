@@ -11,6 +11,8 @@
 // rule about it, which is what this was checked against.
 
 import { rng } from '../_shared/art.js'
+import { liftFor } from './jump.js'
+import { MAX_SPEED } from './car.js'
 import {
 	catmullClosed, isStarShaped, headings, turnRates,
 	longestStraight, resample, differentiate, smoothOnce,
@@ -359,31 +361,24 @@ function buildPickups(track) {
 	return out
 }
 
-// Turning a crossing into a flyover.
+// Turning a crossing into a jump.
 //
 // The two branches meet at an angle, and the shallower that
 // angle the longer the stretch where the road bands lie on top
 // of each other: a road 100 wide crossed at 30 degrees overlaps
-// for 200 units. The branch that goes over has to clear all of
-// it, so the overlap is what sets the length of the jump.
+// for 200 units. That overlap is the gap the jump has to
+// clear, because the road simply stops either side of it.
 //
-// Which branch goes over is decided by how straight it is
-// there. A ramp on a straight is drivable; a ramp mid-corner
-// is not.
+// Which branch jumps is not a choice. It is always the one
+// reached later in the lap, so a car that comes up short drops
+// onto road it has already driven — which costs it the stretch
+// in between and nothing else. The other way round, a failed
+// jump would drop a car onto road it had not reached yet and
+// hand it a shortcut for failing.
 const MIN_SIN = 0.42
 const CROSS_MIN_GAP = 0.16
-const RAMP_LEN = 34
 const LINE_CLEAR = 220
-
-function branchFlatness(track, i) {
-	let sum = 0
-	const span = 14
-	for (let d = -span; d <= span; d++) {
-		const j = ((i + d) % track.n + track.n) % track.n
-		sum += Math.abs(track.k[j])
-	}
-	return sum / (span * 2 + 1)
-}
+const MAX_JUMPS = 3
 
 function crossingToJump(track, h, id) {
 	const dot = track.ux[h.i] * track.ux[h.j] +
@@ -402,35 +397,38 @@ function crossingToJump(track, h, id) {
 			return null
 		}
 	}
-	// Flatter branch flies; the other one passes underneath.
-	const overI = branchFlatness(track, h.i) <=
-		branchFlatness(track, h.j)
-	const over = overI ? si : sj
-	const under = overI ? sj : si
+	// Later from the line jumps; earlier passes underneath.
+	const fromLine = (s) =>
+		(deltaS(track, track.START.s, s) + track.L) % track.L
+	const over = fromLine(si) > fromLine(sj) ? si : sj
+	const under = over === si ? sj : si
 	const span = track.ROAD_WIDTH / sin
 	return {
 		id,
-		s0: wrapS(track, over - span / 2 - RAMP_LEN),
-		s1: wrapS(track, over + span / 2 + RAMP_LEN),
+		s0: wrapS(track, over - span / 2),
+		s1: wrapS(track, over + span / 2),
 		mid: over,
-		span: span + RAMP_LEN * 2,
+		span,
 		under,
-		underSpan: span,
+		lift: liftFor(span, MAX_SPEED),
 	}
 }
 
+// Zero jumps is a perfectly good track and one more is a
+// bonus, so nothing here rejects a layout for the number it
+// has. Only a crossing too shallow to jump, too close to the
+// line, or too close to its own other branch is thrown out —
+// and throwing one out just means that track has fewer.
 function buildJumps(track) {
 	const pts = []
 	for (let i = 0; i < track.n; i++) {
 		pts.push({ x: track.px[i], y: track.py[i] })
 	}
-	const hits = selfCrossings(pts, 30)
-	if (!hits.length || hits.length > 2) return null
 	const jumps = []
-	for (const h of hits) {
+	for (const h of selfCrossings(pts, 30)) {
+		if (jumps.length >= MAX_JUMPS) break
 		const j = crossingToJump(track, h, jumps.length)
-		if (!j) return null
-		jumps.push(j)
+		if (j) jumps.push(j)
 	}
 	return jumps
 }
@@ -450,7 +448,6 @@ function assemble(seed, dense, wantJumps) {
 	})
 	orientToTravel(track, gridFor(dense, heads, straight))
 	track.JUMPS = wantJumps ? buildJumps(track) : []
-	if (track.JUMPS === null) return null
 	return populate(track, seed)
 }
 
@@ -472,26 +469,28 @@ function populate(track, seed) {
 	return track
 }
 
+// Whether this track crosses itself at all. Two in three, so
+// a jump is something a track might have rather than a tax
+// every level pays — and so the ones without feel different
+// to drive rather than merely jumpless.
+function wantsCrossing(seed) {
+	return (seed >>> 7) % 3 !== 0
+}
+
 // A seed that fails every check is a level nobody can play,
 // and a level is a fixed seed, so the player cannot ask for
-// another. The walk tries a crossing track first and falls
-// back to a plain loop rather than giving up: a level without
-// a jump is a disappointment, a level that throws is a broken
-// game.
+// another. The walk tries the shape this seed asks for and
+// falls back to a plain loop rather than giving up.
 export function buildTrack(seed) {
-	for (let k = 0; k < 60; k++) {
-		const s = (seed + k * 7919) >>> 0
-		const dense = centreline(rng(s), true)
-		if (!dense) continue
-		const track = assemble(s, dense, true)
-		if (track) return track
-	}
-	for (let k = 0; k < 40; k++) {
-		const s = (seed + k * 7919) >>> 0
-		const dense = centreline(rng(s), false)
-		if (!dense) continue
-		const track = assemble(s, dense, false)
-		if (track) return track
+	const want = wantsCrossing(seed)
+	for (const cross of want ? [true, false] : [false]) {
+		for (let k = 0; k < 50; k++) {
+			const s = (seed + k * 7919) >>> 0
+			const dense = centreline(rng(s), cross)
+			if (!dense) continue
+			const track = assemble(s, dense, cross)
+			if (track) return track
+		}
 	}
 	return null
 }

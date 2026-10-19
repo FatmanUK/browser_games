@@ -64,11 +64,13 @@ files in its own `music/` folder — see
 - **Dash** — a three-lap race against five rivals on a large
   track generated from a seed when the game loads
   (`games/racer/track.js`; no track data is committed), from a
-  six-car grid on a straight before the line. The track
-  crosses over itself once: a flyover carries one branch over
-  the other, and the ramp has to be taken at speed. A car
-  that goes round the ramp, or crawls over it, does not
-  complete the lap.
+  six-car grid on a straight before the line. Some tracks run
+  back through themselves, and where they do the later branch
+  stops at a ramp and picks up again past the gap — no bridge,
+  just air, with the earlier branch of the same lap crossing
+  underneath. Arrive fast enough and you clear it; arrive too
+  slowly and you come down on the road below, facing the wrong
+  way and half a lap behind. The jump is never compulsory.
   The lights hold the field until they go out; the rivals
   steer at a point a speed-scaled lookahead further round the
   lap, each on its own line across the road and at its own
@@ -88,10 +90,9 @@ files in its own `music/` folder — see
   checkpoint a life down and a long way back. At zero lives
   your race is over where you stand. Twelve checkpoint gates are
   painted across the road, and a lap only counts if every one
-  of them was passed *on* the road, and every jump made —
-  cutting covers the same ground the long way round does as
-  far as any counter can tell, so being there is what gets
-  checked. Amber chevrons warn of the sharper corners,
+  of them was passed *on* the road — cutting covers the same
+  ground the long way round does as far as any counter can
+  tell, so being there is what gets checked. Amber chevrons warn of the sharper corners,
   pointing the way they bend. Their lamps are drawn over the dusk rather than
   under it, so a car outside your headlights is still
   something you can see coming. Crossing the line for the

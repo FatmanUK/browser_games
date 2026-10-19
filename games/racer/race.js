@@ -4,7 +4,7 @@
 // driving toy rather than the game its siblings are.
 
 import { deltaS } from './path.js'
-import { checkLaunch, allJumps } from './jump.js'
+import { checkLaunch } from './jump.js'
 
 export const LAP_TARGET = 3
 
@@ -53,22 +53,18 @@ export function allGates(track) {
 }
 
 // Crossing the line. The lap only lands if every gate was
-// collected and every jump made on the way round; otherwise
-// the crossing resets the masks and counts for nothing. Gate
-// zero is the line itself, so starting a new lap sets its bit.
+// collected on the way round; otherwise the crossing resets
+// the mask and counts for nothing. Gate zero is the line
+// itself, so starting a new lap sets its bit.
+//
+// Jumps are deliberately not part of this. Coming up short
+// drops the car onto the road below and costs it the stretch
+// of lap in between, which is punishment enough — making the
+// lap not count as well would mean one missed ramp threw away
+// everything you had driven.
 function closeLap(track, car) {
-	const clean = car.gates === allGates(track) &&
-		car.jumps === allJumps(track)
-	if (clean) car.lapsDone++
+	if (car.gates === allGates(track)) car.lapsDone++
 	car.gates = 1
-	car.jumps = 0
-	// A fresh go at the ramp every lap. Without this a car
-	// that was walked across once keeps its crawl for ever,
-	// never earns the jump bit again, and so never completes
-	// another lap — the guard against one deadlock quietly
-	// causing a worse one.
-	car.jumpStalls = 0
-	car.crawl = null
 }
 
 // Gates are credited as the car drives past them, and only if
@@ -79,7 +75,6 @@ function closeLap(track, car) {
 export function trackGates(track, car) {
 	if (car.gates === undefined) {
 		car.gates = 0
-		car.jumps = 0
 		car.lapsDone = 0
 		car.gateAt = car.s
 		return

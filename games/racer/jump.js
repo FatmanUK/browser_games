@@ -1,39 +1,66 @@
-// Going over the flyover.
+// The jumps.
 //
-// A track that crosses over itself has one branch on the
-// ground and one in the air, and the one in the air has to be
-// jumped: there is no road under the car between the ramp and
-// the landing, only the other branch of the lap passing
-// underneath. Every car has to make every jump for its lap to
-// count, which is what stops anyone driving under the bridge
-// and calling it a lap.
+// Where the track runs back through itself there is no bridge
+// and no deck: the later branch simply stops at a ramp, and
+// the road picks up again on the far side of the gap. What is
+// underneath, in between, is the earlier branch of the same
+// lap — real road, at the same level, going the other way.
+//
+// So the jump is not a gate and it is not compulsory. Arrive
+// fast enough and you clear the gap and carry on. Arrive too
+// slowly and you come down short, onto the road below, facing
+// the wrong way round and a long stretch of lap behind where
+// you were. Nothing is taken away from you; you simply have
+// to drive it again.
+//
+// The later branch is always the one that jumps, which is
+// what makes a failure a drop rather than a collision: the
+// road you land on is one you have already driven, so landing
+// on it costs time and nothing else.
 
-import { deltaS, wrapS, offsetPoint } from './path.js'
+import { deltaS, locate } from './path.js'
 
-// Tuned backwards from how it should look rather than from
-// anything physical. Flight time is the span divided by the
-// launch speed, and the lift is whatever lands the car exactly
-// at the far ramp — so a car that launches always clears, and
-// a slow one simply goes higher and takes longer about it. At
-// a typical 180 the apex is about 14 units, which against a
-// 16-unit car reads as a jump rather than as a hop or a
-// moon-shot.
-const GRAVITY = 100
+// Fixed, so speed is what decides whether a car clears. The
+// first version solved the lift from the launch speed, which
+// meant every car that launched landed exactly on the far
+// ramp — a jump nobody could fail is a bump in the road with
+// extra steps.
+// Raising this and the ramp's lift together makes the arc
+// deeper without changing the speed needed to clear the gap:
+// the flight time is the gap divided by the speed either way,
+// and only the height over it changes. At 110 the apex was 9
+// units against a car 16 long, which reads as a kerb rather
+// than as a jump.
+export const GRAVITY = 240
 
-// Below this the car does not launch at all: it stops at the
-// ramp face and has to back off and come again. The jump is
-// the one place on the track where arriving slowly is worse
-// than arriving fast.
-export const MIN_SPEED = 130
+// How much of the car's speed the ramp turns upward, as the
+// flight time it buys. Lift is set per ramp from the gap it
+// has to clear, so a wider gap is a steeper ramp rather than
+// an impossible one, and the speed needed to clear it is the
+// same fraction of the car's top speed either way.
+const CLEAR_AT = 0.72
 
-// Three failures in a row and the car is walked across with
-// the gate credited anyway. A rival that cannot get up to
-// speed would otherwise bounce off the ramp for ever, never
-// finish, and hang the race on a lap nobody can complete.
-const MAX_STALLS = 3
+export function liftFor(span, maxSpeed) {
+	const time = span / (maxSpeed * CLEAR_AT)
+	return (GRAVITY * time) / 2
+}
 
-export function allJumps(track) {
-	return (1 << track.JUMPS.length) - 1
+// What clearing it actually takes, which the AI needs and the
+// HUD would want if it ever showed it.
+export function speedToClear(jump) {
+	return (jump.span * GRAVITY) / (2 * jump.lift)
+}
+
+function launch(car, j) {
+	car.air = {
+		z: 0,
+		vz: j.lift,
+		ux: Math.cos(car.angle),
+		uy: Math.sin(car.angle),
+		speed: car.speed,
+		id: j.id,
+		from: j,
+	}
 }
 
 function jumpAt(track, car, moved) {
@@ -44,58 +71,23 @@ function jumpAt(track, car, moved) {
 	return null
 }
 
-function launch(car, j) {
-	const t = j.span / car.speed
-	car.air = {
-		z: 0,
-		vz: (GRAVITY * t) / 2,
-		ux: Math.cos(car.angle),
-		uy: Math.sin(car.angle),
-		speed: car.speed,
-		id: j.id,
-	}
-}
-
-// Stopped at the face, not bounced off it: a bounce sends the
-// car back down the road it just came up and the next attempt
-// starts from further away than the last.
-function refuse(track, car, j) {
-	car.jumpStalls = (car.jumpStalls || 0) + 1
-	if (car.jumpStalls >= MAX_STALLS) {
-		car.jumps |= 1 << j.id
-		car.crawl = j.id
-		return
-	}
-	const p = offsetPoint(track, j.s0 - 6, car.off)
-	car.x = p.x
-	car.y = p.y
-	car.s = wrapS(track, j.s0 - 6)
-	car.speed = 0
-}
-
-// Called with how far the car has moved along the lap this
+// Called with how far the car has come along the lap this
 // frame, which race.js has already worked out for the gates.
 export function checkLaunch(track, car, moved) {
 	if (car.air || !track.JUMPS.length) return
 	if (moved <= 0 || moved > track.L / 4) return
 	const j = jumpAt(track, car, moved)
 	if (!j) return
-	// Crawling across after three refusals: no launch, and
-	// the bit is already set.
-	if (car.crawl === j.id) return
+	// Off the road at the ramp and you miss it entirely, the
+	// same as missing it would be on any other obstacle.
 	if (Math.abs(car.off) > track.halfWidth) return
-	if (car.speed < MIN_SPEED) {
-		refuse(track, car, j)
-		return
-	}
-	car.jumpStalls = 0
 	launch(car, j)
 }
 
-// While airborne the car is a projectile: it holds the heading
-// and speed it left at. Steering in the air would let you line
-// the landing up and make the jump free, and committing to it
-// is the whole of what a jump asks.
+// Airborne, a car is a projectile: it holds the heading and
+// the speed it left with. Steering in the air would let you
+// line the landing up and make the jump free, and committing
+// to it is the whole of what a jump asks.
 export function updateAir(track, car, dt, fx) {
 	const a = car.air
 	if (!a) return false
@@ -105,19 +97,49 @@ export function updateAir(track, car, dt, fx) {
 	car.y += a.uy * a.speed * dt
 	if (a.z > 0) return true
 	car.air = null
-	car.jumps |= 1 << a.id
-	car.crawl = null
-	if (fx) fx.land()
+	land(track, car, a, fx)
 	return false
+}
+
+// Where the car came down decides what happened. Past the far
+// ramp and it made it; short of it and it is on the road
+// underneath, which is a different stretch of the same lap and
+// has to be found explicitly — the windowed search would still
+// be looking along the branch the car launched from.
+function land(track, car, a, fx) {
+	const j = a.from
+	const past = deltaS(track, j.s1, car.s) >= -4
+	if (past) {
+		if (fx) fx.land()
+		return
+	}
+	dropThrough(track, car, a, j)
+	if (fx) fx.wreck()
+}
+
+function dropThrough(track, car, a, j) {
+	// Found from the under-branch's own arc length, not from
+	// where the car launched: the windowed search would still
+	// be looking along the branch it just left, and that
+	// branch is not the one it has landed on.
+	const got = locate(track, car.x, car.y, j.under)
+	car.s = got.s
+	car.off = got.off
+	car.gateAt = got.s
+	// Still pointing the way it was flying, which is across
+	// the road it has come down on. Most of the speed goes
+	// with the impact; the real cost is the stretch of lap it
+	// now has to drive again.
+	car.angle = Math.atan2(a.uy, a.ux)
+	car.facing = car.angle
+	car.speed *= 0.25
 }
 
 export function isAirborne(car) {
 	return !!car.air
 }
 
-// How high to draw it, and how much bigger. A shadow left on
-// the ground at the car's own position is what makes the
-// height read at all from directly above.
 export function airLift(car) {
 	return car.air ? car.air.z : 0
 }
+
