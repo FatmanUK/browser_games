@@ -31,14 +31,16 @@ export const DRIVERS = {
 		w: 0.27, h: 0.33, jaw: 0.86, style: 'voss',
 		look: 0.4, open: 1, browLift: 0.095,
 		browTilt: 0.012, browW: 0.03, nose: 0.015,
-		mouth: 0.075, smile: 0.012, crown: 0.02,
+		mouth: 0.075, smile: 0.012,
+		hairline: 0.38, temple: 0.5,
 	},
 	KESTREL: {
 		skin: '#edc79c', shade: '#d0a376', hair: '#17120f',
 		w: 0.255, h: 0.33, jaw: 0.6, style: 'kestrel',
 		look: 0, open: 0.52, browLift: 0.1,
 		browTilt: -0.018, browW: 0.024, nose: 0.01,
-		mouth: 0.055, smile: 0.004, crown: 0.0,
+		mouth: 0.055, smile: 0.004,
+		hairline: 0.46, temple: 0.62,
 		lashes: true,
 	},
 	MARLO: {
@@ -46,7 +48,8 @@ export const DRIVERS = {
 		w: 0.285, h: 0.32, jaw: 0.92, style: 'marlo',
 		look: -0.3, open: 1, browLift: 0.115,
 		browTilt: 0.02, browW: 0.034, nose: 0.028,
-		mouth: 0.115, smile: 0.055, crown: 0.0,
+		mouth: 0.115, smile: 0.055,
+		hairline: 0.42, temple: 0.54,
 		teeth: true,
 	},
 	DRAKE: {
@@ -54,7 +57,8 @@ export const DRIVERS = {
 		w: 0.29, h: 0.32, jaw: 1.02, style: 'drake',
 		look: 0.2, open: 0.68, browLift: 0.075,
 		browTilt: -0.03, browW: 0.046, nose: 0.03,
-		mouth: 0.085, smile: -0.03, crown: 0.01,
+		mouth: 0.085, smile: -0.03,
+		hairline: 0.44, temple: 0.52,
 		stubble: true,
 	},
 	IBBOTT: {
@@ -62,7 +66,8 @@ export const DRIVERS = {
 		w: 0.26, h: 0.325, jaw: 0.72, style: 'ibbott',
 		look: 0, open: 0.8, browLift: 0.105,
 		browTilt: 0.006, browW: 0.022, nose: 0.018,
-		mouth: 0.055, smile: 0.01, crown: 0.0,
+		mouth: 0.055, smile: 0.01,
+		hairline: 0.44, temple: 0.6,
 		lashes: true,
 	},
 }
@@ -235,7 +240,7 @@ function mouth(ctx, d) {
 
 // Hair comes in two passes, because some of it is behind the
 // head and some in front: a bob frames the face from behind
-// its own outline, a fringe lies over it.
+// its own outline, the crown lies over it.
 function hairBack(ctx, d) {
 	ctx.fillStyle = d.hair
 	if (d.style === 'kestrel') {
@@ -274,19 +279,37 @@ function hairBack(ctx, d) {
 	}
 }
 
-function fringe(ctx, d, q) {
+// The whole top of the head, not a fringe.
+//
+// It used to be a fringe with a cap over it, which hid the
+// forehead and a good part of what made one face different
+// from another. With the cap gone the crown has to be hair
+// all the way over, and where the hairline sits is now doing
+// the work the cap colour was: Voss's is high and swept,
+// Kestrel's comes down flat, Drake's sits low and heavy.
+//
+// Ibbott's has to meet her ponytail at the temple. Left
+// short it reads as a bald patch, which on the one face in
+// the row that is a woman is the only thing anybody would
+// look at.
+function crown(ctx, d, q) {
+	const w = d.w + 0.016
 	ctx.fillStyle = d.hair
 	ctx.beginPath()
-	ctx.moveTo(0.5 - d.w - 0.01, 0.46)
+	ctx.moveTo(0.5 - w, d.temple)
+	ctx.bezierCurveTo(
+		q(0.5 - w), q(0.52 - d.h * 1.34),
+		q(0.5 + w), q(0.52 - d.h * 1.34),
+		0.5 + w, d.temple)
 	ctx.quadraticCurveTo(
-		q(0.5 - d.w * 0.4), q(0.27 + d.crown),
-		0.5 + d.w + 0.01, 0.44)
+		q(0.5 + d.w * 0.55), q(d.hairline + 0.05),
+		0.5, q(d.hairline))
 	ctx.quadraticCurveTo(
-		q(0.5), q(0.4 + d.crown * 0.5),
-		0.5 - d.w - 0.01, 0.46)
+		q(0.5 - d.w * 0.55), q(d.hairline + 0.05),
+		0.5 - w, d.temple)
 	ctx.closePath()
 	ctx.fill()
-	ink(ctx, 0.016)
+	ink(ctx, 0.018)
 }
 
 function sideburns(ctx, d) {
@@ -353,26 +376,52 @@ function specs(ctx, d) {
 	ink(ctx, 0.016)
 }
 
-// The livery, worn, so a face still says which car. A peak
-// rather than a band alone: at twenty pixels the peak is the
-// part that reads as a cap and not as a hat band.
-function cap(ctx, d, colours, q) {
-	const y = 0.34 - d.crown
+// The livery, worn below the chin instead of above the eyes.
+//
+// A cap says whose car it is in one glance, which is why
+// there was one, but it does it by covering the top third of
+// the face — and the faces are the point. A collar says the
+// same thing out of the way, and leaves a head you can
+// actually read.
+//
+// Drawn before the head so the chin and the hair lie over
+// it, which is also why the neck is here rather than with
+// the head: it has to go under the collar and behind the
+// jaw.
+export function shoulders(ctx, d, colours) {
+	ctx.fillStyle = d ? d.shade : '#9aa0a8'
 	ctx.beginPath()
-	ctx.moveTo(0.5 - d.w - 0.02, y + 0.07)
-	ctx.quadraticCurveTo(
-		q(0.5), q(y - 0.19), 0.5 + d.w + 0.02, y + 0.07)
+	ctx.moveTo(0.38, 0.72)
+	ctx.lineTo(0.62, 0.72)
+	ctx.lineTo(0.64, 0.95)
+	ctx.lineTo(0.36, 0.95)
+	ctx.closePath()
+	ctx.fill()
+	ink(ctx, 0.02)
+	// High in the frame on purpose. A portrait is cropped at
+	// the collar, so whatever sits below about 0.88 is off
+	// the bottom — pitched where shoulders really are, the
+	// livery came out as an eight pixel line under the chin
+	// at podium size and nothing at all in the standings.
+	ctx.beginPath()
+	ctx.moveTo(0.0, 1.1)
+	ctx.quadraticCurveTo(0.04, 0.91, 0.29, 0.87)
+	ctx.quadraticCurveTo(0.5, 0.96, 0.71, 0.87)
+	ctx.quadraticCurveTo(0.96, 0.91, 1.0, 1.1)
 	ctx.closePath()
 	ctx.fillStyle = colours.body
 	ctx.fill()
-	ink(ctx, 0.02)
+	ink(ctx, 0.024)
+	// The darker tone as the collar's own edge, so the two
+	// halves of a livery both show.
 	ctx.beginPath()
-	ctx.ellipse(0.5, y + 0.075, d.w + 0.085, 0.045,
-		0, Math.PI, Math.PI * 2)
+	ctx.moveTo(0.29, 0.87)
+	ctx.quadraticCurveTo(0.5, 0.96, 0.71, 0.87)
+	ctx.quadraticCurveTo(0.5, 1.05, 0.29, 0.87)
 	ctx.closePath()
 	ctx.fillStyle = colours.shell
 	ctx.fill()
-	ink(ctx, 0.02)
+	ink(ctx, 0.018)
 }
 
 // Still the Stig — nobody sees the face — but gloss black
@@ -406,6 +455,7 @@ function helmetShell(ctx, colours) {
 }
 
 export function drawHelmet(ctx, colours) {
+	shoulders(ctx, null, colours)
 	helmetShell(ctx, colours)
 	ctx.beginPath()
 	ctx.moveTo(0.26, 0.5)
@@ -449,6 +499,7 @@ const EXTRAS = {
 }
 
 function drawFace(ctx, d, colours, q) {
+	shoulders(ctx, d, colours)
 	hairBack(ctx, d)
 	headParts(ctx, d, q)
 	if (!d.teeth) nose(ctx, d, q)
@@ -457,8 +508,7 @@ function drawFace(ctx, d, colours, q) {
 	mouth(ctx, d)
 	if (d.teeth) nose(ctx, d, q)
 	EXTRAS[d.style](ctx, d)
-	fringe(ctx, d, q)
-	cap(ctx, d, colours, q)
+	crown(ctx, d, q)
 }
 
 // Scaled from the 0..1 square the drawing is authored in, so
@@ -468,8 +518,11 @@ function drawFace(ctx, d, colours, q) {
 // inside, a head leaves a fifth of the panel empty all round
 // and the face ends up smaller than the space it was given.
 // Heads are cropped at the chin in portraits anyway.
-const FIT = 1.22
-const FOCUS = 0.54
+// Set so the crown of the head is just inside the top and
+// the collar is cut by the bottom, which is where a portrait
+// is cropped.
+const FIT = 1.16
+const FOCUS = 0.6
 
 export function paintPortrait(ctx, px, name, colours) {
 	ctx.save()
