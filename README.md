@@ -183,6 +183,36 @@ files in its own `music/` folder — see
   `tools/generate_mod.py`, which also writes the base64 fallback
   in `music-data.js`. Has its own "Sound"/"Music" toggles.
 
+- **Wheelworks** — a Logical-style marble puzzle over a
+  hundred levels, each reachable by a four-character access
+  code. Wheels sit on an 8x5 grid joined by pipes; fill a
+  wheel's four slots with four marbles of one colour and it
+  breaks, destroying them. Break every wheel to clear the
+  level. Left-click a wheel to fire the marble on that side
+  along its run, right-click to turn the wheel a slow quarter
+  turn — time one against an arriving marble and it bounces off
+  the body between the slots instead of dropping in. Marbles
+  are intangible to each other, which is why runs can cross
+  without interfering; they can also be turned by a one-way
+  block, which sends everything that enters it out along its
+  arrow, and repainted by a paint booth. The only source of
+  marbles is the gutter along the top, and the only way to lose
+  is to let it jam: a marble entering the gutter starts a
+  clock that only resets when something accepts it. Since a
+  broken wheel still accepts, turns and breaks again, breaking
+  one is also how junk marbles are got rid of — four at a time,
+  against one at a time arriving, which is the whole economy of
+  the game. From level 15 a pattern grid lights at random and
+  stays lit until some wheel matches it exactly, orientation
+  and all; while it is lit the ordinary colour match works in
+  no wheel on the board, so it is an emergency rather than a
+  nuisance. Levels are generated from the level number rather
+  than committed, as Dash's tracks are, and progress is one
+  number in `localStorage` — a code is a visit, not an unlock,
+  so only finishing a level climbs the ladder. The first mouse
+  game in the suite. Has its own "Sound"/"Music" toggles, with
+  a replaceable ProTracker module in `games/logical/music/`.
+
 ## Adding a game
 
 See [games/README.md](games/README.md).
@@ -226,6 +256,15 @@ games/racer/            Dash (+ audio.js, same pattern;
                         and lives, marks.js the rubber and the
                         blast scorch, portraits.js the drawn
                         faces)
+games/logical/          Wheelworks (board.js the cell model
+                        and the one transition rule, level.js +
+                        tiers.js the generator, topology.js its
+                        checks, wheel.js/travel.js/gutter.js/
+                        pattern.js/world.js the rules,
+                        code.js the access codes, input.js the
+                        mouse, models.js + sprites.js the baked
+                        art, render.js + hud.js the drawing,
+                        audio.js over music/*.mod)
 games/beltbreaker/      Belt Breaker (rocks.js/craft.js/
                         sprites.js pre-render the art over
                         games/_shared/mesh.js;

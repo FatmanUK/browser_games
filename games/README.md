@@ -40,7 +40,7 @@ games should too, for a consistent look:
   container, { title, onNewGame, onBack })` builds a canvas of
   the suite's standard size (`WIDTH` x `HEIGHT`) with the
   title and buttons laid over the top of it, and returns
-  `{ main: canvas, controlsRow }` — pass `controlsRow` to
+  `{ canvas, controlsRow }` — pass `controlsRow` to
   `createAudioToggles`. A game whose playfield is a different
   shape centres inside that window with `fitBoard(ctx, boardW,
   boardH, insetTop, insetBottom)` rather than resizing the
@@ -82,6 +82,24 @@ games should too, for a consistent look:
   baked per heading rather than `ctx.rotate()`d. Bake lazily,
   never at module load: `js/registry.js` imports every game's
   module when the launcher page opens.
+- **Mouse input** has no shared helper yet. Four of the five
+  games are keyboard-only; Wheelworks is the first mouse game,
+  and its `boardPoint()` and hit-testing live in
+  `games/logical/input.js` rather than here, on the principle
+  `hud.js` describes for its own birth — pull it up when a
+  second game wants it. Three things to know before writing
+  the second one. The canvas backing store is a fixed
+  `WIDTH` x `HEIGHT` while CSS renders it at whatever size
+  fits, so a client coordinate has to be scaled by
+  `WIDTH / rect.width`; invert the `{ scale, x, y }` that
+  `fitBoard` returned for *the frame that was last drawn*
+  rather than recomputing it, or the click and the picture are
+  two opinions about where the board is; and right-click needs
+  a `mousedown` with `button === 2` plus a `contextmenu`
+  handler that preventDefaults **on the canvas only**, never on
+  the document. The AudioContext unlock note below applies
+  just the same, except that the trusted gesture is the
+  mousedown rather than a keydown.
 - `games/_shared/storage.js` — `loadNumber(key, fallback)` /
   `saveNumber(key, value)` wrap `localStorage` (with try/catch) for
   persisting a high score or best time across visits.
