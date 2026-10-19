@@ -20,7 +20,7 @@ import {
 	decodeBase64, renderMod, isSupported,
 } from './modplayer.js'
 
-export const TRACKS = ['belt-breaker.mod']
+export const TRACKS = ['piston_cathedral.mod']
 
 const VOLUME = 0.42
 
