@@ -15,12 +15,21 @@ import { CAR_LENGTH, CAR_WIDTH } from './car.js'
 import { isAirborne } from './jump.js'
 import { onRoad } from './path.js'
 
-// The speed change, per second, that scrubs a tyre. Braking
-// is 260 and so always counts; accelerating is 220 less the
-// drag, which only clears this below about 50 — so pulling
-// away hard marks the road and holding the throttle down on a
-// straight does not.
-const SCRUB = 190
+// The speed change, per second, that scrubs a tyre.
+//
+// The floor is set by coasting, not by taste: lift off on the
+// road and the drag alone takes 0.6 of the speed away a
+// second, which at the 225 top speed is 135. Anything at or
+// under that and a car marks the road for simply rolling.
+//
+// 150 is as close to that floor as is honest, and the
+// closeness is the point. Braking is 260 plus the drag and
+// was always over the line; it is the throttle that changes,
+// because accelerating is 220 less the drag and so clears the
+// threshold up to about 117 rather than only up to 50. At 190
+// you had to be nearly stopped to chirp the tyres, which is
+// why there was so little rubber about.
+const SCRUB = 150
 
 // Below this a car is not going fast enough to scrub anything,
 // however hard it is trying.
@@ -42,13 +51,14 @@ const MIN_SPEED = 12
 //
 // It is also what a tyre does: rubber already down does not
 // vanish the instant the wheel grips again.
-const TAU = 0.1
+const TAU = 0.07
 
 // A new pair of segments every few units rather than every
-// frame. At top speed a frame is under four units, so per-frame
-// segments would overlap into a solid smear and cost sixty list
-// entries a second per car.
-const STEP = 4
+// frame. At top speed a frame is under four units, so
+// per-frame segments would overlap into a solid smear and
+// cost sixty list entries a second per car. Three rather than
+// four so a short scrub still manages to lay something.
+const STEP = 3
 
 // Further than a frame's travel means the car did not drive
 // there: it was respawned, dropped off a ramp, or the level was
@@ -62,7 +72,7 @@ export const BLAST_R = 13
 
 const RUBBER_LIFE = 7
 const BLAST_LIFE = 22
-const MAX_RUBBER = 640
+const MAX_RUBBER = 900
 const MAX_BLASTS = 24
 
 export function createMarks() {

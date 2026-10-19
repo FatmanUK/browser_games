@@ -558,9 +558,13 @@ function drawMissiles(ctx, state) {
 //
 // The alpha is quantised into a handful of bands so the whole
 // lot strokes in four passes. A per-segment alpha means a
-// per-segment stroke, and there are six hundred segments.
-const RUBBER_W = 2.6
-const RUBBER_DARK = 0.4
+// per-segment stroke, and there are nine hundred segments.
+// Dark enough to read on a road that is already dark and
+// then dimmed again by the dusk, which is what the rubber
+// sits in: the trail is behind the car and the headlamps
+// point the other way.
+const RUBBER_W = 3
+const RUBBER_DARK = 0.55
 const RUBBER_BANDS = 4
 
 function drawRubber(ctx, marks, cam) {

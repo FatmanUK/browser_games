@@ -414,26 +414,46 @@ function crossingToJump(track, h, id) {
 	}
 }
 
-// Zero jumps is a perfectly good track and one more is a
-// bonus, so nothing here rejects a layout for the number it
-// has. Only a crossing too shallow to jump, too close to the
-// line, or too close to its own other branch is thrown out —
-// and throwing one out just means that track has fewer.
+// Zero jumps is a perfectly good track and more than one is a
+// bonus, so nothing here wants a particular number. What it
+// will not do any more is keep a crossing it could not turn
+// into a jump.
+//
+// It used to: a crossing too shallow, too near the line, or
+// too near its own other branch was dropped and the track
+// shipped with the crossing still in it. That is not a
+// shortcut, it is a knot — two stretches of road on the same
+// tarmac, so a car's arc length there is genuinely ambiguous
+// and only continuity picks the branch.
+//
+// Out on the lap that is survivable. Under the grid it is
+// not: on level six the start line resolved onto one branch
+// and the cars onto the other, so the pole came out 2044
+// behind its own start line, and driving away from the grid
+// put the player ninety-nine units up the road into a dead
+// stop. Eight of the first forty levels had a knot in them.
+//
+// Returning null rejects the whole layout, which is the right
+// answer because the seed walk already exists to find
+// another: a crossing that cannot be jumped is a layout to
+// walk past, not one to ship with a knot in it.
 function buildJumps(track) {
 	const pts = []
 	for (let i = 0; i < track.n; i++) {
 		pts.push({ x: track.px[i], y: track.py[i] })
 	}
+	const found = selfCrossings(pts, 30)
+	if (found.length > MAX_JUMPS) return null
 	const jumps = []
-	for (const h of selfCrossings(pts, 30)) {
-		if (jumps.length >= MAX_JUMPS) break
+	for (const h of found) {
 		const j = crossingToJump(track, h, jumps.length)
-		if (j) jumps.push(j)
+		if (!j) return null
+		jumps.push(j)
 	}
 	return jumps
 }
 
-function assemble(seed, dense, wantJumps) {
+function assemble(seed, dense) {
 	const path = pathOf(dense)
 	// An undrivable corner is a level nobody can finish, and
 	// the seed walk can simply try another one.
@@ -447,7 +467,12 @@ function assemble(seed, dense, wantJumps) {
 		ROAD_WIDTH, VERGE_WIDTH,
 	})
 	orientToTravel(track, gridFor(dense, heads, straight))
-	track.JUMPS = wantJumps ? buildJumps(track) : []
+	// Asked of every layout, not only the ones built
+	// from a figure of eight: a plain loop is meant to
+	// be star-shaped and so never cross, and if one
+	// does it needs the jump just the same.
+	track.JUMPS = buildJumps(track)
+	if (!track.JUMPS) return null
 	return populate(track, seed)
 }
 
@@ -497,7 +522,7 @@ export function buildTrack(seed) {
 			const s = (seed + k * 7919) >>> 0
 			const dense = centreline(rng(s), cross)
 			if (!dense) continue
-			const track = assemble(s, dense, cross)
+			const track = assemble(s, dense)
 			if (track) return track
 		}
 	}

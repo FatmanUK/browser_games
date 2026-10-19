@@ -68,7 +68,10 @@ files in its own `music/` folder — see
   back through themselves, and where they do the later branch
   stops at a ramp and picks up again past the gap — no bridge,
   just air, with the earlier branch of the same lap crossing
-  underneath. Arrive fast enough and you clear it; arrive too
+  underneath. Every crossing gets one: a layout with a
+  crossing the generator cannot ramp is thrown out and another
+  seed tried, because a crossing without a jump is two roads
+  on the same tarmac. Arrive fast enough and you clear it; arrive too
   slowly and you come down on the road below, facing the wrong
   way and half a lap behind. The jump is never compulsory.
   The lights hold the field until they go out; the rivals
