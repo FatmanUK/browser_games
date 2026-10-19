@@ -63,6 +63,13 @@ const SEQS = {
 			[1175, 0.2]],
 		'square', 0.07, 60,
 	],
+	// A pod cashed in because the gun is already full. Has
+	// to be audibly its own thing, not the coin sound.
+	payout: [
+		[[1568, 0.07], [1319, 0.07], [1047, 0.07],
+			[1760, 0.24]],
+		'triangle', 0.075, 60,
+	],
 	gameOver: [
 		[[330, 0.3], [262, 0.3], [196, 0.4], [131, 0.7]],
 		'triangle', 0.09, 230,

@@ -47,7 +47,7 @@ export const KINDS = {
 export const DROPS = {
 	silver: null,
 	gold: ['cash', 0.92],
-	red: ['upgrade', 0.26],
+	red: ['upgrade', 0.2],
 }
 
 export const CASH_PER_COIN = 30
@@ -248,12 +248,14 @@ function collect(state, p, fx) {
 	if (state.gun < MAX_GUN) {
 		state.gun += 1
 		fx.upgrade()
-	} else {
-		// Nothing left to fit: pay out instead, so a pod
-		// is never a wasted pickup.
-		addCash(state, CASH_PER_COIN * 4, fx)
-		fx.coin()
+		return
 	}
+	// Nothing left to fit: pay out instead, so a pod is
+	// never a wasted pickup. It gets its own sound — paying
+	// it out under the ordinary coin ping made a maxed-gun
+	// pod feel like it had done nothing at all.
+	addCash(state, CASH_PER_COIN * 4, fx)
+	fx.payout()
 }
 
 export function updatePickups(state, dt, fx) {
