@@ -23,6 +23,7 @@ import { CAR_LENGTH, CAR_WIDTH, PLAYER_COLOURS } from './car.js'
 import { sampleAt, offsetPoint, deltaS } from './path.js'
 import { airLift } from './jump.js'
 import { drawRivals, drawRivalLights } from './rivals.js'
+import { BLAST_R } from './marks.js'
 function deg(d) {
 	return (d * Math.PI) / 180
 }
@@ -553,6 +554,83 @@ function drawMissiles(ctx, state) {
 	}
 }
 
+// Rubber and scorch, drawn over the paint and under the cars.
+//
+// The alpha is quantised into a handful of bands so the whole
+// lot strokes in four passes. A per-segment alpha means a
+// per-segment stroke, and there are six hundred segments.
+const RUBBER_W = 2.6
+const RUBBER_DARK = 0.4
+const RUBBER_BANDS = 4
+
+function drawRubber(ctx, marks, cam) {
+	ctx.lineWidth = RUBBER_W
+	ctx.lineCap = 'round'
+	for (let b = 1; b <= RUBBER_BANDS; b++) {
+		const lo = (b - 1) / RUBBER_BANDS
+		const hi = b / RUBBER_BANDS
+		const a = RUBBER_DARK * hi
+		ctx.strokeStyle = `rgba(26, 23, 26, ${a})`
+		ctx.beginPath()
+		for (const m of marks.rubber) {
+			const f = m.t / m.life
+			if (f <= lo || f > hi) continue
+			if (!onScreen(m.x0, m.y0, cam)) continue
+			ctx.moveTo(m.x0, m.y0)
+			ctx.lineTo(m.x1, m.y1)
+		}
+		ctx.stroke()
+	}
+}
+
+// A scorched disc with cracks running out of it. The crack
+// lengths come off the index rather than off Math.random so
+// they are the same every frame: a blast mark is a mark, and
+// one that reshuffles itself sixty times a second reads as a
+// flame instead.
+const CRACKS = 9
+
+function blastCracks(ctx, r, a) {
+	ctx.strokeStyle = `rgba(18, 16, 18, ${a})`
+	ctx.lineWidth = 1.5
+	ctx.lineCap = 'round'
+	ctx.beginPath()
+	for (let i = 0; i < CRACKS; i++) {
+		const ang = (i / CRACKS) * Math.PI * 2
+		const len = r * (0.88 + ((i * 7) % 5) * 0.14)
+		const co = Math.cos(ang), si = Math.sin(ang)
+		ctx.moveTo(co * r * 0.45, si * r * 0.45)
+		ctx.lineTo(co * len, si * len)
+	}
+	ctx.stroke()
+}
+
+function drawBlast(ctx, m) {
+	const f = m.t / m.life
+	ctx.save()
+	ctx.translate(m.x, m.y)
+	ctx.rotate(m.turn)
+	const g = ctx.createRadialGradient(
+		0, 0, 0, 0, 0, BLAST_R)
+	g.addColorStop(0, `rgba(14, 12, 14, ${0.82 * f})`)
+	g.addColorStop(0.5, `rgba(34, 29, 31, ${0.6 * f})`)
+	g.addColorStop(1, 'rgba(44, 38, 40, 0)')
+	ctx.fillStyle = g
+	ctx.beginPath()
+	ctx.arc(0, 0, BLAST_R, 0, Math.PI * 2)
+	ctx.fill()
+	blastCracks(ctx, BLAST_R, 0.55 * f)
+	ctx.restore()
+}
+
+function drawMarks(ctx, state, cam) {
+	for (const m of state.marks.blasts) {
+		if (!onScreen(m.x, m.y, cam)) continue
+		drawBlast(ctx, m)
+	}
+	drawRubber(ctx, state.marks, cam)
+}
+
 function drawWorld(ctx, state, atlas, cam) {
 	const track = state.track
 	drawRoad(ctx, track, state)
@@ -562,6 +640,9 @@ function drawWorld(ctx, state, atlas, cam) {
 	drawGates(ctx, track, state)
 	drawStartGrid(ctx, track)
 	drawStartLine(ctx, track)
+	// Over the paint and the grid: rubber lies on top of
+	// whatever is painted on the road, not under it.
+	drawMarks(ctx, state, cam)
 	// The treeline stands outside the boundary, so it goes
 	// down after the road rather than before it — a tree is
 	// taller than the kerb it overhangs.

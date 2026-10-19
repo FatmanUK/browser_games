@@ -32,6 +32,9 @@ import {
 	updateWrecks, rivalsFire, fire,
 } from './missiles.js'
 import { updateAir, isAirborne } from './jump.js'
+import {
+	createMarks, updateMarks, layRubber, armScrub,
+} from './marks.js'
 import { drawHud } from './hud.js'
 import { buildTrack } from './track.js'
 import {
@@ -61,7 +64,8 @@ const LEVEL_KEYS = { '[': -1, ']': 1 }
 
 function createState(track, level, unlocked) {
 	const pole = track.GRID_SLOTS[0]
-	const rivals = createRivals(track).map(armCar)
+	const rivals = createRivals(track)
+		.map(armCar).map(armScrub)
 	return armCar({
 		track,
 		level,
@@ -92,6 +96,9 @@ function createState(track, level, unlocked) {
 		race: createRace(),
 		pickups: createPickups(track),
 		missiles: [],
+		marks: createMarks(),
+		scrubRate: 0,
+		scrubLaid: null,
 		keys: new Set(),
 	})
 }
@@ -299,6 +306,31 @@ function updateWeapons(state, dt, audio) {
 	rivalsFire(state, dt, audio)
 }
 
+// Everything that wants the frame already driven.
+//
+// A wrecked car is scenery until it comes back, one that
+// is out has left the race, and one in the air is over
+// everybody's head: none of them should shove anybody, and
+// a car cannot be shoved by a ghost.
+//
+// The marks come after the shoving for the same reason.
+// Laying rubber from a position a collision is about to
+// undo leaves a streak running to somewhere the car never
+// was.
+function settle(state, dt, audio) {
+	const live = state.rivals.filter(
+		(r) => !r.out && r.wrecked <= 0 && !isAirborne(r))
+	if (state.wrecked <= 0 && !state.out &&
+			!isAirborne(state) &&
+			resolveContacts(state, live)) {
+		audio.nudge()
+	}
+	updateMarks(state.marks, dt)
+	layRubber(
+		state.marks, state.track,
+		[state, ...state.rivals], dt)
+}
+
 // The grid is held until the lights go out, so the countdown
 // ticks on its own before anything moves. The last lap's time
 // still has to be recorded, so the finish is checked after the
@@ -321,17 +353,7 @@ function update(state, dt, best, audio) {
 		state.rivals.filter(
 			(r) => !r.out && r.wrecked <= 0),
 		dt, (car) => terrainAt(state.track, car))
-	// A wrecked car is scenery until it comes back, one that
-	// is out has left the race, and one in the air is over
-	// everybody's head: none of them should shove anybody,
-	// and a car cannot be shoved by a ghost.
-	const live = state.rivals.filter(
-		(r) => !r.out && r.wrecked <= 0 && !isAirborne(r))
-	if (state.wrecked <= 0 && !state.out &&
-			!isAirborne(state) &&
-			resolveContacts(state, live)) {
-		audio.nudge()
-	}
+	settle(state, dt, audio)
 	if (checkFinishes(state.track, race, state, state.rivals)) {
 		audio.finish()
 		// Winning is what opens the next one. Finishing

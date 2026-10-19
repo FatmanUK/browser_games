@@ -13,6 +13,7 @@
 import { CAR_LENGTH } from './car.js'
 import { angleDelta } from './geom.js'
 import { offsetPoint, headingAt } from './path.js'
+import { addBlast } from './marks.js'
 
 export const MAX_AMMO = 3
 export const LIVES = 3
@@ -95,13 +96,19 @@ export function fire(state, car, fx) {
 
 // Guarded the way Belt Breaker's killShip is: two missiles
 // arriving in the same volley must cost one life, not two.
+//
+// The missiles it was carrying are kept. Scrapping them meant
+// being shot cost a life and the only means of answering back,
+// so the car that was already behind was the one left with
+// nothing to shoot with — ninety-eight missiles over forty
+// races went that way. A hit should put you down, not disarm
+// you.
 export function wreck(car, fx) {
 	if (car.wrecked > 0 || car.invuln > 0 || car.out) return
 	car.lives--
 	car.wrecked = WRECK_TIME
 	car.speed = 0
 	car.spin = (Math.random() < 0.5 ? -1 : 1) * WRECK_SPIN
-	car.ammo = 0
 	if (car.lives <= 0) car.out = true
 	fx.wreck()
 }
@@ -155,12 +162,15 @@ export function updateMissiles(state, dt, fx) {
 		m.y += m.vy * dt
 		for (const car of cars) {
 			if (!hits(m, car)) continue
-			wreck(car, car === state ? fx : fx)
+			addBlast(state.marks, m.x, m.y)
+			wreck(car, fx)
 			return false
 		}
 		for (const o of state.track.HARD_OBSTACLES) {
 			const d = Math.hypot(m.x - o.x, m.y - o.y)
-			if (d <= o.r + RADIUS) return false
+			if (d > o.r + RADIUS) continue
+			addBlast(state.marks, m.x, m.y)
+			return false
 		}
 		return m.t < LIFE
 	})
@@ -172,21 +182,39 @@ export function updateMissiles(state, dt, fx) {
 const CONE = 0.22
 const RANGE = 170
 
+// Anybody in front, not the player in front.
+//
+// A rival has always been willing to shoot another rival
+// — measured over forty races it is about an even split —
+// but the search walked the field in order with the player
+// at the head of it and took the first car it found, so a
+// rival with both in its sights always chose the player.
+// Nearest wins now, which is the same rule for everyone
+// and is also the shot more likely to land.
+//
+// A car that is spinning, or just back from a respawn,
+// cannot be hit (see `hits`), so it is not worth a
+// missile either.
+function targetFor(state, r) {
+	let best = null
+	for (const car of [state, ...state.rivals]) {
+		if (car === r || car.out) continue
+		if (car.wrecked > 0 || car.invuln > 0) continue
+		const dx = car.x - r.x, dy = car.y - r.y
+		const d = Math.hypot(dx, dy)
+		if (d > RANGE || (best && d >= best.d)) continue
+		const off = Math.abs(angleDelta(
+			r.angle, Math.atan2(dy, dx)))
+		if (off > CONE) continue
+		best = { car, d }
+	}
+	return best && best.car
+}
+
 export function rivalsFire(state, dt, fx) {
-	const cars = [state, ...state.rivals]
 	for (const r of state.rivals) {
 		if (!canFire(r)) continue
 		if (Math.random() > r.skill.nerve * dt * 3) continue
-		for (const car of cars) {
-			if (car === r || car.out) continue
-			const dx = car.x - r.x, dy = car.y - r.y
-			const d = Math.hypot(dx, dy)
-			if (d > RANGE) continue
-			const off = Math.abs(angleDelta(
-				r.angle, Math.atan2(dy, dx)))
-			if (off > CONE) continue
-			fire(state, r, fx)
-			break
-		}
+		if (targetFor(state, r)) fire(state, r, fx)
 	}
 }

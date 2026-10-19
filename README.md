@@ -87,10 +87,15 @@ files in its own `music/` folder — see
   Drake brakes so late it keeps running wide. Every car has three lives and
   carries up to three dumbfire missiles, picked up off the
   racing line; a missile does not steer, so a shot is a
-  judgement about where a car will be. Being hit wrecks you —
-  a spin, a couple of seconds, then back in at the last
-  checkpoint a life down and a long way back. At zero lives
-  your race is over where you stand. Twelve checkpoint gates are
+  judgement about where a car will be, and the rivals fire at
+  whoever is nearest in their sights rather than at you by
+  preference. Being hit wrecks you — a spin, a couple of
+  seconds, then back in at the last checkpoint a life down and
+  a long way back, still carrying whatever you had loaded. At
+  zero lives your race is over where you stand. The road keeps
+  a record of all this: a scorch mark where a missile went off,
+  and rubber wherever a car pulled away hard or stood on the
+  brakes. Twelve checkpoint gates are
   painted across the road, and a lap only counts if every one
   of them was passed inside the track's boundary — cutting
   covers the same ground the long way round does as far as any
@@ -189,7 +194,8 @@ games/racer/            Dash (+ audio.js, same pattern;
                         path.js the arc-length geometry,
                         jump.js the flyover, progress.js the
                         track ladder, missiles.js the weapons
-                        and lives)
+                        and lives, marks.js the rubber and the
+                        blast scorch)
 games/beltbreaker/      Belt Breaker (rocks.js/craft.js/
                         sprites.js pre-render the art over
                         games/_shared/mesh.js;
