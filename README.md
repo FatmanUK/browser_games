@@ -64,7 +64,11 @@ files in its own `music/` folder — see
 - **Dash** — a three-lap race against five rivals on a large
   track generated from a seed when the game loads
   (`games/racer/track.js`; no track data is committed), from a
-  six-car grid on a straight before the line.
+  six-car grid on a straight before the line. The track
+  crosses over itself once: a flyover carries one branch over
+  the other, and the ramp has to be taken at speed. A car
+  that goes round the ramp, or crawls over it, does not
+  complete the lap.
   The lights hold the field until they go out; the rivals
   steer at a point a speed-scaled lookahead further round the
   lap, each on its own line across the road and at its own
@@ -80,10 +84,11 @@ files in its own `music/` folder — see
   checkpoint a life down and a long way back. At zero lives
   your race is over where you stand. Twelve checkpoint gates are
   painted across the road, and a lap only counts if every one
-  of them was passed *on* the road — swept angle alone cannot
-  tell a lap from a straight line across the infield, because
-  the shortcut sweeps exactly the same angle. Amber chevrons
-  warn of the sharper corners, pointing the way they bend. Their lamps are drawn over the dusk rather than
+  of them was passed *on* the road, and every jump made —
+  cutting covers the same ground the long way round does as
+  far as any counter can tell, so being there is what gets
+  checked. Amber chevrons warn of the sharper corners,
+  pointing the way they bend. Their lamps are drawn over the dusk rather than
   under it, so a car outside your headlights is still
   something you can see coming. Crossing the line for the
   third time ends your race with a finishing place. Win one
@@ -174,8 +179,10 @@ games/racer/            Dash (+ audio.js, same pattern;
                         view.js the camera, models.js +
                         sprites.js the baked art, track.js +
                         spline.js + hazards.js the generator,
-                        progress.js the track ladder,
-                        missiles.js the weapons and lives)
+                        path.js the arc-length geometry,
+                        jump.js the flyover, progress.js the
+                        track ladder, missiles.js the weapons
+                        and lives)
 games/beltbreaker/      Belt Breaker (rocks.js/craft.js/
                         sprites.js pre-render the art over
                         games/_shared/mesh.js;

@@ -11,13 +11,14 @@
 // rule about it, which is what this was checked against.
 
 import { rng } from '../_shared/art.js'
-import { travelDir } from './geom.js'
 import {
 	catmullClosed, isStarShaped, headings, turnRates,
-	longestStraight, unwrapped, wrapDelta, resample,
-	differentiate, smoothOnce, minRadius,
+	longestStraight, resample, differentiate, smoothOnce,
+	minRadius, selfCrossings,
 } from './spline.js'
-import { locate, offsetPoint, headingAt } from './path.js'
+import {
+	locate, offsetPoint, headingAt, deltaS, wrapS,
+} from './path.js'
 import {
 	buildHazards, buildSand, buildTreeLine,
 } from './hazards.js'
@@ -44,7 +45,7 @@ const DS = 4
 // road radially from the centre instead of across the
 // centreline, so the band stayed well-defined no matter how
 // sharp the curve underneath it got.
-const CONTROL_POINTS = 14
+const CONTROL_POINTS = 16
 const BASE_RADIUS = 580
 const RADIUS_JITTER = 60
 const ANGLE_JITTER = 0.15
@@ -72,10 +73,8 @@ const CORNER_MIN = 40
 const TWO_PI = Math.PI * 2
 
 // Control points laid out in polar and then sorted by angle.
-// The sort is what makes the curve star-shaped by
-// construction rather than by luck — without it the loop
-// doubles back on itself and the radius tables below stop
-// being able to describe it at all.
+// The sort keeps the loop from wandering back through itself,
+// which is what a track without a flyover wants.
 function controlPoints(rand) {
 	const step = TWO_PI / CONTROL_POINTS
 	const polar = []
@@ -92,11 +91,66 @@ function controlPoints(rand) {
 	}))
 }
 
-function centreline(rand) {
+// A track that crosses over itself, built as a figure of
+// eight rather than discovered by accident.
+//
+// The first attempt took the ordinary loop and swapped one
+// adjacent pair of control points, which does make it double
+// back through itself — 54 of 60 seeds crossed, and 31 of
+// those crossed steeply enough to bridge. It was still no
+// good: the double-back is a hairpin of about 5 units of
+// radius on a road 100 wide, which is not a corner but a
+// fold, and no amount of relaxing fixed it (median radius 5
+// before smoothing and 5 after). Two cleverer variations on
+// the swap were worse.
+//
+// The lemniscate of Gerono has the crossing built into it.
+// x = A cos t, y = B sin t cos t passes through the origin at
+// t = pi/2 and 3pi/2 and nowhere else, so there is exactly one
+// crossing, its angle is set by the ratio A:B rather than by
+// luck, and both lobes are as wide as the track is big.
+// Measured over 60 seeds: one crossing every time, at 53
+// degrees every time, median tightest corner 97.
+//
+// The variety comes from two low-frequency harmonics and a
+// rotation. Per-point jitter, which is what the plain loop
+// uses, puts a kink at the scale of one control point and
+// drops the tightest corner from 97 to 37.
+const LOBE_X = 840
+const LOBE_Y = 450
+const WOBBLE = 0.08
+
+function figureEight(rand) {
+	const harm = [2, 3].map((k) => ({
+		k, a: (rand() * 2 - 1) * WOBBLE, p: rand() * TWO_PI,
+	}))
+	const spin = rand() * TWO_PI
+	const cos = Math.cos(spin), sin = Math.sin(spin)
+	const out = []
+	for (let i = 0; i < CONTROL_POINTS; i++) {
+		const t = (i / CONTROL_POINTS) * TWO_PI
+		let j = 1
+		for (const h of harm) {
+			j += h.a * Math.sin(h.k * t + h.p)
+		}
+		const x = LOBE_X * Math.cos(t) * j
+		const y = LOBE_Y * Math.sin(t) * Math.cos(t) * j
+		out.push({
+			x: x * cos - y * sin,
+			y: x * sin + y * cos,
+		})
+	}
+	return out
+}
+
+function centreline(rand, wantJump) {
 	for (let i = 0; i < MAX_ATTEMPTS; i++) {
-		const dense = catmullClosed(
-			controlPoints(rand), PER_SEGMENT)
-		if (isStarShaped(dense)) return dense
+		const pts = wantJump
+			? figureEight(rand) : controlPoints(rand)
+		const dense = catmullClosed(pts, PER_SEGMENT)
+		// A plain loop has to be star-shaped: the cheapest
+		// guarantee that it does not cross by accident.
+		if (wantJump || isStarShaped(dense)) return dense
 	}
 	return null
 }
@@ -218,7 +272,6 @@ function orientToTravel(track, grid) {
 	track.GRID_SLOTS = grid.slots
 	track.START.s = atS(track, grid.start.x, grid.start.y).s
 	for (const g of grid.slots) g.s = atS(track, g.x, g.y).s
-	track.TRAVEL_DIR = travelDir(grid.start)
 	return track
 }
 
@@ -306,7 +359,83 @@ function buildPickups(track) {
 	return out
 }
 
-function assemble(seed, dense) {
+// Turning a crossing into a flyover.
+//
+// The two branches meet at an angle, and the shallower that
+// angle the longer the stretch where the road bands lie on top
+// of each other: a road 100 wide crossed at 30 degrees overlaps
+// for 200 units. The branch that goes over has to clear all of
+// it, so the overlap is what sets the length of the jump.
+//
+// Which branch goes over is decided by how straight it is
+// there. A ramp on a straight is drivable; a ramp mid-corner
+// is not.
+const MIN_SIN = 0.42
+const CROSS_MIN_GAP = 0.16
+const RAMP_LEN = 34
+const LINE_CLEAR = 220
+
+function branchFlatness(track, i) {
+	let sum = 0
+	const span = 14
+	for (let d = -span; d <= span; d++) {
+		const j = ((i + d) % track.n + track.n) % track.n
+		sum += Math.abs(track.k[j])
+	}
+	return sum / (span * 2 + 1)
+}
+
+function crossingToJump(track, h, id) {
+	const dot = track.ux[h.i] * track.ux[h.j] +
+		track.uy[h.i] * track.uy[h.j]
+	const sin = Math.sqrt(Math.max(0, 1 - dot * dot))
+	if (sin < MIN_SIN) return null
+	const si = h.i * track.ds
+	const sj = h.j * track.ds
+	if (Math.abs(deltaS(track, si, sj)) <
+			CROSS_MIN_GAP * track.L) {
+		return null
+	}
+	for (const s of [si, sj]) {
+		if (Math.abs(deltaS(track, track.START.s, s)) <
+				LINE_CLEAR) {
+			return null
+		}
+	}
+	// Flatter branch flies; the other one passes underneath.
+	const overI = branchFlatness(track, h.i) <=
+		branchFlatness(track, h.j)
+	const over = overI ? si : sj
+	const under = overI ? sj : si
+	const span = track.ROAD_WIDTH / sin
+	return {
+		id,
+		s0: wrapS(track, over - span / 2 - RAMP_LEN),
+		s1: wrapS(track, over + span / 2 + RAMP_LEN),
+		mid: over,
+		span: span + RAMP_LEN * 2,
+		under,
+		underSpan: span,
+	}
+}
+
+function buildJumps(track) {
+	const pts = []
+	for (let i = 0; i < track.n; i++) {
+		pts.push({ x: track.px[i], y: track.py[i] })
+	}
+	const hits = selfCrossings(pts, 30)
+	if (!hits.length || hits.length > 2) return null
+	const jumps = []
+	for (const h of hits) {
+		const j = crossingToJump(track, h, jumps.length)
+		if (!j) return null
+		jumps.push(j)
+	}
+	return jumps
+}
+
+function assemble(seed, dense, wantJumps) {
 	const path = pathOf(dense)
 	// An undrivable corner is a level nobody can finish, and
 	// the seed walk can simply try another one.
@@ -320,6 +449,8 @@ function assemble(seed, dense) {
 		ROAD_WIDTH, VERGE_WIDTH,
 	})
 	orientToTravel(track, gridFor(dense, heads, straight))
+	track.JUMPS = wantJumps ? buildJumps(track) : []
+	if (track.JUMPS === null) return null
 	return populate(track, seed)
 }
 
@@ -341,12 +472,25 @@ function populate(track, seed) {
 	return track
 }
 
+// A seed that fails every check is a level nobody can play,
+// and a level is a fixed seed, so the player cannot ask for
+// another. The walk tries a crossing track first and falls
+// back to a plain loop rather than giving up: a level without
+// a jump is a disappointment, a level that throws is a broken
+// game.
 export function buildTrack(seed) {
+	for (let k = 0; k < 60; k++) {
+		const s = (seed + k * 7919) >>> 0
+		const dense = centreline(rng(s), true)
+		if (!dense) continue
+		const track = assemble(s, dense, true)
+		if (track) return track
+	}
 	for (let k = 0; k < 40; k++) {
 		const s = (seed + k * 7919) >>> 0
-		const dense = centreline(rng(s))
+		const dense = centreline(rng(s), false)
 		if (!dense) continue
-		const track = assemble(s, dense)
+		const track = assemble(s, dense, false)
 		if (track) return track
 	}
 	return null

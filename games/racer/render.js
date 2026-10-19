@@ -21,6 +21,7 @@ import {
 import { getAtlas, carRing, frameFor, variant } from './sprites.js'
 import { CAR_LENGTH, CAR_WIDTH, PLAYER_COLOURS } from './car.js'
 import { sampleAt, offsetPoint, deltaS } from './path.js'
+import { airLift } from './jump.js'
 import { drawRivals, drawRivalLights } from './rivals.js'
 function deg(d) {
 	return (d * Math.PI) / 180
@@ -48,8 +49,8 @@ function ribbonRun(ctx, track, cam, off) {
 	}
 }
 
-function ribbonBand(ctx, track, cam, a, b) {
-	const half = Math.ceil(300 / track.ds)
+function ribbonBand(ctx, track, cam, a, b, reach) {
+	const half = Math.ceil((reach || 300) / track.ds)
 	const i0 = Math.floor(cam.s / track.ds)
 	ctx.beginPath()
 	for (let d = -half; d <= half; d++) {
@@ -64,14 +65,14 @@ function ribbonBand(ctx, track, cam, a, b) {
 	ctx.closePath()
 }
 
-function drawRoad(ctx, track, cam) {
+function roadAt(ctx, track, s, surface) {
 	ribbonBand(
-		ctx, track, cam, -track.halfWidth, track.halfWidth)
-	ctx.fillStyle = '#555'
+		ctx, track, { s }, -track.halfWidth, track.halfWidth)
+	ctx.fillStyle = surface
 	ctx.fill()
 	for (const side of [-1, 1]) {
-		ribbonRun(
-			ctx, track, cam, side * (track.halfWidth - 4))
+		const kerb = side * (track.halfWidth - 4)
+		ribbonRun(ctx, track, { s }, kerb)
 		ctx.save()
 		ctx.setLineDash([10, 10])
 		ctx.lineWidth = 6
@@ -82,6 +83,112 @@ function drawRoad(ctx, track, cam) {
 		ctx.stroke()
 		ctx.restore()
 	}
+}
+
+// Where the track crosses itself the two branches are far
+// apart in arc length but right on top of each other on the
+// map, so standing on one means the other has to be drawn too
+// — and drawn first, because it is the one underneath.
+function pairedS(track, cam) {
+	for (const j of track.JUMPS) {
+		const dOver = Math.abs(deltaS(track, j.mid, cam.s))
+		if (dOver < 340) return { s: j.under, over: false }
+		const dUnder = Math.abs(deltaS(track, j.under, cam.s))
+		if (dUnder < 340) return { s: j.mid, over: true }
+	}
+	return null
+}
+
+const DECK = '#6a6a72'
+const ROAD = '#555'
+
+function drawRoad(ctx, track, cam) {
+	const pair = pairedS(track, cam)
+	if (pair && !pair.over) {
+		// Standing on the bridge: the ground road goes down
+		// first, then the deck's shadow, then the deck.
+		roadAt(ctx, track, pair.s, ROAD)
+		deckShadow(ctx, track, cam.s)
+		roadAt(ctx, track, cam.s, DECK)
+		deckEdge(ctx, track, cam.s)
+		return
+	}
+	roadAt(ctx, track, cam.s, ROAD)
+	if (!pair) return
+	// Standing underneath: the deck passes overhead, and its
+	// shadow falls on the road you are on.
+	deckShadow(ctx, track, pair.s)
+	roadAt(ctx, track, pair.s, DECK)
+	deckEdge(ctx, track, pair.s)
+}
+
+// Seen from directly above, an elevated road and a flat one
+// are the same shape in the same place. A cast shadow is the
+// only thing that says which of the two is which, so the deck
+// gets one, thrown the way the baked sprites are lit — down
+// and to the right of the light that made them.
+const SHADOW_X = 9
+const SHADOW_Y = 11
+
+function deckShadow(ctx, track, s) {
+	ctx.save()
+	ctx.translate(SHADOW_X, SHADOW_Y)
+	ribbonBand(
+		ctx, track, { s },
+		-track.halfWidth - 3, track.halfWidth + 3)
+	ctx.fillStyle = 'rgba(4, 7, 14, 0.5)'
+	ctx.fill()
+	ctx.restore()
+}
+
+// A dark lip down each side of the deck, so the edge you must
+// not run off reads at speed.
+function deckEdge(ctx, track, s) {
+	for (const side of [-1, 1]) {
+		ribbonRun(ctx, track, { s }, side * track.halfWidth)
+		ctx.strokeStyle = 'rgba(8, 10, 18, 0.85)'
+		ctx.lineWidth = 5
+		ctx.stroke()
+	}
+}
+
+// The ramps, painted across the road at each end of a jump.
+function drawRamps(ctx, track, cam) {
+	for (const j of track.JUMPS) {
+		for (const s of [j.s0, j.s1]) {
+			if (Math.abs(deltaS(track, s, cam.s)) > 320) {
+				continue
+			}
+			rampBand(ctx, track, s)
+		}
+	}
+}
+
+// Hazard stripes across the road. A plain band reads as a
+// patch of different tarmac; the stripes read as a thing the
+// track is telling you about.
+function rampBand(ctx, track, s) {
+	const len = 30
+	ribbonBand(
+		ctx, track, { s }, -track.halfWidth,
+		track.halfWidth, len)
+	ctx.save()
+	ctx.clip()
+	ctx.fillStyle = '#8a8d99'
+	ctx.fill()
+	for (let i = -6; i <= 6; i++) {
+		const a = offsetPoint(
+			track, s - len + i * 13, -track.halfWidth)
+		const b = offsetPoint(
+			track, s + len + i * 13, track.halfWidth)
+		ctx.strokeStyle = '#e0bb4e'
+		ctx.lineWidth = 7
+		ctx.beginPath()
+		ctx.moveTo(a.x, a.y)
+		ctx.lineTo(b.x, b.y)
+		ctx.stroke()
+	}
+	ctx.restore()
 }
 
 function drawStartLine(ctx, track) {
@@ -192,9 +299,30 @@ function drawObstacles(ctx, track, atlas, cam) {
 	}
 }
 
+// Airborne, the sprite is lifted up the screen and scaled up,
+// and a shadow is left where the car actually is. From
+// directly above the lift alone says nothing — it just looks
+// like the car is somewhere else — and the gap between car and
+// shadow is the whole of what reads as height.
 function drawCarSprite(ctx, car, colours) {
-	blit(ctx, frameFor(carRing(colours), car.facing),
-		car.x, car.y)
+	const z = airLift(car)
+	const img = frameFor(carRing(colours), car.facing)
+	if (z > 0.5) {
+		ctx.save()
+		ctx.globalAlpha = 0.35
+		ctx.fillStyle = '#000'
+		ctx.beginPath()
+		ctx.ellipse(
+			car.x, car.y, 9, 5.5, car.facing,
+			0, Math.PI * 2)
+		ctx.fill()
+		ctx.restore()
+	}
+	const k = 1 + z * 0.02
+	const w = (img.width / PX) * k
+	const h = (img.height / PX) * k
+	ctx.drawImage(
+		img, car.x - w / 2, car.y - h / 2 - z * 0.75, w, h)
 }
 
 const SAND_COLOR = 'rgba(216, 186, 128, 0.85)'
@@ -355,6 +483,7 @@ function drawWorld(ctx, state, atlas, cam) {
 	const track = state.track
 	drawRoad(ctx, track, state)
 	drawSand(ctx, track, state)
+	drawRamps(ctx, track, state)
 	drawArrows(ctx, track, state)
 	drawGates(ctx, track, state)
 	drawStartGrid(ctx, track)

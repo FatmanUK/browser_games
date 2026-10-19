@@ -214,3 +214,67 @@ export function minRadius(k) {
 	}
 	return kMax > 0 ? 1 / kMax : Infinity
 }
+
+function segHit(p1, p2, p3, p4) {
+	const d = (p2.x - p1.x) * (p4.y - p3.y) -
+		(p2.y - p1.y) * (p4.x - p3.x)
+	if (Math.abs(d) < 1e-12) return null
+	const t = ((p3.x - p1.x) * (p4.y - p3.y) -
+		(p3.y - p1.y) * (p4.x - p3.x)) / d
+	const u = ((p3.x - p1.x) * (p2.y - p1.y) -
+		(p3.y - p1.y) * (p2.x - p1.x)) / d
+	// A hair of tolerance: a curve that crosses exactly at a
+	// sample point lands t or u on zero, and floating point
+	// puts it a whisker either side.
+	const e = 1e-9
+	if (t < -e || t > 1 + e || u < -e || u > 1 + e) {
+		return null
+	}
+	return {
+		x: p1.x + (p2.x - p1.x) * t,
+		y: p1.y + (p2.y - p1.y) * t,
+	}
+}
+
+// Every place the closed curve runs through itself.
+//
+// Neighbouring segments share an endpoint and would report a
+// hit at every step, so pairs closer than `gap` samples apart
+// are skipped — which also rules out the hairpins that touch
+// themselves without really crossing.
+//
+// O(n^2) with a bounding-box reject in front of it. At a
+// thousand samples that is half a million cheap tests and a
+// couple of milliseconds, once, at track build. A grid would
+// be more code than it saves.
+export function selfCrossings(pts, gap) {
+	const n = pts.length
+	const out = []
+	for (let i = 0; i < n; i++) {
+		const a = pts[i]
+		const b = pts[(i + 1) % n]
+		const lo = Math.min(a.x, b.x), hi = Math.max(a.x, b.x)
+		const lo2 = Math.min(a.y, b.y)
+		const hi2 = Math.max(a.y, b.y)
+		for (let j = i + gap; j < n; j++) {
+			if (i === 0 && j === n - 1) continue
+			const c = pts[j]
+			const d = pts[(j + 1) % n]
+			if (Math.max(c.x, d.x) < lo) continue
+			if (Math.min(c.x, d.x) > hi) continue
+			if (Math.max(c.y, d.y) < lo2) continue
+			if (Math.min(c.y, d.y) > hi2) continue
+			const hit = segHit(a, b, c, d)
+			if (!hit) continue
+			// One crossing can land on two segment pairs
+			// when it falls on a shared endpoint, so near
+			// duplicates are folded together.
+			const dup = out.some(
+				(o2) => Math.hypot(o2.x - hit.x,
+					o2.y - hit.y) < 2)
+			if (dup) continue
+			out.push({ i, j, x: hit.x, y: hit.y })
+		}
+	}
+	return out
+}

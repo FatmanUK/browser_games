@@ -27,6 +27,16 @@ const MUSIC = {
 }
 
 
+// Coming back down off the flyover.
+function jumpFx(audio) {
+	return {
+		land: () =>
+			audio.toneSequence(
+				[[150, 0.08], [95, 0.14]],
+				'triangle', 0.1, 20),
+	}
+}
+
 // The weapons: picking one up, firing it, and being hit by it.
 function weaponFx(audio) {
 	return {
@@ -54,6 +64,7 @@ function weaponFx(audio) {
 function effects(audio) {
 	return {
 		...weaponFx(audio),
+		...jumpFx(audio),
 		bump: () => audio.tone(90, 0.12, 'square', 0.1),
 		splash: () =>
 			audio.toneSequence(

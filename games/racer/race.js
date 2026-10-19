@@ -3,8 +3,8 @@
 // a track against the clock until you stopped, which is a
 // driving toy rather than the game its siblings are.
 
-import { progressOf } from './geom.js'
 import { deltaS } from './path.js'
+import { checkLaunch, allJumps } from './jump.js'
 
 export const LAP_TARGET = 3
 
@@ -48,32 +48,61 @@ export function tickCountdown(race, dt, audio) {
 // with a gate: a wheel over it and no more.
 const GATE_SLACK = 12
 
+export function allGates(track) {
+	return (1 << track.GATES.length) - 1
+}
+
+// Crossing the line. The lap only lands if every gate was
+// collected and every jump made on the way round; otherwise
+// the crossing resets the masks and counts for nothing. Gate
+// zero is the line itself, so starting a new lap sets its bit.
+function closeLap(track, car) {
+	const clean = car.gates === allGates(track) &&
+		car.jumps === allJumps(track)
+	if (clean) car.lapsDone++
+	car.gates = 1
+	car.jumps = 0
+	// A fresh go at the ramp every lap. Without this a car
+	// that was walked across once keeps its crawl for ever,
+	// never earns the jump bit again, and so never completes
+	// another lap — the guard against one deadlock quietly
+	// causing a worse one.
+	car.jumpStalls = 0
+	car.crawl = null
+}
+
 // Gates are credited as the car drives past them, and only if
 // it is on the road at the time. That is the whole rule:
-// cutting across the infield covers the lap's angle exactly
-// as the long way round does, so neither swept angle nor arc
-// length can tell the two apart on its own — being there is
+// cutting the infield covers the same ground the long way
+// round does as far as any counter can tell — being there is
 // what has to be checked.
 export function trackGates(track, car) {
 	if (car.gates === undefined) {
 		car.gates = 0
+		car.jumps = 0
+		car.lapsDone = 0
 		car.gateAt = car.s
 		return
 	}
 	const prev = car.gateAt
 	car.gateAt = car.s
 	const moved = deltaS(track, prev, car.s)
+	// The ramp is a gate of a different kind, and it is
+	// checked from here because this already knows how far
+	// along the lap the car has just come.
+	checkLaunch(track, car, moved)
 	// Backwards credits nothing, and neither does a jump too
 	// big to be one frame of driving.
 	if (moved <= 0 || moved > track.L / 4) return
-	if (Math.abs(car.off) > track.halfWidth + GATE_SLACK) {
-		return
-	}
+	const wide = Math.abs(car.off) >
+		track.halfWidth + GATE_SLACK
 	track.GATES.forEach((g, i) => {
 		// In the stretch just driven, which deltaS answers
 		// across the lap's seam as well as inside it.
 		const d = deltaS(track, prev, g)
 		if (d <= 0 || d > moved) return
+		if (i === 0) { closeLap(track, car); return }
+		if (wide) return
 		car.gates |= 1 << i
 		// Where a wrecked car comes back. Tracked here
 		// because this is the one place that already knows
@@ -82,26 +111,19 @@ export function trackGates(track, car) {
 	})
 }
 
-export function allGates(track) {
-	return (1 << track.GATES.length) - 1
+// Laps come off arc length, not off swept angle about a
+// centre. On a figure of eight the two lobes wind opposite
+// ways about any one point, so the net angle swept in a lap
+// is about zero and a swept-angle counter simply never
+// increments — which is exactly what it did.
+export function lapsOf(track, car) {
+	return car.lapsDone || 0
 }
 
-// The lap count is still swept angle, but a lap only lands
-// when every gate was collected on the way round. Crossing the
-// line with a gap in the mask does nothing at all.
-export function lapsOf(track, car) {
-	const raw = Math.max(
-		0, Math.floor(progressOf(track, car.totalAngle)))
-	if (car.lapsDone === undefined) {
-		car.lapsDone = 0
-		car.lapRaw = raw
-	}
-	if (raw > car.lapRaw) {
-		car.lapRaw = raw
-		if (car.gates === allGates(track)) car.lapsDone++
-		car.gates = 0
-	}
-	return car.lapsDone
+// Where a car is round the lap, as a single increasing
+// number: completed laps plus how far into this one.
+export function progressOf(track, car) {
+	return (car.lapsDone || 0) + car.s / track.L
 }
 
 // The whole field, furthest round the lap first. Progress is a
@@ -114,8 +136,8 @@ export function lapsOf(track, car) {
 // that can disagree is one more than is wanted.
 export function orderOf(track, player, rivals) {
 	return [player, ...rivals].sort(
-		(a, b) => progressOf(track, b.totalAngle) -
-			progressOf(track, a.totalAngle))
+		(a, b) => progressOf(track, b) -
+			progressOf(track, a))
 }
 
 export function positionOf(track, player, rivals) {

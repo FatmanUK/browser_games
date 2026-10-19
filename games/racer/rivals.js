@@ -15,7 +15,8 @@ import {
 	CAR_LENGTH, CAR_WIDTH, ACCEL, BRAKE, MAX_SPEED, TURN_RATE,
 	FRICTION, RIVALS,
 } from './car.js'
-import { angleOf, angleDelta } from './geom.js'
+import { updateAir, isAirborne, MIN_SPEED } from './jump.js'
+import { angleDelta } from './geom.js'
 import {
 	locate, offsetPoint, onRoad, wrapS, deltaS, curvAhead,
 	WINDOW,
@@ -57,8 +58,7 @@ export function createRivals(track) {
 				nerve: driver.nerve,
 			},
 			colours: driver.colours,
-			totalAngle: 0,
-			finished: false,
+				finished: false,
 		}
 	})
 }
@@ -98,10 +98,25 @@ function steer(rival, dt, sharp, aim) {
 	rival.facing = rival.angle
 }
 
+const RUN_UP = 180
+
+function inJumpRun(track, rival) {
+	return track.JUMPS.some((j) => {
+		const d = deltaS(track, rival.s, j.s0)
+		return d > 0 && d < RUN_UP
+	})
+}
+
 function drive(track, rival, dt, drag) {
 	const aim = aimAngle(track, rival)
 	const sharp = Math.abs(angleDelta(rival.angle, aim))
-	const want = wantedSpeed(track, rival, drag)
+	// Floor it into a ramp. A rival that arrives under the
+	// launch speed stops at the face, and one that keeps
+	// arriving under it never finishes — see jump.js for the
+	// other two guards against the same deadlock.
+	const want = Math.max(
+		wantedSpeed(track, rival, drag),
+		inJumpRun(track, rival) ? MIN_SPEED + 25 : 0)
 	if (rival.speed < want) rival.speed += ACCEL * dt
 	else rival.speed -= BRAKE * dt
 	rival.speed -= rival.speed * drag * dt
@@ -146,17 +161,22 @@ function advanceS(track, car, dt) {
 }
 
 function integrate(track, rival, dt) {
-	const prev = angleOf(rival.x, rival.y)
+	if (updateAir(track, rival, dt, null)) {
+		advanceS(track, rival, dt)
+		return
+	}
 	rival.x += Math.cos(rival.angle) * rival.speed * dt
 	rival.y += Math.sin(rival.angle) * rival.speed * dt
 	clearObstacles(track, rival)
 	advanceS(track, rival, dt)
-	rival.totalAngle += angleDelta(
-		prev, angleOf(rival.x, rival.y))
 }
 
 export function updateRivals(track, rivals, dt, terrainOf) {
 	for (const rival of rivals) {
+		if (isAirborne(rival)) {
+			integrate(track, rival, dt)
+			continue
+		}
 		if (rival.finished) {
 			rival.speed -= rival.speed * 2 * dt
 			integrate(track, rival, dt)

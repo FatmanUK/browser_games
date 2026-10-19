@@ -16,7 +16,6 @@ import {
 	CAR_LENGTH, ACCEL, BRAKE, MAX_SPEED, MAX_REVERSE,
 	FRICTION, OFF_TRACK_DRAG, TURN_RATE,
 } from './car.js'
-import { angleOf, angleDelta } from './geom.js'
 import {
 	locate, offsetPoint, onRoad, inVerge, wrapS, deltaS,
 	WINDOW,
@@ -32,6 +31,7 @@ import {
 	armCar, createPickups, updatePickups, updateMissiles,
 	updateWrecks, rivalsFire, fire,
 } from './missiles.js'
+import { updateAir, isAirborne } from './jump.js'
 import { drawHud } from './hud.js'
 import { buildTrack } from './track.js'
 import {
@@ -83,7 +83,6 @@ function createState(track, level, unlocked) {
 		// is what picks the branch — see path.js locate().
 		s: pole.s,
 		off: 0,
-		totalAngle: 0,
 		elapsed: 0,
 		lapsShown: 0,
 		lastLapAt: 0,
@@ -230,7 +229,13 @@ function playTerrainSound(terrain, audio) {
 }
 
 function integrate(state, dt, audio) {
-	const prevAngle = angleOf(state.x, state.y)
+	// Airborne, the car is a projectile and nothing on the
+	// ground touches it: no drag, no obstacle, no kerb, no
+	// other car. It moves itself and that is all.
+	if (updateAir(state.track, state, dt, audio)) {
+		advanceS(state.track, state, dt)
+		return
+	}
 	state.x += Math.cos(state.angle) * state.speed * dt
 	state.y += Math.sin(state.angle) * state.speed * dt
 	// Arc length first: the clamp and the terrain both need
@@ -252,8 +257,6 @@ function integrate(state, dt, audio) {
 	}
 	state.terrain = newTerrain
 
-	const angle = angleOf(state.x, state.y)
-	state.totalAngle += angleDelta(prevAngle, angle)
 }
 
 function recordLap(state, best) {
@@ -318,12 +321,14 @@ function update(state, dt, best, audio) {
 		state.rivals.filter(
 			(r) => !r.out && r.wrecked <= 0),
 		dt, (car) => terrainAt(state.track, car))
-	// A wrecked car is scenery until it comes back, and one
-	// that is out has left the race: neither should shove
-	// anybody, and a car cannot be shoved by a ghost.
+	// A wrecked car is scenery until it comes back, one that
+	// is out has left the race, and one in the air is over
+	// everybody's head: none of them should shove anybody,
+	// and a car cannot be shoved by a ghost.
 	const live = state.rivals.filter(
-		(r) => !r.out && r.wrecked <= 0)
+		(r) => !r.out && r.wrecked <= 0 && !isAirborne(r))
 	if (state.wrecked <= 0 && !state.out &&
+			!isAirborne(state) &&
 			resolveContacts(state, live)) {
 		audio.bump()
 	}
