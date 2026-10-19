@@ -61,10 +61,20 @@ files in its own `music/` folder — see
   time) rather than ending the game. Has its own "Sound"/"Music"
   toggles, with a replaceable ProTracker module in
   `games/pacman/music/` for the music.
-- **Dash** — a top-down racer on a large, randomly generated
-  track (built by `tools/generate_track.py` into
+- **Dash** — a three-lap race against five rivals on a large,
+  randomly generated track (built by
+  `tools/generate_track.py` into
   `games/racer/track-data.js` — rerun it for a fresh layout),
-  starting from a grid on a straight before the line. Dusk
+  starting from a six-car grid on a straight before the line.
+  The lights hold the field until they go out; the rivals
+  steer at a point a speed-scaled lookahead further round the
+  lap, each on its own line across the road and at its own
+  pace, so the field strings out instead of running as a
+  block, and leaning on one through a corner costs you both
+  speed. Their lamps are drawn over the dusk rather than
+  under it, so a car outside your headlights is still
+  something you can see coming. Crossing the line for the
+  third time ends your race with a finishing place. Dusk
   setting, with the camera zoomed in and following the car (you
   can't see the whole track at once) and twin headlight beams
   cutting through the dim to light up whatever's ahead with its
@@ -145,9 +155,12 @@ games/tetris/           Blockfall (+ audio.js/hud.js and its
                         own music/, built on games/_shared/)
 games/pacman/           Maze Muncher (+ audio.js/hud.js and
                         its own music/, same pattern)
-games/racer/            Dash (+ audio.js, same pattern; track
-                        -data.js is generated, see tools/
-                        generate_track.py)
+games/racer/            Dash (+ audio.js, same pattern;
+                        car.js/geom.js the car and the track
+                        geometry, rivals.js the AI field,
+                        race.js the countdown/laps/places;
+                        track-data.js is generated, see
+                        tools/generate_track.py)
 games/beltbreaker/      Belt Breaker (art.js/mesh.js/rocks.js/
                         craft.js/sprites.js pre-render the art;
                         common.js/belt.js/tunnel.js/boss.js/

@@ -8,6 +8,7 @@
 import {
 	WIDTH as W, HEIGHT as H, DIM, brackets, readout, label,
 } from '../_shared/hud.js'
+import { LAP_TARGET, ordinal } from './race.js'
 
 export function formatLap(value) {
 	return value === 0 ? '--.-' : value.toFixed(1)
@@ -31,13 +32,67 @@ function speedBar(ctx, speed, max, x, y, w) {
 	ctx.strokeRect(x + 0.5, y + 0.5, w - 1, 4)
 }
 
-export function drawHud(ctx, state, best, maxSpeed) {
+// Big centred text, the same shape Belt Breaker's banners use,
+// so the two games announce things the same way.
+function banner(ctx, text, size, y, colour) {
+	ctx.save()
+	ctx.textAlign = 'center'
+	ctx.font = `bold ${size}px system-ui, sans-serif`
+	ctx.shadowColor = '#4ad6ff'
+	ctx.shadowBlur = 24
+	ctx.fillStyle = colour
+	ctx.fillText(text, W / 2, y)
+	ctx.restore()
+}
+
+// Above the middle, not on it: unlike Belt Breaker's ship, the
+// car sits dead centre of the window, and a 92px glyph there
+// hides the one thing the player is about to need to see.
+const LIGHTS_Y = 152
+
+// The lights. `ready` runs down through 3, 2, 1 and then past
+// zero, where the cars are already released and only the 'GO!'
+// is left — hence the two branches rather than one countdown.
+function drawLights(ctx, race) {
+	if (race.phase !== 'countdown') return
+	const left = Math.ceil(race.ready)
+	if (left > 0) {
+		const k = left - race.ready
+		ctx.save()
+		ctx.globalAlpha = 0.4 + 0.6 * k
+		banner(ctx, String(left), 92, LIGHTS_Y, '#f2faff')
+		ctx.restore()
+		return
+	}
+	banner(ctx, 'GO!', 84, LIGHTS_Y, '#9dffb0')
+}
+
+function drawResult(ctx, race) {
+	if (race.phase !== 'finished') return
+	ctx.fillStyle = 'rgba(4,10,22,0.55)'
+	ctx.fillRect(0, 0, W, H)
+	banner(
+		ctx, `FINISHED ${ordinal(race.place)}`, 52,
+		H / 2 - 4, race.place === 1 ? '#ffe28a' : '#eaf6ff')
+	label(
+		ctx, W / 2, H / 2 + 28,
+		'PRESS NEW GAME TO RACE AGAIN', 'center')
+}
+
+export function drawHud(ctx, state, best, maxSpeed, place) {
 	ctx.save()
 	ctx.setTransform(1, 0, 0, 1, 0, 0)
 	ctx.textBaseline = 'alphabetic'
 
-	readout(ctx, 20, 54, 'LAP', state.lapsShown, 26)
-	brackets(ctx, 14, 42, 120, 50)
+	readout(
+		ctx, 20, 54, 'LAP',
+		`${Math.min(state.lapsShown + 1, LAP_TARGET)}/` +
+			LAP_TARGET, 26)
+	brackets(ctx, 14, 42, 250, 50)
+
+	// Beside LAP rather than mid-window: the middle column is
+	// where the lights and the chequered flag go.
+	readout(ctx, 150, 54, 'POS', ordinal(place), 26)
 
 	readout(
 		ctx, W - 20, 54, 'BEST LAP',
@@ -52,5 +107,8 @@ export function drawHud(ctx, state, best, maxSpeed) {
 	label(
 		ctx, W - 20, H - 18,
 		'ARROWS / WASD TO DRIVE', 'right')
+
+	drawLights(ctx, state.race)
+	drawResult(ctx, state.race)
 	ctx.restore()
 }

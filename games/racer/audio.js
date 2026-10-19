@@ -27,6 +27,42 @@ const MUSIC = {
 }
 
 
+// The effects, kept apart from the wiring: the palette is what
+// grows when the game grows (a countdown, a chequered flag) and
+// setupSound itself should not grow with it.
+function effects(audio) {
+	return {
+		bump: () => audio.tone(90, 0.12, 'square', 0.1),
+		skid: () =>
+			audio.toneSequence(
+				[[500, 0.08], [350, 0.1]],
+				'sawtooth', 0.06, 60),
+		splash: () =>
+			audio.toneSequence(
+				[[300, 0.1], [180, 0.15]],
+				'sine', 0.08, 70),
+		slow: () => audio.tone(140, 0.2, 'triangle', 0.08),
+		lap: () => audio.tone(660, 0.12, 'square', 0.08),
+		countdown: () =>
+			audio.tone(440, 0.18, 'square', 0.09),
+		go: () => audio.tone(880, 0.22, 'square', 0.11),
+		bestLap: () =>
+			audio.toneSequence(
+				[
+					[523, 0.1], [659, 0.1],
+					[784, 0.1], [1047, 0.25],
+				],
+				'square', 0.09, 90),
+		finish: () =>
+			audio.toneSequence(
+				[
+					[784, 0.1], [784, 0.1],
+					[988, 0.1], [1319, 0.35],
+				],
+				'square', 0.1, 70),
+	}
+}
+
 export function setupSound(side) {
 	const audio = createAudio(SILENT, 500)
 	const music = createMusic(audio.context, MUSIC)
@@ -40,24 +76,7 @@ export function setupSound(side) {
 	})
 
 	return {
-		bump: () => audio.tone(90, 0.12, 'square', 0.1),
-		skid: () =>
-			audio.toneSequence(
-				[[500, 0.08], [350, 0.1]],
-				'sawtooth', 0.06, 60),
-		splash: () =>
-			audio.toneSequence(
-				[[300, 0.1], [180, 0.15]],
-				'sine', 0.08, 70),
-		slow: () => audio.tone(140, 0.2, 'triangle', 0.08),
-		lap: () => audio.tone(660, 0.12, 'square', 0.08),
-		bestLap: () =>
-			audio.toneSequence(
-				[
-					[523, 0.1], [659, 0.1],
-					[784, 0.1], [1047, 0.25],
-				],
-				'square', 0.09, 90),
+		...effects(audio),
 		unlock: audio.unlock,
 		stop() {
 			music.stop()

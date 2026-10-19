@@ -11,10 +11,25 @@ import {
 } from '../_shared/hud.js'
 import { loadNumber, saveNumber } from '../_shared/storage.js'
 import { setupSound } from './audio.js'
+import {
+	CAR_LENGTH, CAR_WIDTH, ACCEL, BRAKE, MAX_SPEED,
+	MAX_REVERSE, FRICTION, OFF_TRACK_DRAG, TURN_RATE,
+	drawCar, PLAYER_COLOURS,
+} from './car.js'
+import {
+	CENTER, lerpArray, angleOf, angleDelta, normFor, onTrack,
+	inWedge, trackBandPoint,
+} from './geom.js'
+import {
+	createRivals, updateRivals, resolveContacts, drawRivals,
+	drawRivalLights,
+} from './rivals.js'
+import {
+	createRace, isRunning, isOver, tickCountdown, lapsOf,
+	placeOf, checkFinishes,
+} from './race.js'
 import { drawHud } from './hud.js'
 import * as TRACK from './track-data.js'
-
-const CENTER = { x: 0, y: 0 }
 
 const OUTER_RUMBLE = offsetTable(TRACK.OUTER_RADIUS, -4)
 const INNER_RUMBLE = offsetTable(TRACK.INNER_RADIUS, 4)
@@ -33,16 +48,6 @@ const INNER_RUMBLE = offsetTable(TRACK.INNER_RADIUS, 4)
 const VIEWPORT_HEIGHT = TRACK.ROAD_WIDTH
 const VIEW_SCALE = HEIGHT / VIEWPORT_HEIGHT
 const VIEWPORT_WIDTH = WIDTH / VIEW_SCALE
-
-const ACCEL = 220
-const BRAKE = 260
-const MAX_SPEED = 260
-const MAX_REVERSE = -80
-const FRICTION = 0.6
-const OFF_TRACK_DRAG = 2.2
-const TURN_RATE = 2.6
-const CAR_LENGTH = 16
-const CAR_WIDTH = 9
 
 // Keyed by the track's own id so each generated track (see
 // tools/generate_track.py) keeps its own best lap rather than
@@ -103,20 +108,9 @@ function randomOilAngle() {
 
 // Small randomly-scattered puddles on the track surface —
 // regenerated each New Game, so the hazard layout isn't the
-// same lap after lap. Positions are restricted to the actual
-// road band (between the inner and outer lookup radii), away
-// from its very edges, so a puddle never ends up partly off
-// the track.
-function trackBandPoint(angle, frac) {
-	const innerR = lerpArray(TRACK.INNER_RADIUS, angle)
-	const outerR = lerpArray(TRACK.OUTER_RADIUS, angle)
-	const r = innerR + (outerR - innerR) * frac
-	return {
-		x: CENTER.x + Math.cos(angle) * r,
-		y: CENTER.y + Math.sin(angle) * r,
-	}
-}
-
+// same lap after lap. trackBandPoint keeps them inside the
+// actual road band, and the 0.3..0.7 fraction keeps them off
+// its very edges, so a puddle never ends up partly off-track.
 function randomOilPatches() {
 	const patches = []
 	for (let i = 0; i < OIL_COUNT; i++) {
@@ -155,55 +149,10 @@ function createState() {
 		terrain: null,
 		wasColliding: false,
 		oilPatches: randomOilPatches(),
+		rivals: createRivals(),
+		race: createRace(),
 		keys: new Set(),
 	}
-}
-
-// Radius of the track's angle-indexed lookup table at an
-// arbitrary (geometric) angle, linearly interpolated between
-// the two nearest sampled entries. This is the generalization
-// of the old ellipse's closed-form radius formula to a track
-// shape with no closed form.
-function lerpArray(table, angle) {
-	const n = table.length
-	const twoPi = Math.PI * 2
-	const norm = ((angle % twoPi) + twoPi) % twoPi
-	const t = (norm / twoPi) * n
-	const i0 = Math.floor(t) % n
-	const i1 = (i0 + 1) % n
-	const frac = t - Math.floor(t)
-	return table[i0] * (1 - frac) + table[i1] * frac
-}
-
-function angleOf(x, y) {
-	return Math.atan2(y - CENTER.y, x - CENTER.x)
-}
-
-// How far (x, y) sits past a lookup-table boundary, as a ratio
-// (<=1 inside it, >1 outside) — the lookup-table equivalent of
-// the old ellipseNorm.
-function normFor(x, y, table) {
-	const dist = Math.hypot(x - CENTER.x, y - CENTER.y)
-	return dist / lerpArray(table, angleOf(x, y))
-}
-
-function onTrack(x, y) {
-	const outerNorm = normFor(x, y, TRACK.OUTER_RADIUS)
-	const innerNorm = normFor(x, y, TRACK.INNER_RADIUS)
-	return outerNorm <= 1 && innerNorm >= 1
-}
-
-function angleDelta(a, b) {
-	let d = b - a
-	while (d > Math.PI) d -= Math.PI * 2
-	while (d < -Math.PI) d += Math.PI * 2
-	return d
-}
-
-function inWedge(angle, wedges) {
-	return wedges.some(
-		(w) => Math.abs(angleDelta(w.angle, angle)) <=
-			w.spread)
 }
 
 function waterAt(x, y) {
@@ -216,9 +165,11 @@ function oilAt(x, y, patches) {
 		(p) => Math.hypot(x - p.x, y - p.y) <= p.r)
 }
 
-function terrainAt(state) {
-	const { x, y } = state
-	if (oilAt(x, y, state.oilPatches)) return 'oil'
+// Takes bare coordinates rather than a car, because the rivals
+// need to ask about their own patch of ground too and they are
+// not shaped like the player's state object.
+function terrainAt(x, y, patches) {
+	if (oilAt(x, y, patches)) return 'oil'
 	const outerNorm = normFor(x, y, TRACK.OUTER_RADIUS)
 	const boundNorm = normFor(x, y, TRACK.BOUND_RADIUS)
 	const inVerge = outerNorm > 1 && boundNorm <= 1
@@ -229,7 +180,7 @@ function terrainAt(state) {
 	return null
 }
 
-function dragFor(state, terrain) {
+function dragFor(x, y, terrain) {
 	if (terrain === 'oil') return 0.1
 	// Higher than water: sand grabs the car hard and hauls it
 	// down to a stop quickly, just not instantly — it's still
@@ -237,7 +188,7 @@ function dragFor(state, terrain) {
 	// so there's no single-frame dead stop.
 	if (terrain === 'sand') return 3.2
 	if (terrain === 'water') return 2.5
-	return onTrack(state.x, state.y) ?
+	return onTrack(x, y) ?
 		FRICTION : FRICTION * OFF_TRACK_DRAG
 }
 
@@ -258,7 +209,7 @@ function applyControls(state, dt, terrain) {
 		state.speed -= BRAKE * dt
 	}
 
-	const drag = dragFor(state, terrain)
+	const drag = dragFor(state.x, state.y, terrain)
 	state.speed -= state.speed * drag * dt
 	state.speed = Math.min(
 		MAX_SPEED, Math.max(MAX_REVERSE, state.speed))
@@ -360,7 +311,8 @@ function integrate(state, dt, audio) {
 	if (collided && !state.wasColliding) audio.bump()
 	state.wasColliding = collided
 
-	const newTerrain = terrainAt(state)
+	const newTerrain = terrainAt(
+		state.x, state.y, state.oilPatches)
 	if (newTerrain !== state.terrain) {
 		playTerrainSound(newTerrain, audio)
 		if (newTerrain === 'oil') startSpin(state)
@@ -369,11 +321,6 @@ function integrate(state, dt, audio) {
 
 	const angle = angleOf(state.x, state.y)
 	state.totalAngle += angleDelta(prevAngle, angle)
-}
-
-function laps(state) {
-	return Math.floor(
-		Math.abs(state.totalAngle) / (Math.PI * 2))
 }
 
 function recordLap(state, best) {
@@ -387,16 +334,41 @@ function recordLap(state, best) {
 	return isBest
 }
 
-function update(state, dt, best, audio) {
-	const terrain = terrainAt(state)
+function drivePlayer(state, dt, best, audio) {
+	const terrain = terrainAt(
+		state.x, state.y, state.oilPatches)
 	applyControls(state, dt, terrain)
 	integrate(state, dt, audio)
+	// Nothing after the flag: the car is still coasting to a
+	// stop, but it is no longer setting lap times.
+	if (isOver(state.race)) return
 	state.elapsed += dt
-	const current = laps(state)
+	const current = lapsOf(state)
 	if (current > state.lapsShown) {
 		const isBest = recordLap(state, best)
 		audio[isBest ? 'bestLap' : 'lap']()
 		state.lapsShown = current
+	}
+}
+
+// The grid is held until the lights go out, so the countdown
+// ticks on its own before anything moves. The last lap's time
+// still has to be recorded, so the finish is checked after the
+// player has driven, not before.
+function update(state, dt, best, audio) {
+	const race = state.race
+	if (race.phase === 'countdown') {
+		tickCountdown(race, dt, audio)
+	}
+	if (!isRunning(race)) return
+	if (isOver(race)) state.keys.clear()
+	drivePlayer(state, dt, best, audio)
+	updateRivals(
+		state.rivals, dt,
+		(x, y) => terrainAt(x, y, state.oilPatches))
+	if (resolveContacts(state, state.rivals)) audio.bump()
+	if (checkFinishes(race, state, state.rivals)) {
+		audio.finish()
 	}
 }
 
@@ -609,23 +581,6 @@ function drawOilPatches(ctx, patches) {
 	for (const patch of patches) drawBlob(ctx, patch)
 }
 
-function drawCar(ctx, state) {
-	ctx.save()
-	ctx.translate(state.x, state.y)
-	ctx.rotate(state.facing)
-	ctx.fillStyle = '#b71c1c'
-	ctx.fillRect(
-		-CAR_LENGTH / 2, -CAR_WIDTH / 2,
-		CAR_LENGTH, CAR_WIDTH)
-	ctx.fillStyle = '#e53935'
-	ctx.fillRect(
-		-CAR_LENGTH / 2 + 2, -CAR_WIDTH / 2 + 1,
-		CAR_LENGTH - 6, CAR_WIDTH - 2)
-	ctx.fillStyle = '#90caf9'
-	ctx.fillRect(1, -CAR_WIDTH / 2 + 2, 4, CAR_WIDTH - 4)
-	ctx.restore()
-}
-
 function drawWorld(ctx, state) {
 	drawTreeLine(ctx)
 	drawTrackRing(ctx, TRACK.OUTER_RADIUS, '#555')
@@ -637,7 +592,8 @@ function drawWorld(ctx, state) {
 	drawObstacles(ctx)
 	drawStartGrid(ctx)
 	drawStartLine(ctx)
-	drawCar(ctx, state)
+	drawRivals(ctx, state.rivals)
+	drawCar(ctx, state, PLAYER_COLOURS)
 }
 
 // Dusky evening: dim everything down except two headlight cones
@@ -734,12 +690,28 @@ function blitWorld(ctx, worldCanvas) {
 		worldCanvas, 0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
 }
 
+// The rivals' lamps go on over the dusk fill, not under it: a
+// light is emissive, so dimming it with the scenery it sits on
+// would hide the one thing that makes a car visible out there.
+// Without this a rival behind you, or alongside but outside the
+// beams, is simply not on screen.
+function drawCarLights(ctx, state) {
+	ctx.save()
+	ctx.globalCompositeOperation = 'lighter'
+	ctx.translate(
+		VIEWPORT_WIDTH / 2 - state.x,
+		VIEWPORT_HEIGHT / 2 - state.y)
+	drawRivalLights(ctx, state.rivals)
+	ctx.restore()
+}
+
 function draw(ctx, world, state) {
 	renderWorldToOffscreen(world, state)
 	ctx.save()
 	ctx.scale(VIEW_SCALE, VIEW_SCALE)
 	blitWorld(ctx, world.canvas)
 	drawDusk(ctx, world.canvas, state.facing)
+	drawCarLights(ctx, state)
 	ctx.restore()
 }
 
@@ -771,40 +743,53 @@ function createWorldCanvas() {
 	return { canvas, ctx: canvas.getContext('2d') }
 }
 
-function createRuntime(ctx, best, audio) {
-	const ref = { state: null }
-	const world = createWorldCanvas()
+// The animation-frame clock, kept apart from what it drives.
+// `reset` drops the previous timestamp so a New Game does not
+// hand the first frame the whole gap since the last one as its
+// dt and teleport the car through the first corner.
+function createLoop(step) {
 	let handle = null, last = null
-
-	function render() {
-		draw(ctx, world, ref.state)
-		drawHud(ctx, ref.state, best, MAX_SPEED)
-	}
-
 	function frame(time) {
 		if (last === null) last = time
 		const dt = Math.min((time - last) / 1000, 0.05)
 		last = time
-		update(ref.state, dt, best, audio)
-		render()
+		step(dt)
 		handle = requestAnimationFrame(frame)
 	}
+	handle = requestAnimationFrame(frame)
+	return {
+		reset: () => { last = null },
+		stop: () => cancelAnimationFrame(handle),
+	}
+}
 
-	function start() {
-		ref.state = createState()
-		last = null
-		render()
+function createRuntime(ctx, best, audio) {
+	const ref = { state: null }
+	const world = createWorldCanvas()
+
+	function render() {
+		const s = ref.state
+		draw(ctx, world, s)
+		const place = placeOf(s.race, s, s.rivals)
+		drawHud(ctx, s, best, MAX_SPEED, place)
 	}
 
+	const loop = createLoop((dt) => {
+		update(ref.state, dt, best, audio)
+		render()
+	})
 	const input = createInput(ref, audio)
-	handle = requestAnimationFrame(frame)
 
 	return {
-		start,
+		start() {
+			ref.state = createState()
+			loop.reset()
+			render()
+		},
 		onKeyDown: input.onKeyDown,
 		onKeyUp: input.onKeyUp,
 		stop: () => {
-			cancelAnimationFrame(handle)
+			loop.stop()
 			audio.stop()
 		},
 	}
@@ -814,9 +799,9 @@ export default {
 	id: 'racer',
 	title: 'Dash',
 	description:
-		'A top-down racer. Arrow keys / WASD to drive ' +
-		'laps around a randomly generated track, from a ' +
-		'starting grid — mind the oil, sand and obstacles.',
+		'A top-down racer. Arrow keys / WASD to race five ' +
+		'rivals over three laps of a randomly generated ' +
+		'track — mind the oil, sand and obstacles.',
 
 	init(container, controls) {
 		let runtime = null
