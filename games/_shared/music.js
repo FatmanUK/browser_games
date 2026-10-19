@@ -57,6 +57,10 @@ async function toBuffer(ctx, opts) {
 }
 
 function play(st, ctx) {
+	// Never leave a source behind: one that is dropped
+	// without being stopped keeps playing with nothing
+	// holding a reference to stop it with.
+	silence(st)
 	const gain = ctx.createGain()
 	gain.gain.value = VOLUME
 	gain.connect(ctx.destination)
@@ -68,7 +72,13 @@ function play(st, ctx) {
 }
 
 function silence(st) {
-	if (st.source) st.source.stop()
+	if (st.source) {
+		try {
+			st.source.stop()
+		} catch {
+			/* already stopped, or its context is gone */
+		}
+	}
 	st.source = null
 }
 
@@ -86,7 +96,11 @@ async function begin(st, ctx, opts, stillOn) {
 			st.loading = false
 		}
 	}
-	if (stillOn() && !st.source) play(st, ctx)
+	// `dead` as well as stillOn(): a render that lands after
+	// the game was torn down must not start a track playing
+	// into a context nobody is holding any more.
+	if (st.dead || !stillOn()) return
+	play(st, ctx)
 }
 
 // `opts` is { baseUrl, tracks, fallback }: where the modules
@@ -95,15 +109,34 @@ async function begin(st, ctx, opts, stillOn) {
 // the module to fall back on. Returns an object shaped to
 // stand in for the engine's own music state in
 // createAudioToggles — see games/README.md.
+function retire(st, onPageHide) {
+	st.dead = true
+	silence(st)
+	st.buffer = null
+	window.removeEventListener('pagehide', onPageHide)
+}
+
 export function createMusic(getContext, opts) {
-	const st = { buffer: null, source: null, loading: false }
+	const st = {
+		buffer: null, source: null,
+		loading: false, dead: false,
+	}
 	let on = false
+
+	// The same safety net createAudio keeps: a tab closed
+	// without going through the game's destroy() must not
+	// leave a track looping.
+	const onPageHide = () => {
+		on = false
+		retire(st, onPageHide)
+	}
+	window.addEventListener('pagehide', onPageHide)
 
 	return {
 		isOn: () => on,
 		setOn(value) {
 			on = value
-			if (!value) {
+			if (!value || st.dead) {
 				silence(st)
 				return
 			}
@@ -114,8 +147,7 @@ export function createMusic(getContext, opts) {
 		// dying context.
 		stop() {
 			on = false
-			silence(st)
-			st.buffer = null
+			retire(st, onPageHide)
 		},
 	}
 }
