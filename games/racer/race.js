@@ -78,7 +78,16 @@ export function allGates(track) {
 // everything you had driven.
 function closeLap(track, car) {
 	if (car.gates === allGates(track)) car.lapsDone++
+	// Counted whether or not the lap was any good, because
+	// this is what the running order is measured in and a lap
+	// thrown away for a missed gate was still a lap driven.
+	car.lapsStarted++
 	car.gates = 1
+	// And the line is where a wreck comes back from now. The
+	// last gate is a few hundred units behind it, so a car
+	// wrecked just after crossing would have been put back on
+	// the far side of its own start line.
+	car.lastGate = 0
 }
 
 // Gates are credited as the car drives past them, and only if
@@ -90,6 +99,7 @@ export function trackGates(track, car) {
 	if (car.gates === undefined) {
 		car.gates = 0
 		car.lapsDone = 0
+		car.lapsStarted = 0
 		car.gateAt = car.s
 		return
 	}
@@ -139,10 +149,32 @@ export function lapsOf(track, car) {
 	return car.lapsDone || 0
 }
 
-// Where a car is round the lap, as a single increasing
-// number: completed laps plus how far into this one.
+// How far round a car is from the start line, in laps.
+//
+// Both halves of that have to be measured from the same
+// place, and they were not: the fraction came off `s`, which
+// wraps at the end of the centreline, while the laps came off
+// the start line, which is somewhere else entirely. So every
+// car dropped START.s/L of progress the moment its arc length
+// wrapped and did not get it back until the line — on track 1
+// that is 0.45 of a lap, and for that 45% of every lap the
+// whole field read as being behind a car parked on the grid.
+// Sit still and you lead until somebody laps you.
+//
+// Laps started rather than laps completed, for the same
+// reason: a lap thrown away for a missed gate was still
+// driven, and the running order is about where you are, not
+// about what counted. The minus one is the grid, which is
+// behind the line — before the first crossing a car is a few
+// units short of having started at all.
+function fromLine(track, s) {
+	return (deltaS(track, track.START.s, s) + track.L) %
+		track.L
+}
+
 export function progressOf(track, car) {
-	return (car.lapsDone || 0) + car.s / track.L
+	return (car.lapsStarted || 0) - 1 +
+		fromLine(track, car.s) / track.L
 }
 
 // The whole field, furthest round the lap first. Progress is a

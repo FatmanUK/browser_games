@@ -720,39 +720,37 @@ function lightFor(state) {
 // floating in the other. Change the reach or the radius and
 // the spread follows.
 //
-// Each lamp is also aimed well outward, by enough that the
-// two circles come out side by side and just touching.
-// Parallel beams put both circles in the same place — the
-// lamps are five units apart and a circle is twenty-six
-// across — and two circles in the same place are one circle.
+// Each lamp is aimed a little outward, by enough to put the
+// two circles side by side with a good overlap between them.
+// Parallel beams put both in the same place — the lamps are
+// five units apart and a circle is twenty-six across — and
+// two circles in the same place are one circle.
 //
 // The reach is bounded by the window, not by taste. The
 // viewport is a hundred units tall, so the camera sees fifty
 // either side of the car: a circle thrown further than that
 // is off the top of the screen whenever the car is pointing
 // up it. At 58 it always was, and the player's own headlights
-// were the two that could never be seen. Thrown 32 with a
-// radius of 13, the far edge sits at 42 and stays in frame
-// whichever way the car faces.
-const POOL_AHEAD = 32
+// were the two that could never be seen. From a nose eight
+// units forward, 28 at this splay puts the far edge of the
+// circle at 48 and keeps it in frame whichever way the car
+// faces.
+const POOL_AHEAD = 28
 const POOL_R = 13
-const SPLAY = 0.42
+const SPLAY = 0.28
 
-// Half the circle's width where the two meet, so the circle
-// visibly bulges out of the end of the beam. Derived, so that
-// changing the reach or the radius keeps the proportion.
-// Made exactly as wide as the circle — the obvious thing to
-// do — the wedge and the disc merge into one fat teardrop and
-// there is no circle left to see.
-const BEAM_SPREAD = Math.atan(POOL_R * 0.5 / POOL_AHEAD)
+// As wide at the end as the circle is: the wedge runs out to
+// meet its own circle rather than stopping short of it.
+const BEAM_SPREAD = Math.atan(POOL_R / POOL_AHEAD)
 const HEADLIGHT_OFFSET = 2.5
 
-// The wedges start at the car's middle rather than its nose.
-// The lamps are on the nose, but the two of them splay apart
-// from there and leave the car itself in the one patch of
-// unlit road on the screen — and at this darkness that means
-// the player cannot see their own car.
-const LAMP_BACK = 0
+// The lamps are on the nose, and the beams start there. They
+// used to start at the middle of the car so that the car sat
+// in its own light, which was the wrong fix for a real
+// problem — the car is marked by its own lamps now (see
+// drawLamps), so the beams can come off the front where they
+// belong.
+const LAMP_BACK = CAR_LENGTH / 2
 
 // Where a car's lamps are, in viewport units. The player sits
 // at the centre of the window and a rival is wherever it is
