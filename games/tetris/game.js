@@ -1,14 +1,22 @@
 // Tetris-style falling block game.
+//
+// The board is its own narrow shape; it is centred inside the
+// suite's shared window (see games/_shared/hud.js) rather than
+// sizing the canvas to itself, so every game in the launcher
+// opens the same size. The space either side of the board is
+// where the meters and the next-piece preview go.
 
-import { createChrome, createStat } from '../_shared/chrome.js'
+import {
+	buildWindow, fitBoard, WIDTH, HEIGHT,
+} from '../_shared/hud.js'
 import { loadNumber, saveNumber } from '../_shared/storage.js'
 import { setupSound } from './audio.js'
+import { drawHud, previewBox } from './hud.js'
 
 const COLS = 10
 const ROWS = 20
 const CELL = 18
 const TICK_MS = 600
-const PREVIEW = CELL * 4
 const BEST_KEY = 'bg-blockfall-best'
 
 const SHAPES = {
@@ -152,23 +160,34 @@ function drawGridLines(ctx) {
 }
 
 function drawGameOver(ctx) {
-	ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
-	ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL)
-	ctx.fillStyle = '#fff'
-	ctx.font = '16px system-ui, sans-serif'
+	ctx.setTransform(1, 0, 0, 1, 0, 0)
+	ctx.fillStyle = 'rgba(2, 4, 10, 0.68)'
+	ctx.fillRect(0, 0, WIDTH, HEIGHT)
+	ctx.fillStyle = '#dff4ff'
+	ctx.font = 'bold 44px ui-monospace, Menlo, monospace'
 	ctx.textAlign = 'center'
+	ctx.fillText('GAME OVER', WIDTH / 2, HEIGHT / 2)
+	ctx.font = '13px ui-monospace, Menlo, monospace'
+	ctx.fillStyle = 'rgba(190,225,245,0.8)'
 	ctx.fillText(
-		'Game Over', COLS * CELL / 2, ROWS * CELL / 2)
+		'PRESS NEW GAME', WIDTH / 2, HEIGHT / 2 + 28)
 	ctx.textAlign = 'left'
 }
 
-function draw(ctx, board, piece, over) {
+function drawWell(ctx, state) {
+	ctx.setTransform(1, 0, 0, 1, 0, 0)
+	ctx.fillStyle = '#05070f'
+	ctx.fillRect(0, 0, WIDTH, HEIGHT)
+	fitBoard(ctx, COLS * CELL, ROWS * CELL, 44, 16)
 	ctx.fillStyle = '#14141c'
 	ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL)
 	drawGridLines(ctx)
-	drawCells(ctx, boardCells(board))
-	if (piece) drawCells(ctx, pieceCells(piece))
-	if (over) drawGameOver(ctx)
+	drawCells(ctx, boardCells(state.board))
+	if (state.piece) drawCells(ctx, pieceCells(state.piece))
+	ctx.strokeStyle = 'rgba(120,214,255,0.3)'
+	ctx.lineWidth = 2
+	ctx.strokeRect(0, 0, COLS * CELL, ROWS * CELL)
+	ctx.setTransform(1, 0, 0, 1, 0, 0)
 }
 
 function drawPreviewCell(ctx, x, y, color) {
@@ -178,15 +197,17 @@ function drawPreviewCell(ctx, x, y, color) {
 }
 
 function drawPreview(ctx, key) {
-	ctx.fillStyle = '#14141c'
-	ctx.fillRect(0, 0, PREVIEW, PREVIEW)
+	const at = previewBox(ctx, CELL)
 	if (!key) return
 	const shape = SHAPES[key]
 	const offset = (4 - shape.size) / 2
+	ctx.save()
+	ctx.translate(at.x, at.y)
 	for (const [cx, cy] of shape.cells) {
 		drawPreviewCell(
 			ctx, offset + cx, offset + cy, COLORS[key])
 	}
+	ctx.restore()
 }
 
 function tryMove(state, dx, dy) {
@@ -211,6 +232,7 @@ function lockPiece(state) {
 	merge(state.board, state.piece)
 	const cleared = clearLines(state.board)
 	state.score += cleared * 100
+	state.lines += cleared
 	state.piece = spawn(takeNext(state.queue))
 	const p = state.piece
 	if (!fits(state.board, p.cells, p.x, p.y)) {
@@ -269,24 +291,9 @@ function createState() {
 		piece: spawn(takeNext(queue)),
 		queue,
 		score: 0,
+		lines: 0,
 		over: false,
 	}
-}
-
-function createCanvas(width, height) {
-	const canvas = document.createElement('canvas')
-	canvas.width = width
-	canvas.height = height
-	canvas.tabIndex = 0
-	return canvas
-}
-
-function appendPreview(side, preview) {
-	const label = document.createElement('p')
-	label.className = 'game-stat'
-	label.textContent = 'Next'
-	side.appendChild(label)
-	side.appendChild(preview)
 }
 
 function checkGameOverSound(state, audio, wasOver) {
@@ -300,23 +307,22 @@ function playLockSound(cleared, audio) {
 	else audio.lock()
 }
 
-function render(ctx, previewCtx, stats, best, state) {
-	draw(ctx, state.board, state.piece, state.over)
-	drawPreview(previewCtx, state.queue[0])
-	stats.setScore(state.score)
+function render(ctx, best, state) {
+	drawWell(ctx, state)
+	drawPreview(ctx, state.queue[0])
 	if (state.score > best.value) {
 		best.value = state.score
 		saveNumber(BEST_KEY, best.value)
 	}
-	stats.setBest(best.value)
+	drawHud(ctx, state, best)
+	if (state.over) drawGameOver(ctx)
 }
 
-function createRuntime(ctx, previewCtx, stats, best, audio) {
+function createRuntime(ctx, best, audio) {
 	let state = null
 	let timer = null
 	const wasOver = { value: false }
-	const redraw = () =>
-		render(ctx, previewCtx, stats, best, state)
+	const redraw = () => render(ctx, best, state)
 
 	function onTick() {
 		playLockSound(dropTick(state), audio)
@@ -358,27 +364,18 @@ export default {
 		'to move/rotate, space to hard-drop.',
 
 	init(container, controls) {
-		const canvas = createCanvas(COLS * CELL, ROWS * CELL)
-		const preview = createCanvas(PREVIEW, PREVIEW)
 		let runtime = null
-
-		const { main, side } = createChrome(container, {
-			title: this.title,
-			onBack: controls.back,
-			onNewGame: () => runtime.start(),
-		})
-		main.appendChild(canvas)
-		appendPreview(side, preview)
-		const stats = {
-			setScore: createStat(side, 'Score'),
-			setBest: createStat(side, 'Best'),
-		}
-		const audio = setupSound(side)
+		const { canvas, controlsRow } = buildWindow(
+			container, {
+				title: this.title,
+				onBack: controls.back,
+				onNewGame: () => runtime.start(),
+			})
+		const audio = setupSound(controlsRow)
 
 		const best = { value: loadNumber(BEST_KEY, 0) }
 		runtime = createRuntime(
-			canvas.getContext('2d'),
-			preview.getContext('2d'), stats, best, audio)
+			canvas.getContext('2d'), best, audio)
 
 		canvas.addEventListener('keydown', runtime.onKeyDown)
 		canvas.focus()

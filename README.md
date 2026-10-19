@@ -43,17 +43,26 @@ make pod-push  # push to ghcr.io/fatmanuk/browser_games (used by CI)
 Each game keeps a high score / best time in `localStorage` (per game,
 per browser) and has its own "New game" button next to its title.
 
+Blockfall, Maze Muncher and Belt Breaker share one window size, draw
+their meters on the canvas rather than in a sidebar, and take their
+music from replaceable `.mod` files in their own `music/` folder —
+see [games/README.md](games/README.md) for the helpers that do it.
+Dash still uses the older sidebar-free-but-text-based bar and
+synthesized music; it is the one left to convert.
+
 - **Blockfall** — a Tetris-style falling block game with a 7-bag
   randomizer and a next-piece preview. Arrow keys to move/rotate,
   space to hard-drop. Has separate "Sound" (SFX, on by default)
-  and "Music" (off by default) toggles — both synthesized via Web
-  Audio, no sound files.
+  and "Music" (off by default) toggles: the effects are
+  synthesized, the music is a replaceable ProTracker module in
+  `games/tetris/music/`.
 - **Maze Muncher** — a Pac-Man-style maze chase with 3 lives and a
   start countdown. Arrow keys to move, eat every dot while avoiding
   the ghosts. Clearing a maze advances to the next level (3 maze
   layouts, cycling with ghosts getting faster/more numerous each
   time) rather than ending the game. Has its own "Sound"/"Music"
-  toggles.
+  toggles, with a replaceable ProTracker module in
+  `games/pacman/music/` for the music.
 - **Dash** — a top-down racer on a large, randomly generated
   track (built by `tools/generate_track.py` into
   `games/racer/track-data.js` — rerun it for a fresh layout),
@@ -117,19 +126,25 @@ See [games/README.md](games/README.md).
 Containerfile           image for the container (make pod-build)
 tools/dev_server.py     static server: local dev and the container
 tools/generate_track.py generates games/racer/track-data.js
-tools/generate_mod.py   generates games/beltbreaker/music-data.js
+tools/generate_mod.py   generates each game's music/*.mod
+                        and its music-data.js fallback
 index.html              launcher page (game-select grid + viewport)
 css/style.css           styling
 js/app.js               launcher logic: render grid, mount/unmount
 js/registry.js          the list of registered games
 games/<slug>/game.js    one module per game (the game contract)
 games/_shared/          chrome.js (title/buttons sidebar),
-                        storage.js (localStorage high scores),
-                        audio.js (Web Audio sound/music engine)
-                        — used by the bundled games, optional
-games/tetris/           Blockfall (+ audio.js: its own melody/
-                        SFX built on games/_shared/audio.js)
-games/pacman/           Maze Muncher (+ audio.js, same pattern)
+                        hud.js (shared game window + canvas
+                        HUD drawing), storage.js (localStorage
+                        high scores), audio.js (Web Audio
+                        sound/music engine), music.js +
+                        modplayer.js + modfx.js (ProTracker
+                        module playback) — used by the bundled
+                        games, optional
+games/tetris/           Blockfall (+ audio.js/hud.js and its
+                        own music/, built on games/_shared/)
+games/pacman/           Maze Muncher (+ audio.js/hud.js and
+                        its own music/, same pattern)
 games/racer/            Dash (+ audio.js, same pattern; track
                         -data.js is generated, see tools/
                         generate_track.py)

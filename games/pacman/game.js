@@ -1,6 +1,9 @@
 // Pac-Man-style maze chase game.
 
-import { createChrome, createStat } from '../_shared/chrome.js'
+import {
+	buildWindow, fitBoard, WIDTH, HEIGHT,
+} from '../_shared/hud.js'
+import { drawHud } from './hud.js'
 import { loadNumber, saveNumber } from '../_shared/storage.js'
 import { setupSound } from './audio.js'
 
@@ -397,13 +400,16 @@ function drawGhost(ctx, ghost) {
 	drawGhostEyes(ctx, cx, cy, r)
 }
 
+// Banners cover the whole window, not just the maze, so they
+// read over the meters too.
 function drawBanner(ctx, text) {
-	ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
-	ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL)
-	ctx.fillStyle = '#fff'
-	ctx.font = '22px system-ui, sans-serif'
+	ctx.setTransform(1, 0, 0, 1, 0, 0)
+	ctx.fillStyle = 'rgba(2, 4, 10, 0.68)'
+	ctx.fillRect(0, 0, WIDTH, HEIGHT)
+	ctx.fillStyle = '#dff4ff'
+	ctx.font = 'bold 44px ui-monospace, Menlo, monospace'
 	ctx.textAlign = 'center'
-	ctx.fillText(text, COLS * CELL / 2, ROWS * CELL / 2)
+	ctx.fillText(text, WIDTH / 2, HEIGHT / 2 + 14)
 	ctx.textAlign = 'left'
 }
 
@@ -421,7 +427,14 @@ function drawOverlay(ctx, state) {
 	}
 }
 
-function draw(ctx, state) {
+// The maze keeps its own shape and is centred in the suite's
+// shared window (games/_shared/hud.js) rather than the canvas
+// being sized to it, so every game opens the same size.
+function draw(ctx, state, best) {
+	ctx.setTransform(1, 0, 0, 1, 0, 0)
+	ctx.fillStyle = '#05070f'
+	ctx.fillRect(0, 0, WIDTH, HEIGHT)
+	fitBoard(ctx, COLS * CELL, ROWS * CELL, 46, 54)
 	ctx.fillStyle = '#000'
 	ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL)
 	drawMaze(ctx, state.maze)
@@ -430,32 +443,22 @@ function draw(ctx, state) {
 	for (const ghost of state.ghosts) {
 		drawGhost(ctx, ghost)
 	}
+	ctx.setTransform(1, 0, 0, 1, 0, 0)
+	drawHud(ctx, state, best)
 	drawOverlay(ctx, state)
 }
 
-function createCanvas() {
-	const canvas = document.createElement('canvas')
-	canvas.width = COLS * CELL
-	canvas.height = ROWS * CELL
-	canvas.tabIndex = 0
-	return canvas
-}
-
-function render(ctx, stats, best, state) {
-	draw(ctx, state)
-	stats.setScore(state.score)
-	stats.setLives(state.lives)
-	stats.setLevel(state.level)
+function render(ctx, best, state) {
 	if (state.score > best.value) {
 		best.value = state.score
 		saveNumber(BEST_KEY, best.value)
 	}
-	stats.setBest(best.value)
+	draw(ctx, state, best)
 }
 
-function createRuntime(ctx, stats, best, audio) {
+function createRuntime(ctx, best, audio) {
 	let state = null
-	const redraw = () => render(ctx, stats, best, state)
+	const redraw = () => render(ctx, best, state)
 
 	function start() {
 		state = createState()
@@ -494,27 +497,18 @@ export default {
 		'while avoiding the ghosts.',
 
 	init(container, controls) {
-		const canvas = createCanvas()
 		let runtime = null
-
-		const { main, side } = createChrome(container, {
-			title: this.title,
-			onBack: controls.back,
-			onNewGame: () => runtime.start(),
-		})
-		main.appendChild(canvas)
-
-		const stats = {
-			setScore: createStat(side, 'Score'),
-			setLives: createStat(side, 'Lives'),
-			setLevel: createStat(side, 'Level'),
-			setBest: createStat(side, 'Best'),
-		}
-		const audio = setupSound(side)
+		const { canvas, controlsRow } = buildWindow(
+			container, {
+				title: this.title,
+				onBack: controls.back,
+				onNewGame: () => runtime.start(),
+			})
+		const audio = setupSound(controlsRow)
 
 		const best = { value: loadNumber(BEST_KEY, 0) }
 		runtime = createRuntime(
-			canvas.getContext('2d'), stats, best, audio)
+			canvas.getContext('2d'), best, audio)
 
 		canvas.addEventListener('keydown', runtime.onKeyDown)
 		canvas.focus()

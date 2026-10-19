@@ -3,15 +3,16 @@
 // Kept separate from world.js so belt.js/tunnel.js/boss.js can
 // use them without importing each other in a cycle.
 
+import { WIDTH, HEIGHT } from '../_shared/hud.js'
 import { ROCK_R } from './rocks.js'
 
-// Matches the Dash window exactly (games/racer/game.js builds
-// 960x400 out of its viewport constants). Several things are
-// keyed to the height rather than assuming a tall field: where
-// the guardian hangs, and how far the wormhole lets the ship
-// stray before it would fly off the top of the screen.
-export const W = 960
-export const H = 400
+// The shared window size every game in the suite uses.
+// Several things here are keyed to the height rather than
+// assuming a tall field: where the guardian hangs, and how far
+// the wormhole lets the ship stray before it would fly off the
+// top of the screen.
+export const W = WIDTH
+export const H = HEIGHT
 
 export const SHIP = {
 	turn: 3.5, thrust: 310, drag: 0.5, max: 400,

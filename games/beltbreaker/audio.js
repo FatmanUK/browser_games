@@ -13,13 +13,28 @@
 import {
 	createAudio, createAudioToggles,
 } from '../_shared/audio.js'
+import { createMusic } from '../_shared/music.js'
 import { buildSfx } from './samples.js'
-import { createMusic } from './music.js'
+import { MOD_BASE64 } from './music-data.js'
 
 // The shared engine wants a melody to loop; this game's music
-// comes from the tracker module instead, so this single rest is
+// comes from a tracker module instead, so this single rest is
 // never heard.
 const SILENT = [null]
+
+// Modules in music/, tried in order; the first that loads is
+// the music. Drop your own in there and name it here.
+// music-data.js is the fallback for when none of them load.
+export const TRACKS = [
+	'piston_cathedral.mod',
+	'belt-breaker.mod',
+]
+
+const MUSIC = {
+	baseUrl: new URL('music/', import.meta.url),
+	tracks: TRACKS,
+	fallback: MOD_BASE64,
+}
 
 // name: [notes, waveform, volume, gap in ms]
 const SEQS = {
@@ -108,7 +123,7 @@ function bindSeqs(audio) {
 
 export function setupSound(side) {
 	const audio = createAudio(SILENT, 500)
-	const music = createMusic(audio.context)
+	const music = createMusic(audio.context, MUSIC)
 	// A façade, not the engine itself: Sound stays the
 	// engine's, Music belongs to the tracker player.
 	createAudioToggles(side, {

@@ -229,16 +229,42 @@ function mixRow(st, left, right, at, rate) {
 	return at
 }
 
+function rowFrames(st, rate) {
+	return Math.round((2.5 / st.bpm) * rate) *
+		st.speed * (1 + st.rowDelay)
+}
+
+// Eight minutes. A Bxx that jumps backwards can loop a module
+// forever, and a buffer is held in memory in full — a stereo
+// minute is about 21MB at 44.1kHz.
+const MAX_SECONDS = 480
+
+// Walks the song without mixing, to find out how long it
+// actually is. Guessing a fixed ceiling instead would either
+// waste the memory or, for a long module, cut the tail off —
+// and a truncated tail is audible, because the buffer loops.
+function songFrames(mod, rate) {
+	const st = newState(mod)
+	const cap = rate * MAX_SECONDS
+	let at = 0
+	while (!st.done && at < cap) {
+		startRow(mod, st, rate)
+		at += rowFrames(st, rate)
+		advance(st, mod)
+	}
+	return Math.min(at, cap)
+}
+
 // Renders the whole song once. The caller loops the buffer, so
 // the tail must land exactly on the end of the last row.
 export function renderMod(bytes, rate) {
 	const mod = parseMod(bytes)
+	const total = songFrames(mod, rate)
+	const left = new Float32Array(total)
+	const right = new Float32Array(total)
 	const st = newState(mod)
-	const cap = Math.ceil(rate * 150)
-	const left = new Float32Array(cap)
-	const right = new Float32Array(cap)
 	let at = 0
-	while (!st.done && at < cap - rate) {
+	while (!st.done && at + rowFrames(st, rate) <= total) {
 		startRow(mod, st, rate)
 		at = mixRow(st, left, right, at, rate)
 		advance(st, mod)

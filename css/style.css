@@ -123,27 +123,27 @@ main {
   flex-wrap: wrap;
 }
 
-/* Belt Breaker overlays its controls on the canvas as Dash
-   does, but styles them as instrumentation rather than as
-   browser widgets: the meters are drawn on the canvas itself
-   (games/beltbreaker/hud.js) and the controls that must stay
-   real buttons are dressed to match. */
-.belt-window {
+/* The shared game window: a fixed-size canvas with the
+   controls laid over the top of it rather than beside it, and
+   the meters drawn on the canvas itself (games/_shared/hud.js)
+   rather than as sidebar stat lines. Dash has its own .dash-*
+   version of this below, which predates it. */
+.game-window {
   position: relative;
   display: inline-block;
 }
 
-.belt-window canvas {
+.game-window canvas {
   display: block;
   background: #02030a;
 }
 
-.belt-window canvas:focus-visible {
+.game-window canvas:focus-visible {
   outline: 1px solid rgba(127, 230, 255, 0.55);
   outline-offset: -1px;
 }
 
-.belt-header {
+.game-hud {
   position: absolute;
   top: 0;
   left: 0;
@@ -159,7 +159,7 @@ main {
   padding: 0.3rem 0.75rem 0.5rem;
 }
 
-.belt-header h2 {
+.game-hud h2 {
   margin: 0 0.5rem 0 0;
   font-size: 0.95rem;
   letter-spacing: 0.22em;
@@ -168,7 +168,7 @@ main {
   text-shadow: 0 0 12px rgba(80, 200, 255, 0.7);
 }
 
-.belt-row {
+.game-hud-row {
   display: flex;
   align-items: center;
   gap: 0.4rem;
@@ -177,7 +177,7 @@ main {
 
 /* Clipped corners and a hairline rule: enough to read as a
    console panel without needing an image. */
-.belt-header .game-side-button {
+.game-hud .game-side-button {
   font: inherit;
   font-size: 0.68rem;
   letter-spacing: 0.14em;
@@ -192,13 +192,13 @@ main {
     calc(100% - 6px) 100%, 0 100%, 0 6px);
 }
 
-.belt-header .game-side-button:hover {
+.game-hud .game-side-button:hover {
   background: rgba(24, 74, 112, 0.85);
   color: #ffffff;
   box-shadow: 0 0 10px rgba(120, 214, 255, 0.35);
 }
 
-.belt-header .game-side-button:focus-visible {
+.game-hud .game-side-button:focus-visible {
   outline: 1px solid #7fe6ff;
   outline-offset: 1px;
 }

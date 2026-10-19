@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Generates Belt Breaker's background music: a ProTracker 2
-module (4 channels, 31 sample slots, "M.K.").
+"""Generates the games' background music: ProTracker 2 modules
+(4 channels, 31 sample slots, "M.K."), one tune per game.
 
-Writes it twice. games/beltbreaker/music/belt-breaker.mod is
-the file the game loads and the one to open in a tracker (or
+Each is written twice. games/<game>/music/<name>.mod is the
+file the game loads and the one to open in a tracker (or
 replace with your own — see that directory's README).
-games/beltbreaker/music-data.js is the same bytes base64'd,
-which the game falls back to when the .mod cannot be fetched.
+games/<game>/music-data.js is the same bytes base64'd, which
+the game falls back to when the .mod cannot be fetched.
 
 The repo ships no binary assets, so the module — instruments
 included — is synthesized here rather than sourced: every
@@ -14,9 +14,9 @@ sample is a waveform written by this script, which makes the
 result ours to licence and keeps the whole tune diffable as
 code. Re-run after editing the score:
 
-	tools/generate_mod.py [--mod out.mod]
+	tools/generate_mod.py [game ...]
 
---mod writes an extra copy somewhere else, for inspection.
+With no games named, every game's music is rebuilt.
 """
 import argparse
 import base64
@@ -25,8 +25,7 @@ import os
 import random
 import struct
 
-OUT_JS = 'games/beltbreaker/music-data.js'
-OUT_MOD = 'games/beltbreaker/music/belt-breaker.mod'
+
 
 NOTES = [
 	'C-', 'C#', 'D-', 'D#', 'E-', 'F-',
@@ -151,37 +150,116 @@ def build_samples():
 	]
 
 
-# One pattern per chord: A minor, F, C, G — four bars each.
-CHORDS = ['A-1', 'F-1', 'C-2', 'G-1']
-PADS = ['A-2', 'F-2', 'C-3', 'G-2']
-LEAD = [
-	'A-2', 'B-2', 'C-3', 'D-3',
-	'E-3', 'F-3', 'G-3', 'A-3',
-]
+# One song per game. Each is four 64-row patterns, one per
+# chord of its progression, with the lead written as scale
+# degrees so a riff stays in key under whatever chord is below
+# it. Drums are named patterns (see DRUMS).
+SONGS = {
+	'beltbreaker': {
+		'title': 'belt breaker',
+		'dir': 'games/beltbreaker',
+		'file': 'belt-breaker.mod',
+		'speed': 6,
+		'drums': 'drive',
+		'chords': ['A-1', 'F-1', 'C-2', 'G-1'],
+		'pads': ['A-2', 'F-2', 'C-3', 'G-2'],
+		'scale': [
+			'A-2', 'B-2', 'C-3', 'D-3',
+			'E-3', 'F-3', 'G-3', 'A-3',
+		],
+		'riffs': [
+			[(0, 0), (4, 2), (6, 4), (8, 7), (12, 6),
+				(14, 4), (16, 0), (20, 2), (22, 4),
+				(24, 3), (28, 2), (32, 0), (36, 2),
+				(38, 4), (40, 7), (44, 6), (48, 4),
+				(52, 3), (56, 2), (60, 0)],
+			[(0, 3), (4, 5), (8, 7), (10, 5), (12, 3),
+				(16, 2), (20, 4), (24, 5), (28, 4),
+				(32, 3), (36, 5), (40, 7), (44, 5),
+				(48, 4), (52, 2), (56, 3), (60, 1)],
+			[(0, 2), (4, 4), (6, 6), (8, 4), (12, 2),
+				(16, 1), (20, 3), (24, 4), (28, 6),
+				(32, 7), (36, 6), (40, 4), (44, 2),
+				(48, 4), (52, 6), (56, 7), (60, 6)],
+			[(0, 4), (2, 6), (4, 7), (8, 6), (12, 4),
+				(16, 5), (20, 3), (24, 1), (28, 3),
+				(32, 4), (36, 6), (40, 7), (42, 6),
+				(44, 7), (48, 6), (52, 4), (56, 2),
+				(60, 0)],
+		],
+	},
+	'tetris': {
+		'title': 'blockfall',
+		'dir': 'games/tetris',
+		'file': 'blockfall.mod',
+		'speed': 5,
+		'drums': 'tight',
+		'chords': ['E-1', 'C-2', 'G-1', 'D-2'],
+		'pads': ['E-2', 'C-3', 'G-2', 'D-3'],
+		'scale': [
+			'E-2', 'F#2', 'G-2', 'A-2',
+			'B-2', 'C-3', 'D-3', 'E-3',
+		],
+		'riffs': [
+			[(0, 4), (2, 2), (4, 0), (8, 2), (10, 4),
+				(12, 2), (16, 4), (20, 7), (24, 6),
+				(28, 4), (32, 4), (34, 2), (36, 0),
+				(40, 2), (44, 1), (48, 2), (52, 4),
+				(56, 2), (60, 0)],
+			[(0, 2), (4, 4), (8, 5), (12, 4), (16, 2),
+				(20, 0), (24, 2), (28, 4), (32, 5),
+				(36, 4), (40, 2), (44, 4), (48, 5),
+				(52, 7), (56, 5), (60, 4)],
+			[(0, 6), (2, 4), (4, 6), (8, 7), (12, 6),
+				(16, 4), (20, 6), (24, 4), (28, 2),
+				(32, 4), (36, 6), (40, 7), (44, 6),
+				(48, 4), (52, 2), (56, 4), (60, 2)],
+			[(0, 0), (4, 2), (8, 4), (10, 5), (12, 4),
+				(16, 2), (20, 4), (24, 2), (28, 0),
+				(32, 2), (36, 4), (40, 6), (44, 4),
+				(48, 2), (52, 1), (56, 0), (60, 0)],
+		],
+	},
+	'pacman': {
+		'title': 'maze muncher',
+		'dir': 'games/pacman',
+		'file': 'maze-muncher.mod',
+		'speed': 6,
+		'drums': 'bounce',
+		'chords': ['C-2', 'A-1', 'F-1', 'G-1'],
+		'pads': ['C-3', 'A-2', 'F-2', 'G-2'],
+		'scale': [
+			'C-2', 'D-2', 'E-2', 'F-2',
+			'G-2', 'A-2', 'B-2', 'C-3',
+		],
+		'riffs': [
+			[(0, 0), (2, 2), (4, 4), (6, 7), (8, 4),
+				(12, 2), (16, 0), (18, 2), (20, 4),
+				(24, 2), (28, 0), (32, 4), (34, 2),
+				(36, 4), (40, 7), (44, 4), (48, 2),
+				(52, 4), (56, 2), (60, 0)],
+			[(0, 5), (4, 4), (8, 2), (12, 4), (16, 5),
+				(20, 7), (24, 5), (28, 4), (32, 2),
+				(36, 4), (40, 5), (44, 4), (48, 2),
+				(52, 0), (56, 2), (60, 4)],
+			[(0, 3), (2, 5), (4, 3), (8, 1), (12, 3),
+				(16, 5), (20, 3), (24, 5), (28, 7),
+				(32, 5), (36, 3), (40, 1), (44, 3),
+				(48, 5), (52, 3), (56, 1), (60, 3)],
+			[(0, 4), (4, 6), (8, 7), (12, 6), (16, 4),
+				(20, 6), (24, 4), (28, 2), (32, 4),
+				(36, 6), (40, 7), (44, 6), (48, 4),
+				(52, 2), (56, 1), (60, 0)],
+		],
+	},
+}
 
-# (row, scale degree) — the melody, written as degrees so it
-# stays in key no matter which chord is under it.
-RIFFS = [
-	[(0, 0), (4, 2), (6, 4), (8, 7), (12, 6), (14, 4),
-		(16, 0), (20, 2), (22, 4), (24, 3), (28, 2),
-		(32, 0), (36, 2), (38, 4), (40, 7), (44, 6),
-		(48, 4), (52, 3), (56, 2), (60, 0)],
-	[(0, 3), (4, 5), (8, 7), (10, 5), (12, 3),
-		(16, 2), (20, 4), (24, 5), (28, 4),
-		(32, 3), (36, 5), (40, 7), (44, 5),
-		(48, 4), (52, 2), (56, 3), (60, 1)],
-	[(0, 2), (4, 4), (6, 6), (8, 4), (12, 2),
-		(16, 1), (20, 3), (24, 4), (28, 6),
-		(32, 7), (36, 6), (40, 4), (44, 2),
-		(48, 4), (52, 6), (56, 7), (60, 6)],
-	[(0, 4), (2, 6), (4, 7), (8, 6), (12, 4),
-		(16, 5), (20, 3), (24, 1), (28, 3),
-		(32, 4), (36, 6), (40, 7), (42, 6), (44, 7),
-		(48, 6), (52, 4), (56, 2), (60, 0)],
-]
-
-KICK_ROWS = (0, 6, 10)
-SNARE_ROWS = (4, 12)
+# bar is the row within each 16-row bar.
+DRUMS = {
+	'drive': {'kick': (0, 6, 10), 'snare': (4, 12), 'hat': 2},
+	'tight': {'kick': (0, 7), 'snare': (4, 12), 'hat': 1},
+	'bounce': {'kick': (0, 8), 'snare': (4, 12), 'hat': 2},
+}
 
 
 def empty_pattern():
@@ -204,9 +282,9 @@ def lay_bass(pat, root):
 		put(pat, row, 0, 1, note)
 
 
-def lay_lead(pat, riff):
+def lay_lead(pat, riff, scale):
 	for row, degree in riff:
-		put(pat, row, 1, 2, LEAD[degree])
+		put(pat, row, 1, 2, scale[degree])
 
 
 def lay_pad(pat, note):
@@ -214,31 +292,32 @@ def lay_pad(pat, note):
 		put(pat, row, 2, 3, note)
 
 
-def lay_drums(pat):
+def lay_drums(pat, kit):
 	for row in range(ROWS):
 		bar = row % 16
-		if bar in KICK_ROWS:
+		if bar in kit['kick']:
 			put(pat, row, 3, 4, 'C-2')
-		elif bar in SNARE_ROWS:
+		elif bar in kit['snare']:
 			put(pat, row, 3, 5, 'C-2')
-		elif row % 2 == 0:
+		elif row % (kit['hat'] + 1) == 0:
 			put(pat, row, 3, 6, 'C-2')
 
 
-def build_patterns():
+def build_patterns(song):
+	kit = DRUMS[song['drums']]
 	pats = []
-	for i, root in enumerate(CHORDS):
+	for i, root in enumerate(song['chords']):
 		pat = empty_pattern()
 		lay_bass(pat, root)
-		lay_lead(pat, RIFFS[i])
-		lay_pad(pat, PADS[i])
-		lay_drums(pat)
+		lay_lead(pat, song['riffs'][i], song['scale'])
+		lay_pad(pat, song['pads'][i])
+		lay_drums(pat, kit)
 		pats.append(pat)
 	# Fxx with a parameter under 32 sets ticks per row; 6 is
 	# the ProTracker default and makes a row a 16th at the
 	# default 125 BPM.
 	first = pats[0][0][0]
-	pats[0][0][0] = (first[0], first[1], 0x0F, 6)
+	pats[0][0][0] = (first[0], first[1], 0x0F, song['speed'])
 	return pats
 
 
@@ -291,50 +370,85 @@ def build_mod(title, samples, patterns, order):
 	return bytes(out)
 
 
-def write_js(path, blob):
+JS_HEADER = """\
+// GENERATED by tools/generate_mod.py — do not edit by hand.
+//
+// "{title}" as a ProTracker 2 module (4 channels, 31
+// sample slots, "M.K."), base64-encoded. This is the
+// fallback: the game loads the .mod in music/ when it
+// can, and only decodes this when that fetch fails.
+// Replace the music by dropping a module in music/, not
+// by editing this file.
+
+export const MOD_BASE64 =
+\t{body}
+"""
+
+
+def write_js(path, blob, title):
 	b64 = base64.b64encode(blob).decode('ascii')
 	lines = [
 		b64[i:i + 56] for i in range(0, len(b64), 56)
 	]
 	body = "'" + "' +\n\t'".join(lines) + "'"
 	with open(path, 'w') as fh:
-		fh.write(
-			'// GENERATED by tools/generate_mod.py — do '
-			'not edit by hand.\n'
-			'//\n'
-			'// Belt Breaker\'s background music as a '
-			'ProTracker 2 module\n'
-			'// (4 channels, 31 sample slots, "M.K."), '
-			'base64-encoded.\n'
-			'// Every instrument in it is a waveform '
-			'synthesized by that\n'
-			'// script, so the tune is ours and the repo '
-			'stays free of\n'
-			'// binary assets. Decoded and rendered by '
-			'modplayer.js.\n\n'
-			'export const MOD_BASE64 =\n\t'
-			+ body + '\n')
+		fh.write(JS_HEADER.format(title=title, body=body))
+
+
+MUSIC_README = """# {title} music
+
+Drop ProTracker 2 modules (`.mod`) in this directory and list
+their filenames in `TRACKS` in `../audio.js`. The first that
+loads is the music; anything that fails to load (missing, or
+not a 4-channel 31-sample module) is skipped, and if none load
+the game falls back to the module built into
+`../music-data.js`.
+
+`{file}` is generated — `tools/generate_mod.py` writes both it
+and the base64 fallback — so re-running that script overwrites
+it. Replacing it with your own module is fine; just don't
+expect the generator to leave it alone.
+
+`.mod` files in here are not tracked by git (see `.gitignore`),
+so a fresh clone has none and falls back to the base64 until
+the generator is run or a module is dropped in.
+
+See `games/_shared/modfx.js` for the effects the player
+supports. Anything outside that set is ignored rather than
+mis-played.
+"""
+
+
+def write_song(slug, song):
+	samples = build_samples()
+	blob = build_mod(
+		song['title'], samples, build_patterns(song),
+		list(range(len(song['chords']))))
+	js = os.path.join(song['dir'], 'music-data.js')
+	mod = os.path.join(song['dir'], 'music', song['file'])
+	os.makedirs(os.path.dirname(mod), exist_ok=True)
+	write_js(js, blob, song['title'])
+	with open(mod, 'wb') as fh:
+		fh.write(blob)
+	readme = os.path.join(song['dir'], 'music', 'README.md')
+	text = MUSIC_README.format(
+		title=song['title'].title(),
+		file=song['file'])
+	with open(readme, 'w') as fh:
+		fh.write(text)
+	print(f'{mod}: {len(blob)} bytes of module')
 
 
 def main():
 	ap = argparse.ArgumentParser(
-		description='Generate Belt Breaker music data.')
+		description='Generate the games\' music.')
 	ap.add_argument(
-		'--mod', help='write an extra copy here too')
+		'games', nargs='*', choices=sorted(SONGS) + [[]],
+		default=[], help='which games (default: all)')
 	args = ap.parse_args()
 
-	samples = build_samples()
-	patterns = build_patterns()
-	blob = build_mod(
-		'belt breaker', samples, patterns,
-		list(range(len(patterns))))
-	write_js(OUT_JS, blob)
-	os.makedirs(os.path.dirname(OUT_MOD), exist_ok=True)
-	for path in filter(None, [OUT_MOD, args.mod]):
-		with open(path, 'wb') as fh:
-			fh.write(blob)
-	print(f'{OUT_MOD}: {len(blob)} bytes of module')
-	print(f'{OUT_JS}: same bytes, base64 fallback')
+	for slug in (args.games or sorted(SONGS)):
+		write_song(slug, SONGS[slug])
 
 
 if __name__ == '__main__':

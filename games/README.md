@@ -35,6 +35,36 @@ games should too, for a consistent look:
   `{ main, side }` elements to mount your game/stats into.
   `createStat(side, label)` adds a `"Label: value"` line to the sidebar
   and returns a setter function.
+- `games/_shared/hud.js` — the shared game window and the
+  pieces for drawing a HUD on the canvas. `buildWindow(
+  container, { title, onNewGame, onBack })` builds a canvas of
+  the suite's standard size (`WIDTH` x `HEIGHT`) with the
+  title and buttons laid over the top of it, and returns
+  `{ main: canvas, controlsRow }` — pass `controlsRow` to
+  `createAudioToggles`. A game whose playfield is a different
+  shape centres inside that window with `fitBoard(ctx, boardW,
+  boardH, insetTop, insetBottom)` rather than resizing the
+  canvas, so every game in the launcher opens the same size.
+  `readout(ctx, x, y, label, value, size, align)`,
+  `label(...)` and `brackets(...)` draw meters in the shared
+  palette. Prefer this to chrome.js for anything that wants to
+  look like a game rather than a form; chrome.js is still
+  there for the plainer option.
+- `games/_shared/music.js` — `createMusic(getContext, {
+  baseUrl, tracks, fallback })` plays ProTracker modules.
+  Modules are real `.mod` files in the game's own `music/`
+  folder, so the music can be replaced without touching code;
+  `fallback` is the base64 of one built in, used when no file
+  loads. The returned object has the same `isOn`/`setOn`
+  shape the engine's music state does, so pass a façade to
+  `createAudioToggles` — `{ isSoundOn, setSoundOn } ` from
+  `createAudio` plus `{ isMusicOn: music.isOn, setMusicOn:
+  music.setOn }` — and Music drives the tracker instead of the
+  melody loop. `createAudio` takes `[null]` as its melody in
+  that case, and `getContext` is `audio.context`.
+  `games/_shared/modplayer.js` renders a module to a buffer and
+  `modfx.js` documents which ProTracker effects it supports.
+  `tools/generate_mod.py` generates the bundled modules.
 - `games/_shared/storage.js` — `loadNumber(key, fallback)` /
   `saveNumber(key, value)` wrap `localStorage` (with try/catch) for
   persisting a high score or best time across visits.

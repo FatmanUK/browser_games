@@ -7,7 +7,7 @@
 // sprites.js owns the art and audio.js owns the sound.
 
 import { loadNumber, saveNumber } from '../_shared/storage.js'
-import { buildWindow } from './hud.js'
+import { buildWindow } from '../_shared/hud.js'
 import { setupSound } from './audio.js'
 import { getAtlas } from './sprites.js'
 import { newGame, updateWorld } from './world.js'
@@ -99,8 +99,11 @@ export default {
 	init(container, controls) {
 		let runtime = null
 		const { canvas, controlsRow } = buildWindow(
-			container, this.title, controls,
-			() => runtime.start())
+			container, {
+				title: this.title,
+				onBack: controls.back,
+				onNewGame: () => runtime.start(),
+			})
 
 		const fx = setupSound(controlsRow)
 		const best = { value: loadNumber(BEST_KEY, 0) }
