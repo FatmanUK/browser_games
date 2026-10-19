@@ -322,22 +322,36 @@ function sideburns(ctx, d) {
 	}
 }
 
-// Marlo's grin needs something under it or the chin is a bare
-// curve; Drake's stubble is the same mark used as shadow.
-function beard(ctx, d) {
+// Drake's stubble: the hair colour at low alpha over the
+// bottom of the jaw, clipped to the head so it stops at the
+// edge of the face.
+function stubble(ctx, d) {
 	ctx.save()
 	headPath(ctx, d, (v) => v)
 	ctx.clip()
-	ctx.globalAlpha = d.stubble ? 0.3 : 1
+	ctx.globalAlpha = 0.3
 	ctx.fillStyle = d.hair
-	if (d.stubble) {
-		ctx.fillRect(0.5 - d.w, 0.72, d.w * 2, 0.3)
-	} else {
-		ctx.beginPath()
-		ctx.ellipse(0.5, 0.84, 0.1, 0.07, 0, 0, Math.PI * 2)
-		ctx.fill()
-	}
+	ctx.fillRect(0.5 - d.w, 0.72, d.w * 2, 0.3)
 	ctx.restore()
+}
+
+// Marlo's moustache. He had a goatee, which at this size is
+// an ellipse on the chin and reads as a smudge rather than
+// as hair — there is no room under a grin for a shape to be
+// anything but a blob. A moustache has somewhere to be: it
+// sits between the nose and the mouth, where the gap is
+// already the right shape for it.
+function tache(ctx, d) {
+	ctx.fillStyle = d.hair
+	ctx.beginPath()
+	ctx.moveTo(0.5, 0.7)
+	ctx.quadraticCurveTo(0.6, 0.692, 0.665, 0.742)
+	ctx.quadraticCurveTo(0.58, 0.742, 0.5, 0.728)
+	ctx.quadraticCurveTo(0.42, 0.742, 0.335, 0.742)
+	ctx.quadraticCurveTo(0.4, 0.692, 0.5, 0.7)
+	ctx.closePath()
+	ctx.fill()
+	ink(ctx, 0.014)
 }
 
 // Eyewear goes over the eyes that are already there, so a
@@ -381,43 +395,47 @@ function specs(ctx, d) {
 // A cap says whose car it is in one glance, which is why
 // there was one, but it does it by covering the top third of
 // the face — and the faces are the point. A collar says the
-// same thing out of the way, and leaves a head you can
-// actually read.
+// same thing out of the way.
 //
-// Drawn before the head so the chin and the hair lie over
-// it, which is also why the neck is here rather than with
-// the head: it has to go under the collar and behind the
-// jaw.
-export function shoulders(ctx, d, colours) {
-	ctx.fillStyle = d ? d.shade : '#9aa0a8'
+// A standing collar rather than a pair of shoulders: a
+// portrait is cropped at the neck, so shoulders drawn where
+// shoulders are end up as a band across the bottom with the
+// head balanced on it and no neck in between. A collar that
+// comes up to the jaw is both what a driver wears and the
+// shape that fits the crop.
+//
+// Higher at the sides than at the front, because that is how
+// a collar sits, and because the dip is what leaves a little
+// throat showing under the chin.
+//
+// Drawn before the head so the jaw and the hair lie over it,
+// which is also why the neck is here: it has to go under the
+// collar and behind the chin.
+export function collar(ctx, d, colours) {
+	ctx.fillStyle = d ? d.shade : '#8e949c'
 	ctx.beginPath()
-	ctx.moveTo(0.38, 0.72)
-	ctx.lineTo(0.62, 0.72)
-	ctx.lineTo(0.64, 0.95)
-	ctx.lineTo(0.36, 0.95)
+	ctx.moveTo(0.39, 0.68)
+	ctx.lineTo(0.61, 0.68)
+	ctx.lineTo(0.63, 1.08)
+	ctx.lineTo(0.37, 1.08)
 	ctx.closePath()
 	ctx.fill()
 	ink(ctx, 0.02)
-	// High in the frame on purpose. A portrait is cropped at
-	// the collar, so whatever sits below about 0.88 is off
-	// the bottom — pitched where shoulders really are, the
-	// livery came out as an eight pixel line under the chin
-	// at podium size and nothing at all in the standings.
 	ctx.beginPath()
-	ctx.moveTo(0.0, 1.1)
-	ctx.quadraticCurveTo(0.04, 0.91, 0.29, 0.87)
-	ctx.quadraticCurveTo(0.5, 0.96, 0.71, 0.87)
-	ctx.quadraticCurveTo(0.96, 0.91, 1.0, 1.1)
+	ctx.moveTo(0.25, 1.1)
+	ctx.lineTo(0.27, 0.855)
+	ctx.quadraticCurveTo(0.5, 0.96, 0.73, 0.855)
+	ctx.lineTo(0.75, 1.1)
 	ctx.closePath()
 	ctx.fillStyle = colours.body
 	ctx.fill()
 	ink(ctx, 0.024)
-	// The darker tone as the collar's own edge, so the two
-	// halves of a livery both show.
+	// The darker tone as the opening at the front, so both
+	// halves of a livery show.
 	ctx.beginPath()
-	ctx.moveTo(0.29, 0.87)
-	ctx.quadraticCurveTo(0.5, 0.96, 0.71, 0.87)
-	ctx.quadraticCurveTo(0.5, 1.05, 0.29, 0.87)
+	ctx.moveTo(0.36, 0.93)
+	ctx.quadraticCurveTo(0.5, 0.99, 0.64, 0.93)
+	ctx.quadraticCurveTo(0.5, 1.1, 0.36, 0.93)
 	ctx.closePath()
 	ctx.fillStyle = colours.shell
 	ctx.fill()
@@ -455,7 +473,7 @@ function helmetShell(ctx, colours) {
 }
 
 export function drawHelmet(ctx, colours) {
-	shoulders(ctx, null, colours)
+	collar(ctx, null, colours)
 	helmetShell(ctx, colours)
 	ctx.beginPath()
 	ctx.moveTo(0.26, 0.5)
@@ -493,13 +511,13 @@ export function drawHelmet(ctx, colours) {
 const EXTRAS = {
 	voss: (ctx, d) => { sideburns(ctx, d); shades(ctx, d) },
 	kestrel: () => {},
-	marlo: (ctx, d) => beard(ctx, d),
-	drake: (ctx, d) => beard(ctx, d),
+	marlo: (ctx, d) => tache(ctx, d),
+	drake: (ctx, d) => stubble(ctx, d),
 	ibbott: (ctx, d) => specs(ctx, d),
 }
 
 function drawFace(ctx, d, colours, q) {
-	shoulders(ctx, d, colours)
+	collar(ctx, d, colours)
 	hairBack(ctx, d)
 	headParts(ctx, d, q)
 	if (!d.teeth) nose(ctx, d, q)

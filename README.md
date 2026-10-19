@@ -89,11 +89,12 @@ files in its own `music/` folder — see
   The rivals are drawn rather than modelled — flat colour
   inside an ink line, the way a comic panel is — because a
   face is a set of marks rather than a solid: Voss behind his
-  shades, Kestrel's bob and narrowed eyes, Marlo's grin,
-  Drake's brow and stubble, Ibbott's ponytail and round specs,
-  each over a collar in its own livery — a collar rather than
-  a cap, because a cap says whose car it is by covering the
-  top third of the face, and the faces are the point. You keep
+  shades, Kestrel's bob and narrowed eyes, Marlo's grin and
+  moustache, Drake's brow and stubble, Ibbott's ponytail and
+  round specs, each in a high collar in its own livery — a
+  collar rather than a cap, because a cap says whose car it
+  is by covering the top third of the face, and the faces are
+  the point. You keep
   a black helmet with a gold mirror visor, which is both what
   you would see of yourself and the quickest way to pick your
   own row out of six. Each drives differently
