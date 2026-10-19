@@ -6,15 +6,20 @@
 // oval used, generalized from a closed-form ellipse formula to a
 // lookup table.
 
+import { buildWindow, WIDTH, HEIGHT } from '../_shared/hud.js'
 import {
-	buildWindow, WIDTH, HEIGHT,
-} from '../_shared/hud.js'
+	VIEWPORT_WIDTH, VIEWPORT_HEIGHT, VIEW_SCALE, PX,
+	CULL_X, CULL_Y,
+} from './view.js'
+import {
+	getAtlas, carRing, frameFor, variant,
+} from './sprites.js'
 import { loadNumber, saveNumber } from '../_shared/storage.js'
 import { setupSound } from './audio.js'
 import {
 	CAR_LENGTH, CAR_WIDTH, ACCEL, BRAKE, MAX_SPEED,
 	MAX_REVERSE, FRICTION, OFF_TRACK_DRAG, TURN_RATE,
-	drawCar, PLAYER_COLOURS,
+	PLAYER_COLOURS,
 } from './car.js'
 import {
 	CENTER, lerpArray, angleOf, angleDelta, normFor, onTrack,
@@ -33,21 +38,6 @@ import * as TRACK from './track-data.js'
 
 const OUTER_RUMBLE = offsetTable(TRACK.OUTER_RADIUS, -4)
 const INNER_RUMBLE = offsetTable(TRACK.INNER_RADIUS, 4)
-
-// The camera follows the car and only shows a window onto the
-// world — tall enough to always show the full width of the
-// track's road surface rather than the whole track at once.
-// VIEW_SCALE blows that up to the shared window size without
-// changing how much of the track it actually shows.
-//
-// The window is the suite's (games/_shared/hud.js), and the
-// scale is derived from it rather than the other way round:
-// the canvas used to be sized from the track's road width, so
-// regenerating the track with a different ROAD_WIDTH would
-// have quietly changed how big this game's window was.
-const VIEWPORT_HEIGHT = TRACK.ROAD_WIDTH
-const VIEW_SCALE = HEIGHT / VIEWPORT_HEIGHT
-const VIEWPORT_WIDTH = WIDTH / VIEW_SCALE
 
 // Keyed by the track's own id so each generated track (see
 // tools/generate_track.py) keeps its own best lap rather than
@@ -333,83 +323,86 @@ function drawStartGrid(ctx) {
 	for (const slot of TRACK.GRID_SLOTS) drawGridSlot(ctx, slot)
 }
 
-function drawTree(ctx, x, y, r) {
-	ctx.fillStyle = '#4e342e'
-	ctx.fillRect(x - 2, y, 4, r * 0.8)
-	ctx.fillStyle = '#2e7d32'
-	ctx.beginPath()
-	ctx.arc(x, y - r * 0.3, r, 0, Math.PI * 2)
-	ctx.fill()
+// Everything from here is a blit of a sprite baked once at
+// init (sprites.js). The world is drawn inside the camera's
+// scale, so PX has to be divided back out or a sprite baked at
+// four pixels to the world unit is magnified four times again.
+function blit(ctx, img, x, y, lift) {
+	const w = img.width / PX
+	const h = img.height / PX
+	ctx.drawImage(
+		img, x - w / 2, y - h / 2 - (lift || 0), w, h)
 }
 
-function drawTreeLine(ctx) {
+// Nothing more than a bounds test. The treeline is around five
+// hundred trees and the viewport shows a 240x100 slice of the
+// world, so almost all of them are off screen every frame —
+// cheap to reject, and five hundred drawImage calls is not
+// cheap to make. A spatial index would be more code than this
+// saves at this count.
+function onScreen(x, y, cam) {
+	return Math.abs(x - cam.x) < CULL_X &&
+		Math.abs(y - cam.y) < CULL_Y
+}
+
+function drawTreeLine(ctx, atlas, cam) {
 	for (const tree of TRACK.TREE_LINE) {
-		drawTree(ctx, tree.x, tree.y, tree.r)
+		if (!onScreen(tree.x, tree.y, cam)) continue
+		const img = variant(atlas.tree, tree.x, tree.y)
+		// Scenery is baked at one size and scaled by the
+		// radius the generator gave it, which is what keeps a
+		// treeline from looking stamped out.
+		drawScaled(ctx, img, tree.x, tree.y, tree.r / 15)
 	}
 }
 
-function drawTyre(ctx, x, y, r) {
-	ctx.fillStyle = '#212121'
-	ctx.beginPath()
-	ctx.arc(x, y, r, 0, Math.PI * 2)
-	ctx.fill()
-	ctx.fillStyle = '#616161'
-	ctx.beginPath()
-	ctx.arc(x, y, r * 0.5, 0, Math.PI * 2)
-	ctx.fill()
+function drawScaled(ctx, img, x, y, k) {
+	const w = (img.width / PX) * k
+	const h = (img.height / PX) * k
+	ctx.drawImage(img, x - w / 2, y - h / 2, w, h)
 }
 
-function drawBarrel(ctx, x, y, r) {
-	ctx.fillStyle = '#ef6c00'
-	ctx.fillRect(x - r, y - r, r * 2, r * 2)
-	ctx.fillStyle = '#4e342e'
-	ctx.fillRect(x - r, y - r * 0.3, r * 2, r * 0.3)
-}
-
-function drawBuilding(ctx, x, y, r) {
-	ctx.fillStyle = '#6d6d78'
-	ctx.fillRect(x - r, y - r, r * 2, r * 2)
-	ctx.fillStyle = '#4a4a52'
-	ctx.fillRect(x - r, y - r, r * 2, r * 0.35)
-	ctx.fillStyle = '#ffd54f'
-	const windowSize = r * 0.3
-	for (const wx of [-r * 0.5, r * 0.5]) {
-		for (const wy of [-r * 0.1, r * 0.5]) {
-			ctx.fillRect(
-				x + wx - windowSize / 2,
-				y + wy - windowSize / 2,
-				windowSize, windowSize)
-		}
-	}
-}
-
+// Water is still painted rather than baked: it is a flat
+// surface seen from directly above, which is the one case
+// where a solid buys nothing at all over a filled ellipse.
 function drawWater(ctx, x, y, r) {
-	ctx.fillStyle = '#2196f3'
+	ctx.fillStyle = '#1b5e9e'
 	ctx.beginPath()
 	ctx.ellipse(x, y, r, r * 0.7, 0, 0, Math.PI * 2)
 	ctx.fill()
-	ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'
+	ctx.strokeStyle = 'rgba(190, 225, 255, 0.35)'
+	ctx.lineWidth = 1
 	ctx.beginPath()
-	ctx.ellipse(
-		x, y, r * 0.6, r * 0.4, 0, 0, Math.PI * 2)
+	ctx.ellipse(x, y, r * 0.6, r * 0.4, 0, 0, Math.PI * 2)
 	ctx.stroke()
 }
 
-function drawHardObstacle(ctx, obstacle) {
-	const { x, y, r, type } = obstacle
-	if (type === 'tyre') drawTyre(ctx, x, y, r)
-	else if (type === 'barrel') drawBarrel(ctx, x, y, r)
-	else if (type === 'building') drawBuilding(ctx, x, y, r)
-	else drawTree(ctx, x, y, r)
+const SPRITE_FOR = {
+	tyre: ['tyre', 4], barrel: ['barrel', 4.5],
+	building: ['building', 20], tree: ['tree', 15],
 }
 
-function drawObstacles(ctx) {
-	for (const obstacle of TRACK.HARD_OBSTACLES) {
-		drawHardObstacle(ctx, obstacle)
-	}
+function drawHardObstacle(ctx, atlas, o) {
+	const [kind, baseR] = SPRITE_FOR[o.type] || SPRITE_FOR.tree
+	drawScaled(
+		ctx, variant(atlas[kind], o.x, o.y),
+		o.x, o.y, o.r / baseR)
+}
+
+function drawObstacles(ctx, atlas, cam) {
 	for (const hazard of TRACK.WATER_HAZARDS) {
+		if (!onScreen(hazard.x, hazard.y, cam)) continue
 		drawWater(ctx, hazard.x, hazard.y, hazard.r)
 	}
+	for (const o of TRACK.HARD_OBSTACLES) {
+		if (!onScreen(o.x, o.y, cam)) continue
+		drawHardObstacle(ctx, atlas, o)
+	}
+}
+
+function drawCarSprite(ctx, car, colours) {
+	blit(ctx, frameFor(carRing(colours), car.facing),
+		car.x, car.y)
 }
 
 function wedgePoint(table, angle) {
@@ -451,26 +444,44 @@ function drawWedges(ctx) {
 	}
 }
 
-function drawWorld(ctx, state) {
-	drawTreeLine(ctx)
+// The ground is still painted, not baked: road, kerbs, grass
+// and markings are flat surfaces seen from directly above, and
+// a solid would give them nothing a fill does not. Only the
+// things that stand up off it are sprites.
+function drawWorld(ctx, state, atlas, cam) {
 	drawTrackRing(ctx, TRACK.OUTER_RADIUS, '#555')
 	drawTrackRing(ctx, TRACK.INNER_RADIUS, '#3e8e41')
 	drawRumbleRing(ctx, OUTER_RUMBLE)
 	drawRumbleRing(ctx, INNER_RUMBLE)
 	drawWedges(ctx)
-	drawObstacles(ctx)
 	drawStartGrid(ctx)
 	drawStartLine(ctx)
-	drawRivals(ctx, state.rivals)
-	drawCar(ctx, state, PLAYER_COLOURS)
+	// The treeline stands outside the boundary, so it goes
+	// down after the road rather than before it — a tree is
+	// taller than the kerb it overhangs.
+	drawTreeLine(ctx, atlas.scenery, cam)
+	drawObstacles(ctx, atlas.scenery, cam)
+	drawRivals(ctx, state.rivals, drawCarSprite)
+	drawCarSprite(ctx, state, PLAYER_COLOURS)
 }
 
 // Dusky evening: dim everything down except two headlight cones
 // ahead of the car, where the normal daylight colors underneath
 // show through undimmed (not brightened — restored, not washed
 // out) with a soft fade back to full dusk at each beam's reach.
-const DUSK_COLOR = 'rgba(18, 22, 48, 0.55)'
+// 0.45, not the 0.55 this was when everything on the ground
+// was a flat fill. A baked mesh carries its own light and
+// shade, and dimming it by more than half flattens that back
+// out — the whole point of the sprites is the contrast across
+// a surface, and the dusk was eating it.
+const DUSK_COLOR = 'rgba(18, 22, 48, 0.45)'
 const DUSK_CLEAR = 'rgba(18, 22, 48, 0)'
+
+// Restoring the daylight colours inside the beam says "not
+// dimmed here". It does not say "lit from here" — for that the
+// beam has to add its own colour, which is what this is. Added
+// rather than painted over, because a lamp is emissive.
+const BEAM_WASH = 'rgba(255, 214, 140, 0.16)'
 const BEAM_SPREAD = deg(18)
 const BEAM_LENGTH = 85
 const HEADLIGHT_OFFSET = 2.5
@@ -514,6 +525,15 @@ function revealBeam(ctx, worldCanvas, origin, facing) {
 	beamPath(ctx, origin, facing)
 	ctx.clip()
 	blitWorld(ctx, worldCanvas)
+	const wash = ctx.createRadialGradient(
+		origin.x, origin.y, 0,
+		origin.x, origin.y, BEAM_LENGTH)
+	wash.addColorStop(0, BEAM_WASH)
+	wash.addColorStop(1, DUSK_CLEAR)
+	ctx.globalCompositeOperation = 'lighter'
+	ctx.fillStyle = wash
+	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+	ctx.globalCompositeOperation = 'source-over'
 	const grad = ctx.createRadialGradient(
 		origin.x, origin.y, BEAM_LENGTH * 0.4,
 		origin.x, origin.y, BEAM_LENGTH)
@@ -539,7 +559,7 @@ function drawDusk(ctx, worldCanvas, facing) {
 // it at viewport units instead and letting the blit magnify it
 // would throw away VIEW_SCALE's worth of detail and pixellate
 // the whole scene.
-function renderWorldToOffscreen(world, state) {
+function renderWorldToOffscreen(world, state, atlas) {
 	const wctx = world.ctx
 	wctx.save()
 	wctx.scale(VIEW_SCALE, VIEW_SCALE)
@@ -548,7 +568,7 @@ function renderWorldToOffscreen(world, state) {
 	wctx.translate(
 		VIEWPORT_WIDTH / 2 - state.x,
 		VIEWPORT_HEIGHT / 2 - state.y)
-	drawWorld(wctx, state)
+	drawWorld(wctx, state, atlas, state)
 	wctx.restore()
 }
 
@@ -574,8 +594,8 @@ function drawCarLights(ctx, state) {
 	ctx.restore()
 }
 
-function draw(ctx, world, state) {
-	renderWorldToOffscreen(world, state)
+function draw(ctx, world, state, atlas) {
+	renderWorldToOffscreen(world, state, atlas)
 	ctx.save()
 	ctx.scale(VIEW_SCALE, VIEW_SCALE)
 	blitWorld(ctx, world.canvas)
@@ -643,10 +663,14 @@ function createLoop(step) {
 function createRuntime(ctx, best, audio) {
 	const ref = { state: null }
 	const world = createWorldCanvas()
+	// Baked here, not at module load: js/registry.js imports
+	// every game when the launcher opens, and this is the
+	// first moment Dash is known to have been picked.
+	const atlas = getAtlas()
 
 	function render() {
 		const s = ref.state
-		draw(ctx, world, s)
+		draw(ctx, world, s, atlas)
 		const place = placeOf(s.race, s, s.rivals)
 		drawHud(ctx, s, best, MAX_SPEED, place)
 	}

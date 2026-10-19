@@ -1,7 +1,9 @@
-// One car's size and sprite. The player's car used to be drawn
-// inline in game.js with its reds hardcoded; a field of rivals
-// needs the same sprite in other colours, so it lives here with
-// the palette passed in.
+// One car's size, its driving envelope, and who is driving.
+//
+// It used to hold the sprite too — two fillRects and a blue
+// windscreen. The sprite is a baked mesh now (models.js,
+// sprites.js); what is left here is the numbers everything
+// else agrees on.
 
 export const CAR_LENGTH = 16
 export const CAR_WIDTH = 9
@@ -21,25 +23,6 @@ export const MAX_REVERSE = -80
 export const FRICTION = 0.6
 export const OFF_TRACK_DRAG = 2.2
 export const TURN_RATE = 2.6
-
-// `facing` rather than heading: the two come apart whenever a
-// car is pointing somewhere other than where it is going.
-export function drawCar(ctx, car, colours) {
-	ctx.save()
-	ctx.translate(car.x, car.y)
-	ctx.rotate(car.facing)
-	ctx.fillStyle = colours.shell
-	ctx.fillRect(
-		-CAR_LENGTH / 2, -CAR_WIDTH / 2,
-		CAR_LENGTH, CAR_WIDTH)
-	ctx.fillStyle = colours.body
-	ctx.fillRect(
-		-CAR_LENGTH / 2 + 2, -CAR_WIDTH / 2 + 1,
-		CAR_LENGTH - 6, CAR_WIDTH - 2)
-	ctx.fillStyle = '#90caf9'
-	ctx.fillRect(1, -CAR_WIDTH / 2 + 2, 4, CAR_WIDTH - 4)
-	ctx.restore()
-}
 
 export const PLAYER_COLOURS = {
 	shell: '#b71c1c',

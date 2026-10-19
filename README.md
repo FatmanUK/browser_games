@@ -140,7 +140,9 @@ css/style.css           styling
 js/app.js               launcher logic: render grid, mount/unmount
 js/registry.js          the list of registered games
 games/<slug>/game.js    one module per game (the game contract)
-games/_shared/          chrome.js (title/buttons sidebar),
+games/_shared/          art.js + mesh.js + bake.js (the
+                        fake-3D sprite pipeline),
+                        chrome.js (title/buttons sidebar),
                         hud.js (shared game window + canvas
                         HUD drawing), storage.js (localStorage
                         high scores), audio.js (Web Audio
@@ -155,11 +157,14 @@ games/pacman/           Maze Muncher (+ audio.js/hud.js and
 games/racer/            Dash (+ audio.js, same pattern;
                         car.js/geom.js the car and the track
                         geometry, rivals.js the AI field,
-                        race.js the countdown/laps/places;
+                        race.js the countdown/laps/places,
+                        view.js the camera, models.js +
+                        sprites.js the baked art;
                         track-data.js is generated, see
                         tools/generate_track.py)
-games/beltbreaker/      Belt Breaker (art.js/mesh.js/rocks.js/
-                        craft.js/sprites.js pre-render the art;
+games/beltbreaker/      Belt Breaker (rocks.js/craft.js/
+                        sprites.js pre-render the art over
+                        games/_shared/mesh.js;
                         common.js/belt.js/tunnel.js/boss.js/
                         world.js the rules; render*.js + hud.js
                         the drawing; audio.js + samples.js +

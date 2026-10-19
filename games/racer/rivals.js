@@ -13,7 +13,7 @@
 
 import {
 	CAR_LENGTH, CAR_WIDTH, ACCEL, BRAKE, MAX_SPEED, TURN_RATE,
-	FRICTION, drawCar, RIVALS,
+	FRICTION, RIVALS,
 } from './car.js'
 import {
 	TRAVEL_DIR, angleOf, angleDelta, trackBandPoint, bandFrac,
@@ -176,9 +176,12 @@ export function resolveContacts(player, rivals) {
 	return hitPlayer
 }
 
-export function drawRivals(ctx, rivals) {
+// The draw function is passed in rather than imported: the
+// sprite blit lives in game.js with the rest of the drawing,
+// and rivals.js importing it back would be a cycle.
+export function drawRivals(ctx, rivals, drawOne) {
 	for (const rival of rivals) {
-		drawCar(ctx, rival, rival.colours)
+		drawOne(ctx, rival, rival.colours)
 	}
 }
 

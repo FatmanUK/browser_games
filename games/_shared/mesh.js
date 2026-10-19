@@ -193,19 +193,26 @@ export function box(hx, hy, hz) {
 	]
 }
 
-// A prism about the Y axis — a wheel lying on its side, a
-// barrel stood up. `sides` planes round the rim plus two caps.
-// Eight is plenty at the size a wheel is drawn; more planes
-// cost bake time and buy nothing.
-export function prism(r, hy, sides) {
+// A prism: `sides` planes round the rim plus two caps. `axis`
+// is which way it points — 1 for Y (a barrel stood on end), 2
+// for Z (a wheel, whose axle lies across the car). Eight sides
+// is plenty at the size these are drawn; more costs bake time
+// and buys nothing you can see.
+export function prism(r, half, sides, axis = 1) {
+	const cap = [0, 0, 0]
+	cap[axis] = 1
 	const planes = [
-		{ n: [0, 1, 0], d: hy }, { n: [0, -1, 0], d: hy },
+		{ n: cap, d: half },
+		{ n: cap.map((v) => -v), d: half },
 	]
+	const u = (axis + 1) % 3
+	const v = (axis + 2) % 3
 	for (let i = 0; i < sides; i++) {
 		const a = (i / sides) * Math.PI * 2
-		planes.push({
-			n: [Math.cos(a), 0, Math.sin(a)], d: r,
-		})
+		const n = [0, 0, 0]
+		n[u] = Math.cos(a)
+		n[v] = Math.sin(a)
+		planes.push({ n, d: r })
 	}
 	return planes
 }
@@ -227,19 +234,6 @@ export function cone(r, h, sides) {
 			d: r * Math.cos(slant),
 		})
 	}
-	return planes
-}
-
-// A box with its top sliced away along +X: a ramp, high at
-// -X and falling to `rise` of its height by +X. The slant
-// replaces the box's top plane rather than joining it, or the
-// two would fight over the same surface.
-export function wedge(hx, hy, hz, rise) {
-	const planes = box(hx, hy, hz).filter(
-		(p) => !(p.n[2] === 1))
-	const drop = hz * (1 - rise)
-	const n = unit([drop, 0, 2 * hx])
-	planes.push({ n, d: -n[0] * hx + n[2] * hz })
 	return planes
 }
 
