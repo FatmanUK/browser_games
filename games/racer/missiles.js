@@ -72,9 +72,14 @@ export function updatePickups(state, dt, fx) {
 
 const silent = new Proxy({}, { get: () => () => {} })
 
+// And a car that is home does not shoot either. The same
+// rule read the other way round: a rival coasting to a stop
+// with the flag out has no AI running and no reason to be in
+// the fight, and it could still pick off the cars behind it
+// that were racing for the places it had already given up.
 export function canFire(car) {
 	return car.ammo > 0 && car.reload <= 0 &&
-		!car.out && car.wrecked <= 0
+		!car.out && !car.finished && car.wrecked <= 0
 }
 
 export function fire(state, car, fx) {
@@ -105,6 +110,10 @@ export function fire(state, car, fx) {
 // you.
 export function wreck(car, fx) {
 	if (car.wrecked > 0 || car.invuln > 0 || car.out) return
+	// Guarded here as well as in `hits`, because this is
+	// what actually takes the life and there is more than
+	// one way to reach it.
+	if (car.finished) return
 	car.lives--
 	car.wrecked = WRECK_TIME
 	car.speed = 0
@@ -147,8 +156,22 @@ export function updateWrecks(state, dt) {
 	}
 }
 
+// A car that is home cannot be hit. Its race is over and its
+// place is recorded, so there is nothing left to take off it
+// — and there was a way to take something anyway: wait for
+// everyone to finish, then drive round shooting the parked
+// cars until they ran out of lives. Out is not finished, so
+// each one dropped off the count the player's own place is
+// read from, and third became first without overtaking
+// anybody.
+//
+// It was not only the scoreboard. A wrecked car respawns, so
+// a car that had been stopped at the line for half a minute
+// would spin, vanish, and reappear at the start.
 function hits(m, car) {
-	if (car === m.owner || car.out) return false
+	if (car === m.owner || car.out || car.finished) {
+		return false
+	}
 	if (car.wrecked > 0 || car.invuln > 0) return false
 	const d = Math.hypot(m.x - car.x, m.y - car.y)
 	return d <= RADIUS + CAR_LENGTH / 2
@@ -192,13 +215,13 @@ const RANGE = 170
 // Nearest wins now, which is the same rule for everyone
 // and is also the shot more likely to land.
 //
-// A car that is spinning, or just back from a respawn,
-// cannot be hit (see `hits`), so it is not worth a
-// missile either.
+// A car that is spinning, just back from a respawn, or home
+// cannot be hit (see `hits`), so it is not worth a missile
+// either.
 function targetFor(state, r) {
 	let best = null
 	for (const car of [state, ...state.rivals]) {
-		if (car === r || car.out) continue
+		if (car === r || car.out || car.finished) continue
 		if (car.wrecked > 0 || car.invuln > 0) continue
 		const dx = car.x - r.x, dy = car.y - r.y
 		const d = Math.hypot(dx, dy)

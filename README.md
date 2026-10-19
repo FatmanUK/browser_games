@@ -107,7 +107,10 @@ files in its own `music/` folder — see
   preference. Being hit wrecks you — a spin, a couple of
   seconds, then back in at the last checkpoint a life down and
   a long way back, still carrying whatever you had loaded. At
-  zero lives your race is over where you stand. The road keeps
+  zero lives your race is over where you stand. Cross the line
+  for the last time and you are out of the fight both ways:
+  nothing can hit you and you cannot shoot anybody, because
+  your place is already recorded and so is theirs. The road keeps
   a record of all this: a scorch mark where a missile went off,
   and rubber wherever a car pulled away hard or stood on the
   brakes. Neither fades: the marks are there for the rest of
