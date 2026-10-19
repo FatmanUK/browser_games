@@ -11,7 +11,7 @@ import { buildWindow } from '../_shared/hud.js'
 import { loadNumber, saveNumber } from '../_shared/storage.js'
 import { setupSound } from './audio.js'
 import { getAtlas } from './sprites.js'
-import { draw, createWorldCanvas } from './render.js'
+import { draw, createWorldCanvas, TIMES } from './render.js'
 import {
 	CAR_LENGTH, ACCEL, BRAKE, MAX_SPEED, MAX_REVERSE,
 	FRICTION, OFF_TRACK_DRAG, TURN_RATE,
@@ -62,6 +62,14 @@ const KEY_DIRS = {
 // already driving the car.
 const LEVEL_KEYS = { '[': -1, ']': 1 }
 
+// The time of day is rolled per run, not derived from the
+// seed: a track you have raced before at dusk should be able
+// to surprise you in the dark, and a level you cannot get
+// past should not always look the same while you learn it.
+function pickTime() {
+	return TIMES[Math.floor(Math.random() * TIMES.length)]
+}
+
 function createState(track, level, unlocked) {
 	const pole = track.GRID_SLOTS[0]
 	const rivals = createRivals(track)
@@ -97,6 +105,7 @@ function createState(track, level, unlocked) {
 		pickups: createPickups(track),
 		missiles: [],
 		marks: createMarks(),
+		light: pickTime(),
 		scrubRate: 0,
 		scrubLaid: null,
 		keys: new Set(),

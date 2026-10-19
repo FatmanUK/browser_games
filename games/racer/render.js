@@ -9,9 +9,11 @@
 // The ground — road, kerbs, grass, markings, sand — is painted
 // here as flat 2D geometry. Everything that stands up off it
 // is a sprite baked once at init (sprites.js). Both go onto an
-// offscreen canvas first, which drawDusk then dims and the
-// headlights reveal; see revealBeam for why that has to be a
-// per-beam paste rather than a cutout.
+// offscreen canvas first, in daylight. What happens to it
+// after that is the time of day: in the morning nothing, and
+// otherwise drawNightfall dims it and the headlights reveal
+// the parts they reach — see revealBeam for why that has to
+// be a per-beam paste rather than a cutout.
 
 import { WIDTH, HEIGHT } from '../_shared/hud.js'
 import {
@@ -663,17 +665,45 @@ function drawWorld(ctx, state, atlas, cam) {
 	drawMissiles(ctx, state)
 }
 
-// Dusky evening: dim everything down except two headlight cones
-// ahead of the car, where the normal daylight colors underneath
-// show through undimmed (not brightened — restored, not washed
-// out) with a soft fade back to full dusk at each beam's reach.
-// 0.45, not the 0.55 this was when everything on the ground
-// was a flat fill. A baked mesh carries its own light and
-// shade, and dimming it by more than half flattens that back
-// out — the whole point of the sprites is the contrast across
-// a surface, and the dusk was eating it.
-const DUSK_COLOR = 'rgba(18, 22, 48, 0.45)'
-const DUSK_CLEAR = 'rgba(18, 22, 48, 0)'
+// The time of day, picked per run (game.js).
+//
+// The world is drawn in daylight and then a fill goes over the
+// top with the headlamps cut back out of it, so morning is not
+// a third rendering path — it is the absence of the fill, and
+// costs nothing at all.
+//
+// Evening is 0.45, not the 0.55 it was when everything on the
+// ground was a flat fill. A baked mesh carries its own light
+// and shade, and dimming it by more than half flattens that
+// back out — the whole point of the sprites is the contrast
+// across a surface, and the dusk was eating it.
+//
+// Night is 0.88 of something much nearer black, which is dark
+// enough that the beams are the only way to read the road.
+// `pool` is the lit circle a lamp throws on the ground right
+// in front of it, and only night has one: in the dusk there
+// is enough light left that a pool would not show, and at
+// night without one the beams start from nothing.
+const LIGHT = {
+	morning: null,
+	evening: {
+		fill: 'rgba(18, 22, 48, 0.45)',
+		clear: 'rgba(18, 22, 48, 0)',
+		pool: 0,
+	},
+	night: {
+		fill: 'rgba(5, 6, 18, 0.88)',
+		clear: 'rgba(5, 6, 18, 0)',
+		pool: 9,
+	},
+}
+
+export const TIMES = Object.keys(LIGHT)
+
+function lightFor(state) {
+	return LIGHT[state.light] !== undefined
+		? LIGHT[state.light] : LIGHT.evening
+}
 
 // Restoring the daylight colours inside the beam says "not
 // dimmed here". It does not say "lit from here" — for that the
@@ -690,13 +720,14 @@ const HEADLIGHT_OFFSET = 2.5
 // layering independent reveals rather than cutting both wedges
 // out of one dusk fill (evenodd parity breaks on overlapping
 // holes: a point inside both wedges gets toggled back "outside").
-function headlightOrigins(facing) {
+function headlightOrigins(facing, offset) {
 	const frontDist = CAR_LENGTH / 2
 	const perp = facing + Math.PI / 2
 	const cx = VIEWPORT_WIDTH / 2 + Math.cos(facing) * frontDist
 	const cy = VIEWPORT_HEIGHT / 2 + Math.sin(facing) * frontDist
-	const ox = Math.cos(perp) * HEADLIGHT_OFFSET
-	const oy = Math.sin(perp) * HEADLIGHT_OFFSET
+	const off = offset === undefined ? HEADLIGHT_OFFSET : offset
+	const ox = Math.cos(perp) * off
+	const oy = Math.sin(perp) * off
 	return [
 		{ x: cx - ox, y: cy - oy },
 		{ x: cx + ox, y: cy + oy },
@@ -717,7 +748,7 @@ function beamPath(ctx, origin, facing) {
 // entirely to its own clip, so a second beam's reveal just lays
 // over this one wherever they overlap — always correct, however
 // much the wedges intersect, unlike a shared fill-rule cutout.
-function revealBeam(ctx, worldCanvas, origin, facing) {
+function revealBeam(ctx, worldCanvas, origin, facing, light) {
 	ctx.save()
 	ctx.beginPath()
 	beamPath(ctx, origin, facing)
@@ -727,7 +758,7 @@ function revealBeam(ctx, worldCanvas, origin, facing) {
 		origin.x, origin.y, 0,
 		origin.x, origin.y, BEAM_LENGTH)
 	wash.addColorStop(0, BEAM_WASH)
-	wash.addColorStop(1, DUSK_CLEAR)
+	wash.addColorStop(1, light.clear)
 	ctx.globalCompositeOperation = 'lighter'
 	ctx.fillStyle = wash
 	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
@@ -735,23 +766,63 @@ function revealBeam(ctx, worldCanvas, origin, facing) {
 	const grad = ctx.createRadialGradient(
 		origin.x, origin.y, BEAM_LENGTH * 0.4,
 		origin.x, origin.y, BEAM_LENGTH)
-	grad.addColorStop(0, DUSK_CLEAR)
-	grad.addColorStop(1, DUSK_COLOR)
+	grad.addColorStop(0, light.clear)
+	grad.addColorStop(1, light.fill)
 	ctx.fillStyle = grad
 	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
 	ctx.restore()
 }
 
-function drawDusk(ctx, worldCanvas, facing) {
-	ctx.fillStyle = DUSK_COLOR
+// The two bright circles a pair of lamps throws on the ground
+// at night. Drawn after the beams and added rather than
+// painted, because a lamp is emissive — and drawn a little
+// ahead of the lamp itself so the pool sits on the road in
+// front of the car rather than under its own bonnet.
+// Far enough ahead, and dim enough, to leave the car itself
+// out of the glare: at 9 units and half alpha the two pools
+// met over the bonnet and the player's own car was the one
+// thing on screen you could not see.
+//
+// Thrown wider apart than the lamps that cast them, because
+// at the lamps' own 5 units apart two circles of any useful
+// size are one circle. A beam spreads on its way to the
+// ground, so the pools belong further out than their lamps
+// as well as further forward.
+const POOL_AHEAD = 15
+const POOL_OFFSET = 7
+const POOL_CORE = 'rgba(255, 240, 205, 0.34)'
+const POOL_EDGE = 'rgba(255, 228, 170, 0)'
+
+function drawPool(ctx, origin, facing, r) {
+	const x = origin.x + Math.cos(facing) * POOL_AHEAD
+	const y = origin.y + Math.sin(facing) * POOL_AHEAD
+	const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+	g.addColorStop(0, POOL_CORE)
+	g.addColorStop(1, POOL_EDGE)
+	ctx.fillStyle = g
+	ctx.beginPath()
+	ctx.arc(x, y, r, 0, Math.PI * 2)
+	ctx.fill()
+}
+
+function drawNightfall(ctx, worldCanvas, facing, light) {
+	ctx.fillStyle = light.fill
 	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
-	for (const origin of headlightOrigins(facing)) {
-		revealBeam(ctx, worldCanvas, origin, facing)
+	const lamps = headlightOrigins(facing)
+	for (const origin of lamps) {
+		revealBeam(ctx, worldCanvas, origin, facing, light)
 	}
+	if (!light.pool) return
+	ctx.save()
+	ctx.globalCompositeOperation = 'lighter'
+	for (const o of headlightOrigins(facing, POOL_OFFSET)) {
+		drawPool(ctx, o, facing, light.pool)
+	}
+	ctx.restore()
 }
 
 // Renders world-space (true daylight colors) to its own
-// offscreen canvas so drawDusk can paste pieces of it back in
+// offscreen canvas so drawNightfall can paste pieces back in
 // per-beam — see revealBeam. It's a full-size canvas with
 // VIEW_SCALE baked in, exactly like the visible one: rendering
 // it at viewport units instead and letting the blit magnify it
@@ -777,7 +848,7 @@ function blitWorld(ctx, worldCanvas) {
 		worldCanvas, 0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
 }
 
-// The rivals' lamps go on over the dusk fill, not under it: a
+// The rivals' lamps go on over the fill, not under it: a
 // light is emissive, so dimming it with the scenery it sits on
 // would hide the one thing that makes a car visible out there.
 // Without this a rival behind you, or alongside but outside the
@@ -794,11 +865,17 @@ function drawCarLights(ctx, state) {
 
 export function draw(ctx, world, state, atlas) {
 	renderWorldToOffscreen(world, state, atlas)
+	const light = lightFor(state)
 	ctx.save()
 	ctx.scale(VIEW_SCALE, VIEW_SCALE)
 	blitWorld(ctx, world.canvas)
-	drawDusk(ctx, world.canvas, state.facing)
-	drawCarLights(ctx, state)
+	// In the morning there is nothing over the top, so there
+	// is nothing for a lamp to show against either: headlamps
+	// belong to the times of day that need them.
+	if (light) {
+		drawNightfall(ctx, world.canvas, state.facing, light)
+		drawCarLights(ctx, state)
+	}
 	ctx.restore()
 }
 

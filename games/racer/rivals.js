@@ -124,8 +124,32 @@ const RUN_UP = 220
 // seconds a race. One driver you cannot trust over a jump is
 // the point — a thinner margin still made it three in four
 // and he stopped finishing.
+// A driver who came up short goes at it harder next time.
+//
+// Without this a rival makes the same mistake for the whole
+// race, because it is deterministic: a margin five units shy
+// of the ramp is five units shy on every lap. On five levels
+// in two hundred that is exactly what happened — and since
+// the lap runs over the ramp, a car that never clears it
+// never completes a lap at all. Drake drove level 71 for two
+// hundred seconds and finished none of them, lapping between
+// the ramp and the road under it.
+//
+// Capped because past a certain point the problem is not
+// nerve: the hardest jump in two hundred levels needs 162 of
+// the 225 the car has, so a driver that cannot make it on
+// this much is being held up by the corner before it.
+const TRY_HARDER = 0.035
+const MARGIN_CAP = 1.08
+
+function jumpMargin(rival) {
+	return Math.min(MARGIN_CAP,
+		0.905 + rival.skill.nerve * 0.195 +
+			(rival.dropped || 0) * TRY_HARDER)
+}
+
 function jumpTarget(track, rival) {
-	const margin = 0.905 + rival.skill.nerve * 0.195
+	const margin = jumpMargin(rival)
 	let want = 0
 	for (const j of track.JUMPS) {
 		const d = deltaS(track, rival.s, j.s0)

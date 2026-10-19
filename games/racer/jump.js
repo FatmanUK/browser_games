@@ -136,6 +136,9 @@ function dropThrough(track, car, a, j) {
 	car.angle = headingAt(track, got.s)
 	car.facing = car.angle
 	car.speed *= 0.25
+	// Counted so a driver can learn from it. Nothing here
+	// reads it; rivals.js does.
+	car.dropped = (car.dropped || 0) + 1
 }
 
 export function isAirborne(car) {

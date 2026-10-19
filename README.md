@@ -103,17 +103,22 @@ files in its own `music/` folder — see
   of them was passed inside the track's boundary — cutting
   covers the same ground the long way round does as far as any
   counter can tell, so being there is what gets checked. Amber chevrons warn of the sharper corners,
-  pointing the way they bend, painted on the tarmac in white. Their lamps are drawn over the dusk rather than
-  under it, so a car outside your headlights is still
-  something you can see coming. Crossing the line for the
+  pointing the way they bend, painted on the tarmac in white.
+  Their lamps are drawn over the dimming rather than under it,
+  so a car outside your headlights is still something you can
+  see coming. Crossing the line for the
   third time ends your race with a finishing place. Win one
   and the next track opens; `[` and `]` step between the ones
   you have opened, and each keeps its own best lap. Progress
-  is one number in `localStorage`, because a level is a seed. Dusk
-  setting, with the camera zoomed in and following the car (you
-  can't see the whole track at once) and twin headlight beams
-  cutting through the dim to light up whatever's ahead with its
-  true colours, not a white wash. Title and buttons overlay the
+  is one number in `localStorage`, because a level is a seed.
+  Every run rolls a time of day — bright morning, dusk, or
+  pitch dark — with the camera zoomed in and following the car
+  (you can't see the whole track at once). Morning is plain
+  daylight and the headlamps stay off; dusk and night dim the
+  world and twin beams cut through it to light whatever's
+  ahead with its true colours, not a white wash, and at night
+  each lamp also throws a bright circle on the road in front
+  of it. Title and buttons overlay the
   top of the canvas rather than sitting beside it, and the
   Lap/Speed/Best lap meters are drawn on the canvas itself as a
   dashboard, so the canvas can fill the window. Bounded by
