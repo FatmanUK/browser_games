@@ -119,7 +119,17 @@ function drawLights(ctx, race) {
 	banner(ctx, 'GO!', 84, LIGHTS_Y, '#9dffb0')
 }
 
-function drawResult(ctx, race) {
+function resultLine(state, race) {
+	if (race.place !== 1) {
+		return 'WIN IT TO OPEN THE NEXT TRACK'
+	}
+	if (state.unlocked > state.level) {
+		return `TRACK ${state.level + 1} OPEN — ] TO GO THERE`
+	}
+	return 'PRESS NEW GAME TO RACE AGAIN'
+}
+
+function drawResult(ctx, state, race) {
 	if (race.phase !== 'finished') return
 	ctx.fillStyle = 'rgba(4,10,22,0.55)'
 	ctx.fillRect(0, 0, W, H)
@@ -128,7 +138,7 @@ function drawResult(ctx, race) {
 		H / 2 - 4, race.place === 1 ? '#ffe28a' : '#eaf6ff')
 	label(
 		ctx, W / 2, H / 2 + 28,
-		'PRESS NEW GAME TO RACE AGAIN', 'center')
+		resultLine(state, race), 'center')
 }
 
 // The top-left cluster plus the speed block. Split out of
@@ -156,6 +166,14 @@ function drawMeters(ctx, state, best, maxSpeed, place) {
 		ctx, W - 20, 54, 'BEST LAP',
 		formatLap(best.value), 22, 'right')
 
+	// Which track, and how many are open. The brackets are
+	// the keys that step it, spelled out rather than left to
+	// be discovered.
+	label(
+		ctx, W - 20, 86,
+		`[ TRACK ${state.level} / ${state.unlocked} ]`,
+		'right')
+
 	readout(
 		ctx, 20, H - 46, 'SPEED',
 		Math.round(state.speed), 26)
@@ -175,6 +193,6 @@ export function drawHud(ctx, state, best, maxSpeed, place) {
 		'ARROWS / WASD TO DRIVE', 'right')
 
 	drawLights(ctx, state.race)
-	drawResult(ctx, state.race)
+	drawResult(ctx, state, state.race)
 	ctx.restore()
 }

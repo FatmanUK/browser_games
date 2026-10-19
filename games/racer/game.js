@@ -30,6 +30,9 @@ import {
 } from './race.js'
 import { drawHud } from './hud.js'
 import { buildTrack } from './track.js'
+import {
+	seedForLevel, loadUnlocked, unlock, stepLevel,
+} from './progress.js'
 
 // Keyed by the track's own seed so each track keeps its own
 // best lap rather than sharing one score across whatever
@@ -38,11 +41,7 @@ function bestKey(track) {
 	return `bg-dash-bestlap-${track.TRACK_ID}`
 }
 
-// The seed a level maps to. Deterministic, so a best lap keeps
-// belonging to the track it was set on.
-export function seedForLevel(level) {
-	return (level * 2654435761) >>> 0
-}
+export { seedForLevel }
 
 const KEY_DIRS = {
 	ArrowUp: 'accel', w: 'accel', W: 'accel',
@@ -51,10 +50,17 @@ const KEY_DIRS = {
 	ArrowRight: 'right', d: 'right', D: 'right',
 }
 
-function createState(track) {
+// Stepping the ladder. Brackets rather than anything cleverer
+// because every other key on that half of the keyboard is
+// already driving the car.
+const LEVEL_KEYS = { '[': -1, ']': 1 }
+
+function createState(track, level, unlocked) {
 	const pole = track.GRID_SLOTS[0]
 	return {
 		track,
+		level,
+		unlocked,
 		x: pole.x,
 		y: pole.y,
 		// `angle` is the true heading (travel direction);
@@ -255,6 +261,13 @@ function update(state, dt, best, audio) {
 	if (resolveContacts(state, state.rivals)) audio.bump()
 	if (checkFinishes(state.track, race, state, state.rivals)) {
 		audio.finish()
+		// Winning is what opens the next one. Finishing
+		// second on a track you have already beaten must not
+		// quietly take the ladder back, which is why unlock()
+		// only ever moves up.
+		if (race.place === 1) {
+			state.unlocked = unlock(state.level + 1)
+		}
 	}
 }
 
@@ -262,9 +275,17 @@ function update(state, dt, best, audio) {
 // Sound/Music toggles and the Laps/Speed/Best lap meters sit in
 // a translucent bar overlaid on top of the canvas itself — not
 // beside or above it — so the canvas can be the whole window.
-function createInput(ref, audio) {
+function createInput(ref, audio, start) {
 	function onKeyDown(e) {
 		audio.unlock()
+		const step = LEVEL_KEYS[e.key]
+		if (step !== undefined) {
+			const to = stepLevel(
+				ref.level, step, ref.state.unlocked)
+			if (to !== ref.level) start(to)
+			e.preventDefault()
+			return
+		}
 		const action = KEY_DIRS[e.key]
 		if (!action) return
 		ref.state.keys.add(action)
@@ -307,8 +328,23 @@ function createLoop(step) {
 	}
 }
 
-function createRuntime(ctx, track, best, audio) {
-	const ref = { state: null }
+// The track and the best-lap record both belong to the level,
+// so both are rebuilt when it changes rather than being handed
+// in once. Building a track is about a millisecond, so there
+// is nothing to cache.
+// Everything that belongs to a level: its track, its stored
+// best lap, and a fresh race on it.
+function enterLevel(ref, best, level) {
+	const unlocked = loadUnlocked()
+	ref.level = Math.min(level, unlocked)
+	const track = buildTrack(seedForLevel(ref.level))
+	best.value = loadNumber(bestKey(track), 0)
+	ref.state = createState(track, ref.level, unlocked)
+}
+
+function createRuntime(ctx, audio) {
+	const ref = { state: null, level: loadUnlocked() }
+	const best = { value: 0 }
 	const world = createWorldCanvas()
 	// Baked here, not at module load: js/registry.js imports
 	// every game when the launcher opens, and this is the
@@ -326,14 +362,15 @@ function createRuntime(ctx, track, best, audio) {
 		update(ref.state, dt, best, audio)
 		render()
 	})
-	const input = createInput(ref, audio)
+	const start = (level) => {
+		enterLevel(ref, best, level)
+		loop.reset()
+		render()
+	}
+	const input = createInput(ref, audio, start)
 
 	return {
-		start() {
-			ref.state = createState(track)
-			loop.reset()
-			render()
-		},
+		start: () => start(ref.level),
 		onKeyDown: input.onKeyDown,
 		onKeyUp: input.onKeyUp,
 		onBlur: input.onBlur,
@@ -365,22 +402,17 @@ export default {
 			})
 		const audio = setupSound(controlsRow)
 
-		// Level 1 for now; the ladder arrives with the
-		// progression. A track that cannot be built at all
-		// would leave nothing to drive on, so the seed walk
-		// in buildTrack has to be what guarantees one.
-		const track = buildTrack(seedForLevel(1))
-		const best = {
-			value: loadNumber(bestKey(track), 0),
-		}
 		runtime = createRuntime(
-			canvas.getContext('2d'), track, best, audio)
+			canvas.getContext('2d'), audio)
 
 		canvas.addEventListener('keydown', runtime.onKeyDown)
 		canvas.addEventListener('keyup', runtime.onKeyUp)
 		window.addEventListener('blur', runtime.onBlur)
 		canvas.focus()
+		// Open on the furthest track reached, which is the
+		// one you were most likely playing last.
 		runtime.start()
+
 
 		this._cleanup = () => {
 			runtime.stop()

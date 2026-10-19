@@ -79,7 +79,10 @@ files in its own `music/` folder — see
   warn of the sharper corners, pointing the way they bend. Their lamps are drawn over the dusk rather than
   under it, so a car outside your headlights is still
   something you can see coming. Crossing the line for the
-  third time ends your race with a finishing place. Dusk
+  third time ends your race with a finishing place. Win one
+  and the next track opens; `[` and `]` step between the ones
+  you have opened, and each keeps its own best lap. Progress
+  is one number in `localStorage`, because a level is a seed. Dusk
   setting, with the camera zoomed in and following the car (you
   can't see the whole track at once) and twin headlight beams
   cutting through the dim to light up whatever's ahead with its
@@ -163,7 +166,8 @@ games/racer/            Dash (+ audio.js, same pattern;
                         race.js the countdown/laps/places,
                         view.js the camera, models.js +
                         sprites.js the baked art, track.js +
-                        spline.js + hazards.js the generator)
+                        spline.js + hazards.js the generator,
+                        progress.js the track ladder)
 games/beltbreaker/      Belt Breaker (rocks.js/craft.js/
                         sprites.js pre-render the art over
                         games/_shared/mesh.js;
