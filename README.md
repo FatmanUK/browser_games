@@ -61,11 +61,10 @@ files in its own `music/` folder — see
   time) rather than ending the game. Has its own "Sound"/"Music"
   toggles, with a replaceable ProTracker module in
   `games/pacman/music/` for the music.
-- **Dash** — a three-lap race against five rivals on a large,
-  randomly generated track (built by
-  `tools/generate_track.py` into
-  `games/racer/track-data.js` — rerun it for a fresh layout),
-  starting from a six-car grid on a straight before the line.
+- **Dash** — a three-lap race against five rivals on a large
+  track generated from a seed when the game loads
+  (`games/racer/track.js`; no track data is committed), from a
+  six-car grid on a straight before the line.
   The lights hold the field until they go out; the rivals
   steer at a point a speed-scaled lookahead further round the
   lap, each on its own line across the road and at its own
@@ -93,8 +92,8 @@ files in its own `music/` folder — see
   than anything else, hauling the car down to a stop fast but
   not instantly), so you only hit one by running wide. Nothing
   is scattered on the track surface itself. Each generated track keeps its
-  own best-lap time. Arrow keys / WASD to drive; the lap counter
-  never decreases. Has its own "Sound"/"Music" toggles, with a
+  own best-lap time, keyed by its seed. Arrow keys / WASD to
+  drive; the lap counter never decreases. Has its own "Sound"/"Music" toggles, with a
   replaceable ProTracker module in `games/racer/music/` for the
   music.
 - **Belt Breaker** — an Asteroids-style rock shoot with a
@@ -132,7 +131,6 @@ See [games/README.md](games/README.md).
 ```
 Containerfile           image for the container (make pod-build)
 tools/dev_server.py     static server: local dev and the container
-tools/generate_track.py generates games/racer/track-data.js
 tools/generate_mod.py   generates each game's music/*.mod
                         and its music-data.js fallback
 index.html              launcher page (game-select grid + viewport)
@@ -159,9 +157,8 @@ games/racer/            Dash (+ audio.js, same pattern;
                         geometry, rivals.js the AI field,
                         race.js the countdown/laps/places,
                         view.js the camera, models.js +
-                        sprites.js the baked art;
-                        track-data.js is generated, see
-                        tools/generate_track.py)
+                        sprites.js the baked art, track.js +
+                        spline.js + hazards.js the generator)
 games/beltbreaker/      Belt Breaker (rocks.js/craft.js/
                         sprites.js pre-render the art over
                         games/_shared/mesh.js;

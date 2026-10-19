@@ -16,9 +16,8 @@ import {
 	FRICTION, RIVALS,
 } from './car.js'
 import {
-	TRAVEL_DIR, angleOf, angleDelta, trackBandPoint, bandFrac,
+	angleOf, angleDelta, trackBandPoint, bandFrac,
 } from './geom.js'
-import * as TRACK from './track-data.js'
 
 export const RIVAL_COUNT = RIVALS.length
 
@@ -34,9 +33,9 @@ const LOOK_PER_SPEED = 0.00042
 const FULL_SHARP = 0.55
 const CORNER_SPEED = 0.42
 
-export function createRivals() {
+export function createRivals(track) {
 	return RIVALS.map((driver, i) => {
-		const slot = TRACK.GRID_SLOTS[i + 1]
+		const slot = track.GRID_SLOTS[i + 1]
 		return {
 			x: slot.x,
 			y: slot.y,
@@ -55,12 +54,12 @@ export function createRivals() {
 
 // Where this rival wants to be pointing: at its lane, a
 // lookahead further round the lap in the direction of travel.
-function aimAngle(rival) {
+function aimAngle(track, rival) {
 	const here = angleOf(rival.x, rival.y)
 	const look = LOOK_BASE +
 		Math.abs(rival.speed) * LOOK_PER_SPEED
 	const target = trackBandPoint(
-		here + TRAVEL_DIR * look, rival.lane)
+		track, here + track.TRAVEL_DIR * look, rival.lane)
 	return Math.atan2(target.y - rival.y, target.x - rival.x)
 }
 
@@ -81,8 +80,8 @@ function steer(rival, dt, sharp, aim) {
 	rival.facing = rival.angle
 }
 
-function drive(rival, dt, drag) {
-	const aim = aimAngle(rival)
+function drive(track, rival, dt, drag) {
+	const aim = aimAngle(track, rival)
 	const sharp = Math.abs(angleDelta(rival.angle, aim))
 	const want = wantedSpeed(rival, sharp, drag)
 	if (rival.speed < want) rival.speed += ACCEL * dt
@@ -93,18 +92,18 @@ function drive(rival, dt, drag) {
 }
 
 // Rivals take the same hazard drag the player does.
-function dragFor(terrain, x, y) {
+function dragFor(track, terrain, x, y) {
 	if (terrain === 'sand') return 3.2
 	if (terrain === 'water') return 2.5
-	const frac = bandFrac(x, y)
+	const frac = bandFrac(track, x, y)
 	return frac < 0 || frac > 1 ? FRICTION * 2.2 : FRICTION
 }
 
 // A rival that has wandered off the road is steered back by its
 // own lookahead, but an obstacle would hold it there forever,
 // so it gets the player's collision response minus the bounce.
-function clearObstacles(rival) {
-	for (const o of TRACK.HARD_OBSTACLES) {
+function clearObstacles(track, rival) {
+	for (const o of track.HARD_OBSTACLES) {
 		const dx = rival.x - o.x
 		const dy = rival.y - o.y
 		const dist = Math.hypot(dx, dy)
@@ -117,27 +116,27 @@ function clearObstacles(rival) {
 	}
 }
 
-function integrate(rival, dt) {
+function integrate(track, rival, dt) {
 	const prev = angleOf(rival.x, rival.y)
 	rival.x += Math.cos(rival.angle) * rival.speed * dt
 	rival.y += Math.sin(rival.angle) * rival.speed * dt
-	clearObstacles(rival)
+	clearObstacles(track, rival)
 	rival.totalAngle += angleDelta(
 		prev, angleOf(rival.x, rival.y))
 }
 
-export function updateRivals(rivals, dt, terrainOf) {
+export function updateRivals(track, rivals, dt, terrainOf) {
 	for (const rival of rivals) {
 		if (rival.finished) {
 			rival.speed -= rival.speed * 2 * dt
-			integrate(rival, dt)
+			integrate(track, rival, dt)
 			continue
 		}
-		drive(
-			rival, dt,
-			dragFor(terrainOf(rival.x, rival.y),
-				rival.x, rival.y))
-		integrate(rival, dt)
+		const drag = dragFor(
+			track, terrainOf(rival.x, rival.y),
+			rival.x, rival.y)
+		drive(track, rival, dt, drag)
+		integrate(track, rival, dt)
 	}
 }
 

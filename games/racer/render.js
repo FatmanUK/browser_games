@@ -22,18 +22,23 @@ import { getAtlas, carRing, frameFor, variant } from './sprites.js'
 import { CAR_LENGTH, CAR_WIDTH, PLAYER_COLOURS } from './car.js'
 import { CENTER, lerpArray, angleOf } from './geom.js'
 import { drawRivals, drawRivalLights } from './rivals.js'
-import * as TRACK from './track-data.js'
-
 function deg(d) {
 	return (d * Math.PI) / 180
 }
 
-function offsetTable(table, inset) {
-	return table.map((r) => r + inset)
+// The rumble strips are the road edges pulled in a little.
+// Derived per track and cached on it: there is more than one
+// track now, and recomputing two 720-entry tables every frame
+// to draw the same two rings would be silly.
+function rumbles(track) {
+	if (!track._rumble) {
+		track._rumble = {
+			outer: track.OUTER_RADIUS.map((r) => r - 4),
+			inner: track.INNER_RADIUS.map((r) => r + 4),
+		}
+	}
+	return track._rumble
 }
-
-const OUTER_RUMBLE = offsetTable(TRACK.OUTER_RADIUS, -4)
-const INNER_RUMBLE = offsetTable(TRACK.INNER_RADIUS, 4)
 
 // Traces the closed path of a radius lookup table (one point per
 // table entry, evenly spaced in angle) — the generalization of
@@ -71,10 +76,10 @@ function drawRumbleRing(ctx, table) {
 	ctx.restore()
 }
 
-function drawStartLine(ctx) {
-	const { x, y, angle } = TRACK.START
+function drawStartLine(ctx, track) {
+	const { x, y, angle } = track.START
 	const perp = angle + Math.PI / 2
-	const half = TRACK.ROAD_WIDTH / 2
+	const half = track.ROAD_WIDTH / 2
 	ctx.strokeStyle = '#fff'
 	ctx.lineWidth = 3
 	ctx.beginPath()
@@ -97,8 +102,10 @@ function drawGridSlot(ctx, slot) {
 	ctx.restore()
 }
 
-function drawStartGrid(ctx) {
-	for (const slot of TRACK.GRID_SLOTS) drawGridSlot(ctx, slot)
+function drawStartGrid(ctx, track) {
+	for (const slot of track.GRID_SLOTS) {
+		drawGridSlot(ctx, slot)
+	}
 }
 
 // Everything from here is a blit of a sprite baked once at
@@ -123,8 +130,8 @@ function onScreen(x, y, cam) {
 		Math.abs(y - cam.y) < CULL_Y
 }
 
-function drawTreeLine(ctx, atlas, cam) {
-	for (const tree of TRACK.TREE_LINE) {
+function drawTreeLine(ctx, track, atlas, cam) {
+	for (const tree of track.TREE_LINE) {
 		if (!onScreen(tree.x, tree.y, cam)) continue
 		const img = variant(atlas.tree, tree.x, tree.y)
 		// Scenery is baked at one size and scaled by the
@@ -167,12 +174,12 @@ function drawHardObstacle(ctx, atlas, o) {
 		o.x, o.y, o.r / baseR)
 }
 
-function drawObstacles(ctx, atlas, cam) {
-	for (const hazard of TRACK.WATER_HAZARDS) {
+function drawObstacles(ctx, track, atlas, cam) {
+	for (const hazard of track.WATER_HAZARDS) {
 		if (!onScreen(hazard.x, hazard.y, cam)) continue
 		drawWater(ctx, hazard.x, hazard.y, hazard.r)
 	}
-	for (const o of TRACK.HARD_OBSTACLES) {
+	for (const o of track.HARD_OBSTACLES) {
 		if (!onScreen(o.x, o.y, cam)) continue
 		drawHardObstacle(ctx, atlas, o)
 	}
@@ -214,10 +221,10 @@ function drawWedge(ctx, innerTable, outerTable, wedge, color) {
 
 const SAND_COLOR = 'rgba(216, 186, 128, 0.85)'
 
-function drawWedges(ctx) {
-	for (const wedge of TRACK.SAND_WEDGES) {
+function drawWedges(ctx, track) {
+	for (const wedge of track.SAND_WEDGES) {
 		drawWedge(
-			ctx, TRACK.OUTER_RADIUS, TRACK.BOUND_RADIUS,
+			ctx, track.OUTER_RADIUS, track.BOUND_RADIUS,
 			wedge, SAND_COLOR)
 	}
 }
@@ -227,18 +234,20 @@ function drawWedges(ctx) {
 // a solid would give them nothing a fill does not. Only the
 // things that stand up off it are sprites.
 function drawWorld(ctx, state, atlas, cam) {
-	drawTrackRing(ctx, TRACK.OUTER_RADIUS, '#555')
-	drawTrackRing(ctx, TRACK.INNER_RADIUS, '#3e8e41')
-	drawRumbleRing(ctx, OUTER_RUMBLE)
-	drawRumbleRing(ctx, INNER_RUMBLE)
-	drawWedges(ctx)
-	drawStartGrid(ctx)
-	drawStartLine(ctx)
+	const track = state.track
+	const rb = rumbles(track)
+	drawTrackRing(ctx, track.OUTER_RADIUS, '#555')
+	drawTrackRing(ctx, track.INNER_RADIUS, '#3e8e41')
+	drawRumbleRing(ctx, rb.outer)
+	drawRumbleRing(ctx, rb.inner)
+	drawWedges(ctx, track)
+	drawStartGrid(ctx, track)
+	drawStartLine(ctx, track)
 	// The treeline stands outside the boundary, so it goes
 	// down after the road rather than before it — a tree is
 	// taller than the kerb it overhangs.
-	drawTreeLine(ctx, atlas.scenery, cam)
-	drawObstacles(ctx, atlas.scenery, cam)
+	drawTreeLine(ctx, track, atlas.scenery, cam)
+	drawObstacles(ctx, track, atlas.scenery, cam)
 	drawRivals(ctx, state.rivals, drawCarSprite)
 	drawCarSprite(ctx, state, PLAYER_COLOURS)
 }

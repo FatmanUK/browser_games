@@ -79,7 +79,7 @@ function boardRow(ctx, car, place, mine, y) {
 }
 
 function drawBoard(ctx, state) {
-	const field = orderOf(state, state.rivals)
+	const field = orderOf(state.track, state, state.rivals)
 	brackets(ctx, BOARD_X - 10, BOARD_Y - 14, 148, 100)
 	label(ctx, BOARD_X, BOARD_Y - 3, 'STANDINGS')
 	field.forEach((car, i) => {

@@ -5,7 +5,7 @@
 // since game.js is what draws the sprites.
 
 import { WIDTH, HEIGHT } from '../_shared/hud.js'
-import * as TRACK from './track-data.js'
+import { ROAD_WIDTH } from './track.js'
 
 // The camera follows the car and only shows a window onto the
 // world — tall enough to always show the full width of the
@@ -18,7 +18,7 @@ import * as TRACK from './track-data.js'
 // the canvas used to be sized from the track's road width, so
 // regenerating the track with a different ROAD_WIDTH would
 // have quietly changed how big this game's window was.
-export const VIEWPORT_HEIGHT = TRACK.ROAD_WIDTH
+export const VIEWPORT_HEIGHT = ROAD_WIDTH
 export const VIEW_SCALE = HEIGHT / VIEWPORT_HEIGHT
 export const VIEWPORT_WIDTH = WIDTH / VIEW_SCALE
 

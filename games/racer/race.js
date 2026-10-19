@@ -43,8 +43,9 @@ export function tickCountdown(race, dt, audio) {
 	if (race.ready <= -GO_HOLD) race.phase = 'racing'
 }
 
-export function lapsOf(car) {
-	return Math.max(0, Math.floor(progressOf(car.totalAngle)))
+export function lapsOf(track, car) {
+	return Math.max(
+		0, Math.floor(progressOf(track, car.totalAngle)))
 }
 
 // The whole field, furthest round the lap first. Progress is a
@@ -55,14 +56,14 @@ export function lapsOf(car) {
 // keep for position: counting rivals ahead and sorting the
 // field are the same question asked twice, and two answers
 // that can disagree is one more than is wanted.
-export function orderOf(player, rivals) {
+export function orderOf(track, player, rivals) {
 	return [player, ...rivals].sort(
-		(a, b) => progressOf(b.totalAngle) -
-			progressOf(a.totalAngle))
+		(a, b) => progressOf(track, b.totalAngle) -
+			progressOf(track, a.totalAngle))
 }
 
-export function positionOf(player, rivals) {
-	return orderOf(player, rivals).indexOf(player) + 1
+export function positionOf(track, player, rivals) {
+	return orderOf(track, player, rivals).indexOf(player) + 1
 }
 
 // What the HUD shows. Once the flag is out the place is the
@@ -70,9 +71,9 @@ export function positionOf(player, rivals) {
 // rivals still coasting past a finished car's frozen progress
 // would otherwise walk the readout down after the race, so it
 // disagreed with the result banner beside it.
-export function placeOf(race, player, rivals) {
+export function placeOf(track, race, player, rivals) {
 	return isOver(race) ?
-		race.place : positionOf(player, rivals)
+		race.place : positionOf(track, player, rivals)
 }
 
 // A rival crossing the line for the last time is retired from
@@ -80,15 +81,15 @@ export function placeOf(race, player, rivals) {
 // the player's place is read from: if a rival is still ahead on
 // the road when the player finishes, it must already have
 // finished, so the tally is exact without sorting anything.
-export function checkFinishes(race, player, rivals) {
+export function checkFinishes(track, race, player, rivals) {
 	for (const rival of rivals) {
 		if (rival.finished) continue
-		if (lapsOf(rival) < LAP_TARGET) continue
+		if (lapsOf(track, rival) < LAP_TARGET) continue
 		rival.finished = true
 		race.finishedAhead++
 	}
 	if (race.phase !== 'racing') return false
-	if (lapsOf(player) < LAP_TARGET) return false
+	if (lapsOf(track, player) < LAP_TARGET) return false
 	race.phase = 'finished'
 	race.place = race.finishedAhead + 1
 	return true
