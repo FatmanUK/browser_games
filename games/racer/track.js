@@ -414,7 +414,21 @@ function attachArcLength(track) {
 	}
 	for (const c of track.CORNERS) {
 		c.s = sOf(pointAtAngle(track, c.angle))
+		c.len = c.spread * 2 * track.L / (Math.PI * 2)
 	}
+	// Sand sits in the verge over a stretch of the lap, and a
+	// stretch is an arc length. As an angular wedge it bunched
+	// up wherever the track ran close to the centre and spread
+	// out where it ran wide, for no reason anyone could see.
+	for (const w of track.SAND_WEDGES) {
+		w.s = sOf(pointAtAngle(track, w.angle))
+		w.half = w.spread * track.L / (Math.PI * 2)
+		w.side = w.angle % 2 < 1 ? 1 : -1
+	}
+	// Obstacles and water keep their arc length too, so the
+	// drawing can cull by it without a distance test.
+	for (const o of track.HARD_OBSTACLES) o.s = sOf(o)
+	for (const o of track.WATER_HAZARDS) o.s = sOf(o)
 	return track
 }
 

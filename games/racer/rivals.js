@@ -15,23 +15,27 @@ import {
 	CAR_LENGTH, CAR_WIDTH, ACCEL, BRAKE, MAX_SPEED, TURN_RATE,
 	FRICTION, RIVALS,
 } from './car.js'
+import { angleOf, angleDelta } from './geom.js'
 import {
-	angleOf, angleDelta, trackBandPoint, bandFrac,
-} from './geom.js'
+	locate, offsetPoint, onRoad, wrapS, deltaS, curvAhead,
+	WINDOW,
+} from './path.js'
 
 export const RIVAL_COUNT = RIVALS.length
 
-// Lookahead in radians: a fixed minimum so a stopped car still
-// has something to aim at, plus a speed term so a fast car
-// looks further into the corner it is about to arrive in.
-const LOOK_BASE = 0.035
-const LOOK_PER_SPEED = 0.00042
+// Lookahead in world units now rather than in radians: a
+// fixed minimum so a stopped car still has something to aim
+// at, plus a speed term so a fast car looks further into the
+// corner it is about to arrive in. The angular version meant
+// a different distance at every radius, which is why rivals
+// used to run wide where the track swung away from the centre.
+const LOOK_BASE = 20
+const LOOK_PER_SPEED = 0.085
 
-// How far off the aiming point a rival will tolerate before it
-// is braking rather than steering. At FULL_SHARP it wants to be
-// at CORNER_SPEED; below that it scales between the two.
-const FULL_SHARP = 0.55
-const CORNER_SPEED = 0.42
+// Lateral grip, as the sideways acceleration a car can hold.
+// A corner of curvature k can be taken at sqrt(grip / k), and
+// that is the whole of the braking model.
+const GRIP = 2600
 
 export function createRivals(track) {
 	return RIVALS.map((driver, i) => {
@@ -43,7 +47,11 @@ export function createRivals(track) {
 			facing: slot.angle,
 			speed: 0,
 			name: driver.name,
-			lane: driver.lane,
+			// A signed fraction of the half-width, turned
+			// into the world units offsetPoint wants.
+			lane: driver.lane * track.halfWidth,
+			s: slot.s,
+			off: 0,
 			skill: {
 				pace: driver.skill,
 				nerve: driver.nerve,
@@ -55,25 +63,31 @@ export function createRivals(track) {
 	})
 }
 
-// Where this rival wants to be pointing: at its lane, a
-// lookahead further round the lap in the direction of travel.
+// Where this rival wants to be pointing: at its own line,
+// a lookahead further along the lap.
 function aimAngle(track, rival) {
-	const here = angleOf(rival.x, rival.y)
 	const look = LOOK_BASE +
 		Math.abs(rival.speed) * LOOK_PER_SPEED
-	const target = trackBandPoint(
-		track, here + track.TRAVEL_DIR * look, rival.lane)
+	const target = offsetPoint(
+		track, rival.s + look, rival.lane)
 	return Math.atan2(target.y - rival.y, target.x - rival.x)
 }
 
-// Pace for how hard the car is having to turn. A rival that has
-// been pushed off its line wants the corner speed too, which is
-// what makes a nudge from behind actually cost it something.
-function wantedSpeed(rival, sharp, drag) {
-	const k = Math.min(1, sharp / FULL_SHARP)
-	const pace = 1 - (1 - CORNER_SPEED) * k
+// Brake for the corner rather than for the steering error.
+// The old AI inferred severity from how hard it was already
+// having to turn, because polar data carried no curvature —
+// by which time it was in the corner. Signed curvature along
+// the centreline means it can look at what is coming within
+// its own braking distance and arrive at the right speed.
+function wantedSpeed(track, rival, drag) {
+	const stop = (rival.speed * rival.speed) / (2 * BRAKE)
+	const { kMax } = curvAhead(track, rival.s, stop + 30)
+	const corner = kMax > 1e-5
+		? Math.sqrt(GRIP * rival.skill.pace / kMax)
+		: MAX_SPEED
 	const wet = drag > 1 ? 0.5 : 1
-	return MAX_SPEED * rival.skill.pace * pace * wet
+	return Math.min(
+		MAX_SPEED * rival.skill.pace, corner) * wet
 }
 
 function steer(rival, dt, sharp, aim) {
@@ -87,7 +101,7 @@ function steer(rival, dt, sharp, aim) {
 function drive(track, rival, dt, drag) {
 	const aim = aimAngle(track, rival)
 	const sharp = Math.abs(angleDelta(rival.angle, aim))
-	const want = wantedSpeed(rival, sharp, drag)
+	const want = wantedSpeed(track, rival, drag)
 	if (rival.speed < want) rival.speed += ACCEL * dt
 	else rival.speed -= BRAKE * dt
 	rival.speed -= rival.speed * drag * dt
@@ -96,11 +110,11 @@ function drive(track, rival, dt, drag) {
 }
 
 // Rivals take the same hazard drag the player does.
-function dragFor(track, terrain, x, y) {
+function dragFor(track, terrain, rival) {
 	if (terrain === 'sand') return 3.2
 	if (terrain === 'water') return 2.5
-	const frac = bandFrac(track, x, y)
-	return frac < 0 || frac > 1 ? FRICTION * 2.2 : FRICTION
+	return onRoad(track, rival.off)
+		? FRICTION : FRICTION * 2.2
 }
 
 // A rival that has wandered off the road is steered back by its
@@ -120,11 +134,23 @@ function clearObstacles(track, rival) {
 	}
 }
 
+function advanceS(track, car, dt) {
+	const got = locate(track, car.x, car.y, car.s)
+	const limit = WINDOW * track.ds
+	if (Math.abs(deltaS(track, car.s, got.s)) > limit) {
+		car.s = wrapS(track, car.s + car.speed * dt)
+		return
+	}
+	car.s = got.s
+	car.off = got.off
+}
+
 function integrate(track, rival, dt) {
 	const prev = angleOf(rival.x, rival.y)
 	rival.x += Math.cos(rival.angle) * rival.speed * dt
 	rival.y += Math.sin(rival.angle) * rival.speed * dt
 	clearObstacles(track, rival)
+	advanceS(track, rival, dt)
 	rival.totalAngle += angleDelta(
 		prev, angleOf(rival.x, rival.y))
 }
@@ -137,8 +163,7 @@ export function updateRivals(track, rivals, dt, terrainOf) {
 			continue
 		}
 		const drag = dragFor(
-			track, terrainOf(rival.x, rival.y),
-			rival.x, rival.y)
+			track, terrainOf(rival), rival)
 		drive(track, rival, dt, drag)
 		integrate(track, rival, dt)
 	}

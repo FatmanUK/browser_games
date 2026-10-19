@@ -1,9 +1,8 @@
 // Dash: the rules and the driving.
 //
-// The track is built from a seed at load (track.js). It is
-// star-shaped around CENTER — every angle maps to exactly one
-// boundary point — so it is stored as a radius per angle and
-// looked up that way (geom.js).
+// The track is built from a seed at load (track.js) and a car
+// knows where it is as an arc length along the centreline
+// (path.js) rather than as an angle about a centre.
 //
 // The drawing is in render.js, the sprites in sprites.js and
 // models.js, the field in rivals.js, the race in race.js.
@@ -17,10 +16,11 @@ import {
 	CAR_LENGTH, ACCEL, BRAKE, MAX_SPEED, MAX_REVERSE,
 	FRICTION, OFF_TRACK_DRAG, TURN_RATE,
 } from './car.js'
+import { angleOf, angleDelta } from './geom.js'
 import {
-	CENTER, lerpArray, angleOf, angleDelta, normFor, onTrack,
-	inWedge,
-} from './geom.js'
+	locate, offsetPoint, onRoad, inVerge, wrapS, deltaS,
+	WINDOW,
+} from './path.js'
 import {
 	createRivals, updateRivals, resolveContacts,
 } from './rivals.js'
@@ -77,6 +77,12 @@ function createState(track, level, unlocked) {
 		angle: pole.angle,
 		facing: pole.angle,
 		speed: 0,
+		// Every car carries where it is along the lap. A
+		// nearest-point search is ambiguous once the track
+		// crosses itself, so continuity from the last frame
+		// is what picks the branch — see path.js locate().
+		s: pole.s,
+		off: 0,
 		totalAngle: 0,
 		elapsed: 0,
 		lapsShown: 0,
@@ -96,28 +102,51 @@ function waterAt(track, x, y) {
 		(w) => Math.hypot(x - w.x, y - w.y) <= w.r)
 }
 
+function inSand(track, s) {
+	return track.SAND_WEDGES.some(
+		(w) => Math.abs(deltaS(track, w.s, s)) <= w.half)
+}
+
+// Carries a car's arc length forward. A candidate further
+// than one frame's travel is not a nearer point on the road,
+// it is the other branch of a crossing, so it is rejected and
+// the position dead-reckoned instead. Without that guard a
+// car near a crossing jumps a third of a lap and the
+// leaderboard jumps with it.
+function advanceS(track, car, dt) {
+	const got = locate(track, car.x, car.y, car.s)
+	const limit = WINDOW * track.ds
+	if (Math.abs(deltaS(track, car.s, got.s)) > limit) {
+		car.s = wrapS(track, car.s + car.speed * dt)
+		return
+	}
+	car.s = got.s
+	car.off = got.off
+}
+
 // Takes bare coordinates rather than a car, because the rivals
 // need to ask about their own patch of ground too and they are
 // not shaped like the player's state object.
-function terrainAt(track, x, y) {
-	const outerNorm = normFor(x, y, track.OUTER_RADIUS)
-	const boundNorm = normFor(x, y, track.BOUND_RADIUS)
-	const inVerge = outerNorm > 1 && boundNorm <= 1
-	if (inVerge && inWedge(angleOf(x, y), track.SAND_WEDGES)) {
+// Takes a car rather than bare coordinates now: the answer
+// depends on where the car is along the lap as well as where
+// it is on the map, and only the car knows which branch of a
+// crossing it is on.
+function terrainAt(track, car) {
+	if (inVerge(track, car.off) && inSand(track, car.s)) {
 		return 'sand'
 	}
-	if (waterAt(track, x, y)) return 'water'
+	if (waterAt(track, car.x, car.y)) return 'water'
 	return null
 }
 
-function dragFor(track, x, y, terrain) {
+function dragFor(track, car, terrain) {
 	// Higher than water: sand grabs the car hard and hauls it
 	// down to a stop quickly, just not instantly — it's still
 	// the same exponential-decay drag model as everything else,
 	// so there's no single-frame dead stop.
 	if (terrain === 'sand') return 3.2
 	if (terrain === 'water') return 2.5
-	return onTrack(track, x, y) ?
+	return onRoad(track, car.off) ?
 		FRICTION : FRICTION * OFF_TRACK_DRAG
 }
 
@@ -131,8 +160,7 @@ function applyControls(state, dt, terrain) {
 	if (state.keys.has('accel')) state.speed += ACCEL * dt
 	if (state.keys.has('brake')) state.speed -= BRAKE * dt
 
-	const drag = dragFor(
-		state.track, state.x, state.y, terrain)
+	const drag = dragFor(state.track, state, terrain)
 	state.speed -= state.speed * drag * dt
 	state.speed = Math.min(
 		MAX_SPEED, Math.max(MAX_REVERSE, state.speed))
@@ -182,13 +210,16 @@ function resolveObstacles(state) {
 // feel the same as hitting one of the solid tree obstacles —
 // stopped dead, not bounced back onto the track.
 function clampToBound(state) {
-	const bound = state.track.BOUND_RADIUS
-	const norm = normFor(state.x, state.y, bound)
-	if (norm <= 1) return false
-	const normalAngle = angleOf(state.x, state.y)
-	const r = lerpArray(bound, normalAngle)
-	state.x = CENTER.x + Math.cos(normalAngle) * r
-	state.y = CENTER.y + Math.sin(normalAngle) * r
+	const track = state.track
+	if (Math.abs(state.off) <= track.boundOff) return false
+	// A lateral clamp, not a point-in-polygon test. Once the
+	// track can cross itself the road outline self-overlaps
+	// and there is no single polygon to be inside of.
+	const edge = Math.sign(state.off) * track.boundOff
+	const p = offsetPoint(track, state.s, edge)
+	state.x = p.x
+	state.y = p.y
+	state.off = edge
 	state.speed = 0
 	return true
 }
@@ -202,14 +233,20 @@ function integrate(state, dt, audio) {
 	const prevAngle = angleOf(state.x, state.y)
 	state.x += Math.cos(state.angle) * state.speed * dt
 	state.y += Math.sin(state.angle) * state.speed * dt
+	// Arc length first: the clamp and the terrain both need
+	// to know where along the lap the car now is.
+	advanceS(state.track, state, dt)
 
 	const hitObstacle = resolveObstacles(state)
 	const hitBound = clampToBound(state)
 	const collided = hitObstacle || hitBound
 	if (collided && !state.wasColliding) audio.bump()
 	state.wasColliding = collided
+	// A clamp or a bounce moves the car, so where it is on
+	// the road has to be asked again before anything uses it.
+	if (collided) advanceS(state.track, state, dt)
 
-	const newTerrain = terrainAt(state.track, state.x, state.y)
+	const newTerrain = terrainAt(state.track, state)
 	if (newTerrain !== state.terrain) {
 		playTerrainSound(newTerrain, audio)
 	}
@@ -234,7 +271,7 @@ function drivePlayer(state, dt, best, audio) {
 	// A wrecked car is spinning where it stopped; it does not
 	// steer, collide or set times until it is back.
 	if (state.wrecked > 0 || state.out) return
-	const terrain = terrainAt(state.track, state.x, state.y)
+	const terrain = terrainAt(state.track, state)
 	applyControls(state, dt, terrain)
 	integrate(state, dt, audio)
 	// Nothing after the flag: the car is still coasting to a
@@ -280,7 +317,7 @@ function update(state, dt, best, audio) {
 		state.track,
 		state.rivals.filter(
 			(r) => !r.out && r.wrecked <= 0),
-		dt, (x, y) => terrainAt(state.track, x, y))
+		dt, (car) => terrainAt(state.track, car))
 	// A wrecked car is scenery until it comes back, and one
 	// that is out has left the race: neither should shove
 	// anybody, and a car cannot be shoved by a ghost.

@@ -1,12 +1,15 @@
-// Dash's track geometry, shared by the player's car (game.js)
-// and the rival AI (rivals.js).
+// What is left of the polar model.
 //
-// The generated track is star-shaped around CENTER: every angle
-// maps to exactly one point on each boundary, so the boundaries
-// are angle-indexed radius lookup tables rather than curves.
-// That is what makes a racing line cheap — a point on the road
-// is just (angle, how far across the band), and "a bit further
-// round" is an angle plus a delta.
+// The track used to be stored as a radius per angle about the
+// origin, and everything that drove on it asked questions in
+// those terms. That is gone: a car's position is arc length
+// along the centreline now (path.js), because a radius per
+// angle cannot describe a track that crosses over itself.
+//
+// These are the pieces with nothing to do with that choice —
+// an angle-table lookup the generator still places scenery
+// with, and the swept-angle lap count, which measures how far
+// round the world a car has been rather than where it is.
 
 export const CENTER = { x: 0, y: 0 }
 
@@ -29,50 +32,11 @@ export function angleOf(x, y) {
 	return Math.atan2(y - CENTER.y, x - CENTER.x)
 }
 
-// How far (x, y) sits past a boundary, as a ratio: <=1 inside
-// it, >1 outside.
-export function normFor(x, y, table) {
-	const dist = Math.hypot(x - CENTER.x, y - CENTER.y)
-	return dist / lerpArray(table, angleOf(x, y))
-}
-
-export function onTrack(track, x, y) {
-	return normFor(x, y, track.OUTER_RADIUS) <= 1 &&
-		normFor(x, y, track.INNER_RADIUS) >= 1
-}
-
 export function angleDelta(a, b) {
 	let d = b - a
 	while (d > Math.PI) d -= Math.PI * 2
 	while (d < -Math.PI) d += Math.PI * 2
 	return d
-}
-
-export function inWedge(angle, wedges) {
-	return wedges.some(
-		(w) => Math.abs(angleDelta(w.angle, angle)) <=
-			w.spread)
-}
-
-// A point on the road surface: `frac` is 0 at the inner edge, 1
-// at the outer. Gives each rival its own line round the lap.
-export function trackBandPoint(track, angle, frac) {
-	const innerR = lerpArray(track.INNER_RADIUS, angle)
-	const outerR = lerpArray(track.OUTER_RADIUS, angle)
-	const r = innerR + (outerR - innerR) * frac
-	return {
-		x: CENTER.x + Math.cos(angle) * r,
-		y: CENTER.y + Math.sin(angle) * r,
-	}
-}
-
-// The inverse: where across the band (x, y) is.
-export function bandFrac(track, x, y) {
-	const angle = angleOf(x, y)
-	const innerR = lerpArray(track.INNER_RADIUS, angle)
-	const outerR = lerpArray(track.OUTER_RADIUS, angle)
-	const dist = Math.hypot(x - CENTER.x, y - CENTER.y)
-	return (dist - innerR) / (outerR - innerR)
 }
 
 // Which way round the track the grid faces: +1 if driving off

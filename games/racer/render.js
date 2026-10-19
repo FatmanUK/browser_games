@@ -20,73 +20,80 @@ import {
 } from './view.js'
 import { getAtlas, carRing, frameFor, variant } from './sprites.js'
 import { CAR_LENGTH, CAR_WIDTH, PLAYER_COLOURS } from './car.js'
-import { CENTER, lerpArray, angleOf } from './geom.js'
+import { sampleAt, offsetPoint, deltaS } from './path.js'
 import { drawRivals, drawRivalLights } from './rivals.js'
 function deg(d) {
 	return (d * Math.PI) / 180
 }
 
-// The rumble strips are the road edges pulled in a little.
-// Derived per track and cached on it: there is more than one
-// track now, and recomputing two 720-entry tables every frame
-// to draw the same two rings would be silly.
-function rumbles(track) {
-	if (!track._rumble) {
-		track._rumble = {
-			outer: track.OUTER_RADIUS.map((r) => r - 4),
-			inner: track.INNER_RADIUS.map((r) => r + 4),
-		}
+// The road as a ribbon along the centreline, not as a band of
+// radii about a centre. This is the drawing half of the move
+// to arc length, and it is not optional: a radial band and a
+// perpendicular band are different shapes wherever the
+// centreline is not square to the radius, so leaving the paint
+// polar would have put the painted road somewhere other than
+// the road the car is driving on.
+//
+// Only the stretch near the camera is traced. The whole lap is
+// about 950 samples and the window shows 240 by 100 units of
+// it, so almost all of them are behind you.
+function ribbonRun(ctx, track, cam, off) {
+	const half = Math.ceil(300 / track.ds)
+	const i0 = Math.floor(cam.s / track.ds)
+	ctx.beginPath()
+	for (let d = -half; d <= half; d++) {
+		const p = offsetPoint(track, (i0 + d) * track.ds, off)
+		if (d === -half) ctx.moveTo(p.x, p.y)
+		else ctx.lineTo(p.x, p.y)
 	}
-	return track._rumble
 }
 
-// Traces the closed path of a radius lookup table (one point per
-// table entry, evenly spaced in angle) — the generalization of
-// ctx.ellipse() for a track shape with no closed form.
-function ringPath(ctx, table) {
-	const n = table.length
+function ribbonBand(ctx, track, cam, a, b) {
+	const half = Math.ceil(300 / track.ds)
+	const i0 = Math.floor(cam.s / track.ds)
 	ctx.beginPath()
-	for (let i = 0; i < n; i++) {
-		const angle = (i / n) * Math.PI * 2
-		const r = table[i]
-		const x = CENTER.x + Math.cos(angle) * r
-		const y = CENTER.y + Math.sin(angle) * r
-		if (i === 0) ctx.moveTo(x, y)
-		else ctx.lineTo(x, y)
+	for (let d = -half; d <= half; d++) {
+		const p = offsetPoint(track, (i0 + d) * track.ds, a)
+		if (d === -half) ctx.moveTo(p.x, p.y)
+		else ctx.lineTo(p.x, p.y)
+	}
+	for (let d = half; d >= -half; d--) {
+		const p = offsetPoint(track, (i0 + d) * track.ds, b)
+		ctx.lineTo(p.x, p.y)
 	}
 	ctx.closePath()
 }
 
-function drawTrackRing(ctx, table, color) {
-	ringPath(ctx, table)
-	ctx.fillStyle = color
+function drawRoad(ctx, track, cam) {
+	ribbonBand(
+		ctx, track, cam, -track.halfWidth, track.halfWidth)
+	ctx.fillStyle = '#555'
 	ctx.fill()
-}
-
-function drawRumbleRing(ctx, table) {
-	ctx.save()
-	ctx.setLineDash([10, 10])
-	ctx.lineWidth = 6
-	ctx.strokeStyle = '#fff'
-	ringPath(ctx, table)
-	ctx.stroke()
-	ctx.lineDashOffset = 10
-	ctx.strokeStyle = '#e53935'
-	ctx.stroke()
-	ctx.restore()
+	for (const side of [-1, 1]) {
+		ribbonRun(
+			ctx, track, cam, side * (track.halfWidth - 4))
+		ctx.save()
+		ctx.setLineDash([10, 10])
+		ctx.lineWidth = 6
+		ctx.strokeStyle = '#fff'
+		ctx.stroke()
+		ctx.lineDashOffset = 10
+		ctx.strokeStyle = '#e53935'
+		ctx.stroke()
+		ctx.restore()
+	}
 }
 
 function drawStartLine(ctx, track) {
-	const { x, y, angle } = track.START
-	const perp = angle + Math.PI / 2
-	const half = track.ROAD_WIDTH / 2
+	const a = offsetPoint(
+		track, track.START.s, -track.halfWidth)
+	const b = offsetPoint(
+		track, track.START.s, track.halfWidth)
 	ctx.strokeStyle = '#fff'
 	ctx.lineWidth = 3
 	ctx.beginPath()
-	ctx.moveTo(
-		x + Math.cos(perp) * half, y + Math.sin(perp) * half)
-	ctx.lineTo(
-		x - Math.cos(perp) * half, y - Math.sin(perp) * half)
+	ctx.moveTo(a.x, a.y)
+	ctx.lineTo(b.x, b.y)
 	ctx.stroke()
 }
 
@@ -190,42 +197,37 @@ function drawCarSprite(ctx, car, colours) {
 		car.x, car.y)
 }
 
-function wedgePoint(table, angle) {
-	const r = lerpArray(table, angle)
-	return {
-		x: CENTER.x + Math.cos(angle) * r,
-		y: CENTER.y + Math.sin(angle) * r,
-	}
-}
-
-function drawWedge(ctx, innerTable, outerTable, wedge, color) {
-	const steps = 12
-	ctx.fillStyle = color
-	ctx.beginPath()
-	for (let i = 0; i <= steps; i++) {
-		const a = wedge.angle - wedge.spread +
-			(2 * wedge.spread * i) / steps
-		const p = wedgePoint(outerTable, a)
-		if (i === 0) ctx.moveTo(p.x, p.y)
-		else ctx.lineTo(p.x, p.y)
-	}
-	for (let i = steps; i >= 0; i--) {
-		const a = wedge.angle - wedge.spread +
-			(2 * wedge.spread * i) / steps
-		const p = wedgePoint(innerTable, a)
-		ctx.lineTo(p.x, p.y)
-	}
-	ctx.closePath()
-	ctx.fill()
-}
-
 const SAND_COLOR = 'rgba(216, 186, 128, 0.85)'
 
-function drawWedges(ctx, track) {
-	for (const wedge of track.SAND_WEDGES) {
-		drawWedge(
-			ctx, track.OUTER_RADIUS, track.BOUND_RADIUS,
-			wedge, SAND_COLOR)
+function sandS(w, i, steps) {
+	return w.s - w.half + (2 * w.half * i) / steps
+}
+
+// Sand in the verge, over a stretch of the lap rather than an
+// angular wedge — see the track builder for why.
+function drawSand(ctx, track, cam) {
+	for (const w of track.SAND_WEDGES) {
+		if (Math.abs(deltaS(track, w.s, cam.s)) > 400) {
+			continue
+		}
+		const steps = 14
+		ctx.beginPath()
+		for (let i = 0; i <= steps; i++) {
+			const s = sandS(w, i, steps)
+			const p = offsetPoint(
+				track, s, w.side * track.halfWidth)
+			if (i === 0) ctx.moveTo(p.x, p.y)
+			else ctx.lineTo(p.x, p.y)
+		}
+		for (let i = steps; i >= 0; i--) {
+			const s = sandS(w, i, steps)
+			const p = offsetPoint(
+				track, s, w.side * track.boundOff)
+			ctx.lineTo(p.x, p.y)
+		}
+		ctx.closePath()
+		ctx.fillStyle = SAND_COLOR
+		ctx.fill()
 	}
 }
 
@@ -242,32 +244,32 @@ const GATE_LIT = 'rgba(143, 233, 255, 0.72)'
 const POST_DIM = '#3a5a68'
 const POST_LIT = '#8fe9ff'
 
-function drawGate(ctx, track, angle, got) {
-	const inner = lerpArray(track.INNER_RADIUS, angle)
-	const outer = lerpArray(track.OUTER_RADIUS, angle)
-	const cos = Math.cos(angle), sin = Math.sin(angle)
+function drawGate(ctx, track, s, got) {
+	const a = offsetPoint(track, s, -track.halfWidth)
+	const b = offsetPoint(track, s, track.halfWidth)
 	ctx.strokeStyle = got ? GATE_LIT : GATE_DIM
 	ctx.lineWidth = 2.5
 	ctx.setLineDash([6, 6])
 	ctx.beginPath()
-	ctx.moveTo(cos * inner, sin * inner)
-	ctx.lineTo(cos * outer, sin * outer)
+	ctx.moveTo(a.x, a.y)
+	ctx.lineTo(b.x, b.y)
 	ctx.stroke()
 	ctx.setLineDash([])
 	ctx.fillStyle = got ? POST_LIT : POST_DIM
-	for (const r of [inner, outer]) {
+	for (const p of [a, b]) {
 		ctx.beginPath()
-		ctx.arc(cos * r, sin * r, 3, 0, Math.PI * 2)
+		ctx.arc(p.x, p.y, 3, 0, Math.PI * 2)
 		ctx.fill()
 	}
 }
 
 function drawGates(ctx, track, state) {
 	const got = state.gates || 0
-	track.GATES.forEach((angle, i) => {
+	track.GATES.forEach((s, i) => {
 		// Gate 0 is the start line, which is already painted.
 		if (i === 0) return
-		drawGate(ctx, track, angle, (got & (1 << i)) !== 0)
+		if (Math.abs(deltaS(track, s, state.s)) > 320) return
+		drawGate(ctx, track, s, (got & (1 << i)) !== 0)
 	})
 }
 
@@ -297,23 +299,17 @@ function chevron(ctx, x, y, face, dir, size, alpha) {
 	ctx.restore()
 }
 
-function drawArrows(ctx, track) {
+function drawArrows(ctx, track, cam) {
 	for (const a of track.ARROWS) {
-		const inner = lerpArray(track.INNER_RADIUS, a.angle)
-		const outer = lerpArray(track.OUTER_RADIUS, a.angle)
-		const r = inner + (outer - inner) * 0.5
-		const x = Math.cos(a.angle) * r
-		const y = Math.sin(a.angle) * r
-		// Along the road, which on a star-shaped track is the
-		// tangent at this angle turned by the travel sense.
-		const face = a.angle +
-			track.TRAVEL_DIR * Math.PI / 2
-		chevron(ctx, x, y, face, a.dir, 13, 0.8)
+		if (Math.abs(deltaS(track, a.s, cam.s)) > 320) {
+			continue
+		}
+		const p = sampleAt(track, a.s)
+		const face = Math.atan2(p.uy, p.ux)
+		chevron(ctx, p.x, p.y, face, a.dir, 13, 0.8)
 		if (!a.hard) continue
-		const back = a.angle - track.TRAVEL_DIR * 0.03
-		chevron(
-			ctx, Math.cos(back) * r, Math.sin(back) * r,
-			face, a.dir, 13, 0.55)
+		const q = sampleAt(track, a.s - 22)
+		chevron(ctx, q.x, q.y, face, a.dir, 13, 0.55)
 	}
 }
 
@@ -357,13 +353,9 @@ function drawMissiles(ctx, state) {
 
 function drawWorld(ctx, state, atlas, cam) {
 	const track = state.track
-	const rb = rumbles(track)
-	drawTrackRing(ctx, track.OUTER_RADIUS, '#555')
-	drawTrackRing(ctx, track.INNER_RADIUS, '#3e8e41')
-	drawRumbleRing(ctx, rb.outer)
-	drawRumbleRing(ctx, rb.inner)
-	drawWedges(ctx, track)
-	drawArrows(ctx, track)
+	drawRoad(ctx, track, state)
+	drawSand(ctx, track, state)
+	drawArrows(ctx, track, state)
 	drawGates(ctx, track, state)
 	drawStartGrid(ctx, track)
 	drawStartLine(ctx, track)

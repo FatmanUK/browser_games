@@ -11,7 +11,8 @@
 // rivals can be given one without the race becoming a lottery.
 
 import { CAR_LENGTH } from './car.js'
-import { angleDelta, trackBandPoint } from './geom.js'
+import { angleDelta } from './geom.js'
+import { offsetPoint, headingAt } from './path.js'
 
 export const MAX_AMMO = 3
 export const LIVES = 3
@@ -106,11 +107,17 @@ export function wreck(car, fx) {
 }
 
 function respawn(track, car) {
-	const gate = track.GATES[car.lastGate || 0]
-	const p = trackBandPoint(track, gate, 0.5)
+	const s = track.GATES[car.lastGate || 0]
+	const p = offsetPoint(track, s, 0)
 	car.x = p.x
 	car.y = p.y
-	car.angle = gate + track.TRAVEL_DIR * Math.PI / 2
+	car.s = s
+	car.off = 0
+	// Reseeded explicitly, not left to locate(): a respawn is
+	// a teleport, and the windowed search would hold on to
+	// wherever the wreck happened to stop.
+	car.gateAt = s
+	car.angle = headingAt(track, s)
 	car.facing = car.angle
 	car.speed = 0
 	car.spin = 0

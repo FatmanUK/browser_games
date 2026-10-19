@@ -35,34 +35,35 @@ export const PLAYER_NAME = 'YOU'
 // parallel arrays keyed by index: a rival is a driver, and its
 // name, pace and line belong together where you can read them
 // as one. `skill` is its fraction of the field's pace, `lane`
-// its line across the road band (0 inner, 1 outer) — spread
-// wide enough that two rivals on the same corner take visibly
-// different lines rather than grinding together all lap — and
-// `nerve` how readily it takes a missile shot. Marlo will fire
-// at anything; Drake mostly will not.
+// the line it takes as a signed fraction of the half-width
+// (negative to the right of the road, positive to the left),
+// spread wide enough that two rivals on the same corner take
+// visibly different lines rather than grinding together all
+// lap, and `nerve` how readily it takes a missile shot. Marlo
+// will fire at anything; Drake mostly will not.
 //
 // Deliberately nothing red: the player's car has to be the one
 // you can pick out of a pack at a glance, in a beam, at speed.
 // Names are kept short so the standings column stays narrow.
 export const RIVALS = [
 	{
-		name: 'VOSS', nerve: 0.9, skill: 0.97, lane: 0.38,
+		name: 'VOSS', nerve: 0.9, skill: 0.97, lane: -0.45,
 		colours: { shell: '#0d47a1', body: '#1e88e5' },
 	},
 	{
-		name: 'KESTREL', nerve: 0.6, skill: 0.94, lane: 0.58,
+		name: 'KESTREL', nerve: 0.6, skill: 0.94, lane: 0.3,
 		colours: { shell: '#1b5e20', body: '#43a047' },
 	},
 	{
-		name: 'MARLO', nerve: 1.0, skill: 0.91, lane: 0.3,
+		name: 'MARLO', nerve: 1.0, skill: 0.91, lane: -0.15,
 		colours: { shell: '#e65100', body: '#fb8c00' },
 	},
 	{
-		name: 'DRAKE', nerve: 0.45, skill: 0.88, lane: 0.68,
+		name: 'DRAKE', nerve: 0.45, skill: 0.88, lane: 0.5,
 		colours: { shell: '#4a148c', body: '#8e24aa' },
 	},
 	{
-		name: 'IBBOTT', nerve: 0.75, skill: 0.85, lane: 0.48,
+		name: 'IBBOTT', nerve: 0.75, skill: 0.85, lane: 0.05,
 		colours: { shell: '#37474f', body: '#78909c' },
 	},
 ]
