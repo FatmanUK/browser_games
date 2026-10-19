@@ -107,7 +107,11 @@ function drawBoard(ctx, state) {
 // Above the middle, not on it: unlike Belt Breaker's ship, the
 // car sits dead centre of the window, and a 92px glyph there
 // hides the one thing the player is about to need to see.
-const LIGHTS_Y = 152
+//
+// Off the middle rather than off a number, because the middle
+// is where the car is and the middle moves when the window
+// does.
+const LIGHTS_Y = H / 2 - 48
 
 // The lights. `ready` runs down through 3, 2, 1 and then past
 // zero, where the cars are already released and only the 'GO!'
@@ -192,9 +196,15 @@ function drawMeters(ctx, state, best, maxSpeed, place) {
 // board down the side answers "where am I"; this answers "who
 // is in front", which is a different question and the one you
 // glance at mid-corner.
-const PODIUM_X = 352
 const PODIUM_Y = 50
 const PODIUM_W = 122
+
+// Centred on the window rather than placed at a number that
+// happened to look centred. The three entries are the only
+// thing along the top that is not ranged against an edge, so
+// they are the only thing that goes wrong when the window
+// changes width — and it did, by half again.
+const PODIUM_X = (W - PODIUM_W * 3) / 2
 
 function podiumEntry(ctx, car, place, mine, x) {
 	const img = portrait(

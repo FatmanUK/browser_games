@@ -8,18 +8,19 @@ import {
 	WIDTH as W, HEIGHT as H, brackets, readout, label,
 } from '../_shared/hud.js'
 
-// Ranged against the left edge of the well rather than the
-// left edge of the window: a readout stranded in the far
-// corner reads as unrelated to the game it belongs to.
-const COL = W / 2 - 130
-
-export function drawHud(ctx, state, best) {
+// Ranged against the edges of the well itself, not against
+// the window: the well's width depends on how much room the
+// window has (see fitBoard), so a column guessed from the
+// centre lands on top of it the moment the window changes
+// size.
+export function drawHud(ctx, state, best, fit) {
+	const col = fit.x - 30
 	ctx.save()
 	ctx.textBaseline = 'alphabetic'
-	readout(ctx, COL, 90, 'SCORE', state.score, 26, 'right')
-	label(ctx, COL, 132, `BEST ${best.value}`, 'right')
-	brackets(ctx, COL - 118, 78, 124, 62)
-	readout(ctx, COL, 182, 'LINES', state.lines, 20, 'right')
+	readout(ctx, col, 90, 'SCORE', state.score, 26, 'right')
+	label(ctx, col, 132, `BEST ${best.value}`, 'right')
+	brackets(ctx, col - 118, 78, 124, 62)
+	readout(ctx, col, 182, 'LINES', state.lines, 20, 'right')
 
 	label(
 		ctx, W - 40, H - 26,
@@ -30,9 +31,9 @@ export function drawHud(ctx, state, best) {
 
 // The preview sits in its own bracketed panel to the right of
 // the board, rather than in a second canvas off to one side.
-export function previewBox(ctx, cell) {
-	const size = cell * 4
-	const x = W / 2 + 118
+export function previewBox(ctx, cell, fit) {
+	const size = cell * 4 * fit.scale
+	const x = fit.x + fit.w + 30
 	const y = 86
 	ctx.save()
 	ctx.textBaseline = 'alphabetic'
@@ -41,5 +42,5 @@ export function previewBox(ctx, cell) {
 	ctx.fillRect(x, y, size, size)
 	brackets(ctx, x - 6, y - 6, size + 12, size + 12)
 	ctx.restore()
-	return { x, y }
+	return { x, y, size }
 }

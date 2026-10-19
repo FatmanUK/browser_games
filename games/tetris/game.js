@@ -178,7 +178,8 @@ function drawWell(ctx, state) {
 	ctx.setTransform(1, 0, 0, 1, 0, 0)
 	ctx.fillStyle = '#05070f'
 	ctx.fillRect(0, 0, WIDTH, HEIGHT)
-	fitBoard(ctx, COLS * CELL, ROWS * CELL, 44, 16)
+	const fit = fitBoard(
+		ctx, COLS * CELL, ROWS * CELL, 44, 16)
 	ctx.fillStyle = '#14141c'
 	ctx.fillRect(0, 0, COLS * CELL, ROWS * CELL)
 	drawGridLines(ctx)
@@ -188,6 +189,7 @@ function drawWell(ctx, state) {
 	ctx.lineWidth = 2
 	ctx.strokeRect(0, 0, COLS * CELL, ROWS * CELL)
 	ctx.setTransform(1, 0, 0, 1, 0, 0)
+	return { ...fit, w: COLS * CELL * fit.scale }
 }
 
 function drawPreviewCell(ctx, x, y, color) {
@@ -196,13 +198,14 @@ function drawPreviewCell(ctx, x, y, color) {
 		x * CELL + 1, y * CELL + 1, CELL - 2, CELL - 2)
 }
 
-function drawPreview(ctx, key) {
-	const at = previewBox(ctx, CELL)
+function drawPreview(ctx, key, fit) {
+	const at = previewBox(ctx, CELL, fit)
 	if (!key) return
 	const shape = SHAPES[key]
 	const offset = (4 - shape.size) / 2
 	ctx.save()
 	ctx.translate(at.x, at.y)
+	ctx.scale(fit.scale, fit.scale)
 	for (const [cx, cy] of shape.cells) {
 		drawPreviewCell(
 			ctx, offset + cx, offset + cy, COLORS[key])
@@ -308,13 +311,13 @@ function playLockSound(cleared, audio) {
 }
 
 function render(ctx, best, state) {
-	drawWell(ctx, state)
-	drawPreview(ctx, state.queue[0])
+	const fit = drawWell(ctx, state)
+	drawPreview(ctx, state.queue[0], fit)
 	if (state.score > best.value) {
 		best.value = state.score
 		saveNumber(BEST_KEY, best.value)
 	}
-	drawHud(ctx, state, best)
+	drawHud(ctx, state, best, fit)
 	if (state.over) drawGameOver(ctx)
 }
 

@@ -16,8 +16,8 @@
 // picture in it. chrome.js is still there for games that want
 // the simpler sidebar.
 
-export const WIDTH = 960
-export const HEIGHT = 400
+export const WIDTH = 1440
+export const HEIGHT = 600
 
 export const FONT = 'ui-monospace, "SF Mono", Menlo, monospace'
 export const LIVE = '#8fe9ff'
@@ -119,13 +119,16 @@ export function label(ctx, x, y, text, align, colour) {
 }
 
 // Centres a playfield of its own shape inside the shared
-// window, scaling it down if it will not fit between the
-// controls bar and whatever the game puts along the bottom.
-// Leaves the transform applied; the caller restores.
+// window, scaling it to fit between the controls bar and
+// whatever the game puts along the bottom. Scales up as well
+// as down: a board left at 1:1 in a window half again its size
+// would sit marooned in empty space. Everything that goes
+// through this is drawn, not blitted, so scaling up re-renders
+// it rather than magnifying pixels. Leaves the transform
+// applied; the caller restores.
 export function fitBoard(ctx, boardW, boardH, top, bottom) {
 	const room = HEIGHT - top - bottom
-	const scale = Math.min(
-		1, room / boardH, WIDTH / boardW)
+	const scale = Math.min(room / boardH, WIDTH / boardW)
 	const x = (WIDTH - boardW * scale) / 2
 	const y = top + (room - boardH * scale) / 2
 	ctx.setTransform(scale, 0, 0, scale, x, y)
