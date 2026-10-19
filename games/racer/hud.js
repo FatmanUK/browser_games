@@ -14,7 +14,7 @@ import {
 } from './race.js'
 import { PLAYER_NAME, PLAYER_COLOURS } from './car.js'
 import { MAX_AMMO, LIVES } from './missiles.js'
-import { portrait } from './sprites.js'
+import { portrait, ROW_R } from './sprites.js'
 
 function countBits(n) {
 	let c = 0
@@ -74,18 +74,20 @@ const BOARD_Y = 108
 
 function boardRow(ctx, car, place, mine, y) {
 	const colour = mine ? LIVE : DIM
+	const name = mine ? PLAYER_NAME : car.name
+	const livery = mine ? PLAYER_COLOURS : car.colours
 	label(ctx, BOARD_X, y, ordinal(place), 'left', colour)
-	label(
-		ctx, BOARD_X + 34, y,
-		mine ? PLAYER_NAME : car.name, 'left', colour)
-	// A swatch rather than more words: it is the only thing
-	// that ties a row to the car you can see on the road.
-	// The player's livery is not on the player's state — it
-	// is passed to drawCar as a separate argument — so the
-	// row has to reach for it rather than read it off the car.
-	ctx.fillStyle =
-		(mine ? PLAYER_COLOURS : car.colours).body
-	ctx.fillRect(BOARD_X + 112, y - 7, 16, 7)
+	// The face, so the board answers "who" with the same
+	// thing the podium does. It wears the livery, which is
+	// what used to tie a row to a car on the road — the
+	// swatch beside it is kept anyway, because a cap at
+	// sixteen pixels is a smaller patch of colour than the
+	// swatch was and the road is where you have to match it.
+	const img = portrait(name, livery, ROW_R)
+	ctx.drawImage(img, BOARD_X + 26, y - img.height + 4)
+	label(ctx, BOARD_X + 48, y, name, 'left', colour)
+	ctx.fillStyle = livery.body
+	ctx.fillRect(BOARD_X + 118, y - 7, 14, 7)
 }
 
 function drawBoard(ctx, state) {
@@ -193,6 +195,7 @@ const PODIUM_W = 112
 
 function podiumEntry(ctx, car, place, mine, x) {
 	const img = portrait(
+		mine ? PLAYER_NAME : car.name,
 		mine ? PLAYER_COLOURS : car.colours)
 	ctx.drawImage(img, x, PODIUM_Y - 4)
 	const tx = x + img.width + 4

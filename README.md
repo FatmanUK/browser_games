@@ -81,8 +81,13 @@ files in its own `music/` folder — see
   block, and leaning on one through a corner costs you both
   speed. They have names and a standings board, so the blue one
   is Voss rather than the blue one, with the current top three
-  shown across the top of the window as helmets and names and
-  the whole field down the side. Each drives differently
+  shown across the top of the window as faces and names, and
+  the whole field down the side with the same faces smaller.
+  Each rival has one: Voss behind his shades, Kestrel's beak,
+  Marlo's grin, Drake's brow, Ibbott's glasses and walrus
+  moustache, each in a cap in its own livery. You keep a
+  helmet, which is both what you would see of yourself and
+  the quickest way to pick your own row out of six. Each drives differently
   rather than just faster or slower: its own top speed, how
   hard it leans on a corner, how late it brakes, and how
   readily it takes a missile shot. Voss is quick and tidy,

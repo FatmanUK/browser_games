@@ -313,6 +313,114 @@ function dome(r) {
 	return planes
 }
 
+// The rivals' faces.
+//
+// A helmet is what a driver wears, not who they are, and the
+// standings had five of them in five colours. These are the
+// same convex solids as everything else in here — no new
+// machinery — but sized by what survives thirty-eight pixels
+// rather than by what a face is actually shaped like. Six or
+// seven shapes each, and every feature at least three pixels
+// across.
+//
+// Axes are the helmet's, not the track's: +Z out of the
+// panel, +Y DOWN, +X across. See the note at the top of this
+// file for why everything else is the other way up.
+//
+// Keyed by driver name rather than carried on the roster
+// (car.js), which holds who a driver is and how they drive.
+// What they look like is art and belongs here. Anything not
+// in the table — the player — keeps the helmet.
+const FACES = {
+	VOSS: {
+		skin: '#e8b48c', hair: '#241b14', jaw: 0.5,
+		nose: 0.2, brow: 0.07, mouth: 0.26,
+		shades: true, sideburns: true,
+	},
+	KESTREL: {
+		skin: '#c98a5e', hair: '#4a2f16', jaw: 0.46,
+		nose: 0.34, brow: 0.08, mouth: 0.24, beak: true,
+	},
+	MARLO: {
+		skin: '#f0c49a', hair: '#8a3b10', jaw: 0.54,
+		nose: 0.22, brow: 0.07, mouth: 0.5, grin: true,
+		mop: true,
+	},
+	DRAKE: {
+		skin: '#d79a74', hair: '#16130f', jaw: 0.68,
+		nose: 0.22, brow: 0.14, mouth: 0.34, scowl: true,
+	},
+	IBBOTT: {
+		skin: '#e3bb95', hair: '#9aa2a8', jaw: 0.48,
+		nose: 0.24, brow: 0.06, mouth: 0.22,
+		glasses: true, tache: true,
+	},
+}
+
+// Flat and almost shineless: skin and hair with a car's
+// specular on them read as plastic, which at this size is the
+// difference between a face and a doll.
+function matte(hex) {
+	return {
+		base: linear(hex), tint: [1, 1, 1],
+		sky: [0.26, 0.32, 0.42], amb: 0.15, fill: 0.28,
+		kd: 1.1, shine: 8, ks: 0.07, rim: 0.2,
+	}
+}
+
+const TEETH = matte('#f2efe6')
+
+function piece(planes, pal, offset) {
+	return { faces: convex(planes), pal, offset }
+}
+
+// A dome on its own is a ball, so every face gets a jaw. It
+// is also where most of the difference between them lives:
+// Drake's is half as wide again as Kestrel's, and at this
+// size that reads before any feature does.
+function headParts(spec) {
+	const skin = matte(spec.skin)
+	return [
+		piece(dome(1), skin, [0, 0, 0]),
+		piece(box(spec.jaw, 0.26, 0.5), skin, [0, 0.54, 0.1]),
+	]
+}
+
+// The livery, worn. The swatch beside the name ties a row to
+// a car on the road; this has to do the same job in the
+// podium, where there is no swatch.
+function capParts(colours) {
+	const band = paint(linear(colours.body))
+	const dark = paint(linear(colours.shell))
+	return [
+		piece(box(0.95, 0.26, 0.5), band, [0, -0.52, 0.34]),
+		piece(box(0.8, 0.07, 0.26), dark, [0, -0.34, 0.78]),
+	]
+}
+
+function hairParts(spec) {
+	const hair = matte(spec.hair)
+	const out = []
+	if (spec.mop) {
+		// Marlo's, escaping from under the cap on both sides.
+		for (const s of [-1, 1]) {
+			out.push(piece(box(0.2, 0.34, 0.34), hair,
+				[s * 0.84, -0.18, 0.3]))
+		}
+	}
+	if (spec.sideburns) {
+		for (const s of [-1, 1]) {
+			out.push(piece(box(0.1, 0.22, 0.2), hair,
+				[s * 0.8, -0.1, 0.5]))
+		}
+	}
+	if (spec.tache) {
+		out.push(piece(box(0.46, 0.13, 0.16), hair,
+			[0, 0.36, 0.78]))
+	}
+	return out
+}
+
 export function helmetModel(colours) {
 	const shell = paint(linear(colours.shell))
 	const flash = paint(linear(colours.body))
@@ -340,5 +448,93 @@ export function helmetModel(colours) {
 			faces: convex(box(0.66, 0.2, 0.26)),
 			pal: GLASS, offset: [0, -0.06, 0.88],
 		},
+	])
+}
+
+// Eyes, or what is over them. A dark bar is not lazier than
+// two eyes — at this size a pair of shades is more legible
+// than a pair of pupils, which is why Voss has them.
+function shadeParts() {
+	return [
+		piece(box(0.84, 0.19, 0.1), TRIM, [0, -0.05, 0.8]),
+		piece(box(0.76, 0.13, 0.06), GLASS, [0, -0.05, 0.86]),
+	]
+}
+
+function glassParts() {
+	const out = []
+	for (const s of [-1, 1]) {
+		out.push(piece(prism(0.27, 0.05, 10, 2), TRIM,
+			[s * 0.36, -0.04, 0.78]))
+		out.push(piece(prism(0.21, 0.05, 10, 2), GLASS,
+			[s * 0.36, -0.04, 0.84]))
+	}
+	out.push(piece(box(0.18, 0.05, 0.05), TRIM,
+		[0, -0.04, 0.82]))
+	return out
+}
+
+function eyeParts(spec) {
+	if (spec.shades) return shadeParts()
+	const hair = matte(spec.hair)
+	const out = spec.glasses ? glassParts() : []
+	for (const s of [-1, 1]) {
+		if (!spec.glasses) {
+			const w = spec.grin ? 0.19 : 0.14
+			out.push(piece(box(w, 0.14, 0.1), TRIM,
+				[s * 0.35, -0.03, 0.79]))
+		}
+		// Drake's brows come down over the eyes rather than
+		// sitting above them, which is the whole scowl —
+		// but only to the edge of them. Any lower and they
+		// are in front of the eyes as well as over them, and
+		// since both are near-black he came out with no eyes
+		// at all.
+		out.push(piece(box(0.26, spec.brow, 0.09), hair,
+			[s * 0.35, spec.scowl ? -0.21 : -0.27, 0.78]))
+	}
+	return out
+}
+
+function noseParts(spec) {
+	const skin = matte(spec.skin)
+	if (spec.beak) {
+		// Kestrel is named for it. Pointed straight at the
+		// viewer a long nose is a small square, so the length
+		// runs down the face as well as out of it, and it
+		// finishes in a tip below the nostril line.
+		return [
+			piece(box(0.15, 0.34, 0.26), skin,
+				[0, 0.14, 0.9]),
+			piece(box(0.1, 0.1, 0.18), skin,
+				[0, 0.42, 0.98]),
+		]
+	}
+	return [piece(box(0.14, spec.nose, 0.2), skin,
+		[0, 0.18, 0.86])]
+}
+
+function mouthParts(spec) {
+	const out = [piece(box(spec.mouth, 0.08, 0.1), TRIM,
+		[0, 0.5, 0.78])]
+	if (spec.grin) {
+		out.push(piece(box(spec.mouth * 0.8, 0.06, 0.06),
+			TEETH, [0, 0.47, 0.82]))
+	}
+	return out
+}
+
+// Falls back to the helmet rather than inventing a face, so
+// the player — who has no entry — keeps the one they had.
+export function faceModel(name, colours) {
+	const spec = FACES[name]
+	if (!spec) return helmetModel(colours)
+	return model([
+		...headParts(spec),
+		...capParts(colours),
+		...hairParts(spec),
+		...eyeParts(spec),
+		...noseParts(spec),
+		...mouthParts(spec),
 	])
 }

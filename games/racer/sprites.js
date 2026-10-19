@@ -12,7 +12,7 @@ import { bakeOne, ringOf, frameFor } from '../_shared/bake.js'
 import { PX } from './view.js'
 import {
 	carModel, tyreModel, barrelModel, treeModel,
-	buildingModel, helmetModel,
+	buildingModel, faceModel,
 } from './models.js'
 
 export { frameFor }
@@ -96,17 +96,25 @@ export function carRing(colours) {
 	return cars.get(key)
 }
 
-// One helmet per livery, built on first use like the cars.
+// One portrait per driver, built on first use like the cars.
 // These are drawn in the HUD, which is not inside the
 // camera's scale, so they bake at their own pixel size and
 // not at PX times it.
+//
+// Two sizes, because the standings rows are a third of the
+// podium's size and a face drawn down to fourteen pixels is
+// a smudge — the small one is modelled the same and baked
+// small, not shrunk.
 const heads = new Map()
 
-export function portrait(colours) {
-	const key = colours.shell + colours.body
+export const ROW_R = 8
+
+export function portrait(name, colours, r) {
+	const radius = r || PORTRAIT_R
+	const key = name + colours.shell + colours.body + radius
 	if (!heads.has(key)) {
 		heads.set(key, bakeOne(
-			helmetModel(colours), PORTRAIT_R, HEAD_ON))
+			faceModel(name, colours), radius, HEAD_ON))
 	}
 	return heads.get(key)
 }
