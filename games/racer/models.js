@@ -282,3 +282,63 @@ export function buildingModel() {
 		},
 	])
 }
+
+// A driver's helmet, for the podium portraits.
+//
+// Authored for a front view rather than a plan one, which is
+// the one place in this file that is true: +X right, +Y down
+// (canvas down), +Z toward the viewer, and baked with no tilt
+// at all. Everything else here is seen from above, so the
+// convention that holds for a car on a road does not hold for
+// a face looking out of a panel.
+const DOME_SIDES = 12
+
+function dome(r) {
+	const planes = [
+		{ n: [0, 0, 1], d: r * 0.8 },
+		{ n: [0, 0, -1], d: r * 0.55 },
+	]
+	for (let i = 0; i < DOME_SIDES; i++) {
+		const a = (i / DOME_SIDES) * Math.PI * 2
+		const c = Math.cos(a), s2 = Math.sin(a)
+		// The rim, then the same ring tipped forward, which
+		// is what rounds the front off instead of leaving a
+		// flat disc staring out of the panel.
+		planes.push({ n: [c, s2 * 1.12, 0], d: r })
+		planes.push({
+			n: unit([c * 0.62, s2 * 0.7, 1]),
+			d: r * 0.95,
+		})
+	}
+	return planes
+}
+
+export function helmetModel(colours) {
+	const shell = paint(linear(colours.shell))
+	const flash = paint(linear(colours.body))
+	return model([
+		{
+			faces: convex(dome(1)),
+			pal: shell, offset: [0, 0, 0],
+		},
+		// A stripe over the crown, so two helmets of similar
+		// colour are still told apart at twenty pixels.
+		{
+			faces: convex(box(0.22, 0.9, 0.5)),
+			pal: flash, offset: [0, -0.1, 0.62],
+		},
+		// The visor: a wide dark band across the eyes. It is
+		// the single feature that makes this read as a
+		// helmet rather than as a ball, and at twenty pixels
+		// wide it has to be big enough to survive being
+		// twenty pixels wide.
+		{
+			faces: convex(box(0.78, 0.3, 0.3)),
+			pal: TRIM, offset: [0, -0.04, 0.72],
+		},
+		{
+			faces: convex(box(0.66, 0.2, 0.26)),
+			pal: GLASS, offset: [0, -0.06, 0.88],
+		},
+	])
+}

@@ -14,6 +14,7 @@ import {
 } from './race.js'
 import { PLAYER_NAME, PLAYER_COLOURS } from './car.js'
 import { MAX_AMMO, LIVES } from './missiles.js'
+import { portrait } from './sprites.js'
 
 function countBits(n) {
 	let c = 0
@@ -182,6 +183,38 @@ function drawMeters(ctx, state, best, maxSpeed, place) {
 	speedBar(ctx, state.speed, maxSpeed, 185, H - 16, 150)
 }
 
+// Who is winning, right now, with a face on it. The six-row
+// board down the side answers "where am I"; this answers "who
+// is in front", which is a different question and the one you
+// glance at mid-corner.
+const PODIUM_X = 392
+const PODIUM_Y = 54
+const PODIUM_W = 112
+
+function podiumEntry(ctx, car, place, mine, x) {
+	const img = portrait(
+		mine ? PLAYER_COLOURS : car.colours)
+	ctx.drawImage(img, x, PODIUM_Y - 4)
+	const tx = x + img.width + 4
+	label(
+		ctx, tx, PODIUM_Y + 14, ordinal(place), 'left',
+		place === 1 ? '#ffe28a' : DIM)
+	label(
+		ctx, tx, PODIUM_Y + 28,
+		mine ? PLAYER_NAME : car.name, 'left',
+		mine ? LIVE : '#d8ecf4')
+}
+
+function drawPodium(ctx, state) {
+	const top = orderOf(state.track, state, state.rivals)
+		.slice(0, 3)
+	top.forEach((car, i) => {
+		podiumEntry(
+			ctx, car, i + 1, car === state,
+			PODIUM_X + i * PODIUM_W)
+	})
+}
+
 // Lives and ammo as pips rather than numbers: both are small
 // counts that change suddenly, and a row you can take in
 // without reading beats a digit you have to.
@@ -209,6 +242,7 @@ export function drawHud(ctx, state, best, maxSpeed, place) {
 	ctx.textBaseline = 'alphabetic'
 
 	drawMeters(ctx, state, best, maxSpeed, place)
+	drawPodium(ctx, state)
 	drawStores(ctx, state)
 	drawBoard(ctx, state)
 	ctx.fillStyle = DIM

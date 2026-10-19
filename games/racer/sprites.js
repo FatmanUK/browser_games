@@ -12,7 +12,7 @@ import { bakeOne, ringOf, frameFor } from '../_shared/bake.js'
 import { PX } from './view.js'
 import {
 	carModel, tyreModel, barrelModel, treeModel,
-	buildingModel,
+	buildingModel, helmetModel,
 } from './models.js'
 
 export { frameFor }
@@ -37,6 +37,11 @@ const CAR_FRAMES = 32
 // PX times these, because every blit happens inside the
 // camera's scale (see view.js).
 const CAR_R = 11
+
+// Straight on, with no tilt: a portrait looks out of the
+// panel rather than down at the road.
+const HEAD_ON = { x: 0, z: 0 }
+const PORTRAIT_R = 19
 const SIZES = {
 	tyre: 4, barrel: 4.5, tree: 15, building: 20,
 }
@@ -89,6 +94,21 @@ export function carRing(colours) {
 			TOP_DOWN))
 	}
 	return cars.get(key)
+}
+
+// One helmet per livery, built on first use like the cars.
+// These are drawn in the HUD, which is not inside the
+// camera's scale, so they bake at their own pixel size and
+// not at PX times it.
+const heads = new Map()
+
+export function portrait(colours) {
+	const key = colours.shell + colours.body
+	if (!heads.has(key)) {
+		heads.set(key, bakeOne(
+			helmetModel(colours), PORTRAIT_R, HEAD_ON))
+	}
+	return heads.get(key)
 }
 
 // Picks a variant from a world position, so a given tree is

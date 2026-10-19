@@ -77,7 +77,9 @@ files in its own `music/` folder — see
   pace, so the field strings out instead of running as a
   block, and leaning on one through a corner costs you both
   speed. They have names and a standings board, so the blue one
-  is Voss rather than the blue one. Each drives differently
+  is Voss rather than the blue one, with the current top three
+  shown across the top of the window as helmets and names and
+  the whole field down the side. Each drives differently
   rather than just faster or slower: its own top speed, how
   hard it leans on a corner, how late it brakes, and how
   readily it takes a missile shot. Voss is quick and tidy,
@@ -93,7 +95,8 @@ files in its own `music/` folder — see
   of them was passed *on* the road — cutting covers the same
   ground the long way round does as far as any counter can
   tell, so being there is what gets checked. Amber chevrons warn of the sharper corners,
-  pointing the way they bend. Their lamps are drawn over the dusk rather than
+  pointing the way they bend, painted on the tarmac in white
+  rather than hung over it. Their lamps are drawn over the dusk rather than
   under it, so a car outside your headlights is still
   something you can see coming. Crossing the line for the
   third time ends your race with a finishing place. Win one
