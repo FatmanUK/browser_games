@@ -9,7 +9,7 @@ import { buildRocks } from './rocks.js'
 import {
 	buildShip, buildFlame, buildFoe, buildBoss,
 	buildShots, buildPuffs, buildShield, buildCoins,
-	buildPods,
+	buildPods, buildShipRear,
 } from './craft.js'
 
 const RING_R = 256
@@ -53,6 +53,7 @@ export function getAtlas() {
 	atlas = {
 		rocks: buildRocks(),
 		ship: buildShip(),
+		shipRear: buildShipRear(),
 		flame: buildFlame(),
 		foe: buildFoe(),
 		boss: buildBoss(),

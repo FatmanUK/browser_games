@@ -427,3 +427,112 @@ export function buildPods() {
 	}
 	return frames
 }
+
+const REAR_PAL = {
+	hi: '#eaf1ff', mid: '#7f8ca6', lo: '#333a4e',
+	rim: '#10131d',
+}
+
+// Seen from behind, a delta is mostly one horizontal wing, and
+// drawn flat that is a stick with a lump in the middle. The
+// dihedral is what rescues it: sweeping the wings up towards
+// the tips gives the silhouette a direction to read in, and
+// the winglets give it ends.
+function rearHull(ctx, r) {
+	ctx.beginPath()
+	ctx.moveTo(-0.44 * r, -0.52 * r)
+	ctx.lineTo(0.44 * r, -0.52 * r)
+	ctx.lineTo(0.5 * r, 0.1 * r)
+	ctx.lineTo(1.45 * r, -0.26 * r)
+	ctx.lineTo(1.62 * r, -0.2 * r)
+	ctx.lineTo(1.62 * r, 0.12 * r)
+	ctx.lineTo(0.62 * r, 0.52 * r)
+	ctx.lineTo(0.56 * r, 0.66 * r)
+	ctx.lineTo(-0.56 * r, 0.66 * r)
+	ctx.lineTo(-0.62 * r, 0.52 * r)
+	ctx.lineTo(-1.62 * r, 0.12 * r)
+	ctx.lineTo(-1.62 * r, -0.2 * r)
+	ctx.lineTo(-1.45 * r, -0.26 * r)
+	ctx.lineTo(-0.5 * r, 0.1 * r)
+	ctx.closePath()
+}
+
+function rearFin(ctx, r) {
+	ctx.beginPath()
+	ctx.moveTo(-0.15 * r, -0.5 * r)
+	ctx.lineTo(0, -1.05 * r)
+	ctx.lineTo(0.15 * r, -0.5 * r)
+	ctx.closePath()
+}
+
+function rearCanopy(ctx, r) {
+	const g = ctx.createRadialGradient(
+		-r * 0.12, -r * 0.38, 0, 0, -r * 0.24, r * 0.38)
+	g.addColorStop(0, '#cdf6ff')
+	g.addColorStop(0.55, '#2f8fb5')
+	g.addColorStop(1, '#0d2a3c')
+	ctx.fillStyle = g
+	ctx.beginPath()
+	ctx.ellipse(
+		0, -r * 0.24, r * 0.26, r * 0.17, 0, 0,
+		Math.PI * 2)
+	ctx.fill()
+}
+
+// Engine bells pointed at the viewer. These are the whole
+// point of the rear view: a plume trailing off the tail reads
+// as a ship moving across the screen, where exhaust coming
+// straight at you reads as one going away from you. Kept tight
+// — a wide glow just smears the two into one orange blob.
+function rearEngines(ctx, r, heat) {
+	for (const side of [-1, 1]) {
+		ctx.save()
+		ctx.translate(side * r * 0.26, r * 0.42)
+		ctx.fillStyle = '#0c0f18'
+		ctx.beginPath()
+		ctx.arc(0, 0, r * 0.22, 0, Math.PI * 2)
+		ctx.fill()
+		ctx.globalCompositeOperation = 'lighter'
+		glow(
+			ctx, r * (0.3 + 0.08 * heat),
+			`rgba(255,248,226,${0.8 + 0.2 * heat})`,
+			`rgba(255,140,50,${0.4 + 0.2 * heat})`)
+		ctx.restore()
+	}
+}
+
+function drawRearFrame(ctx, r, heat) {
+	rearHull(ctx, r)
+	ctx.save()
+	ctx.clip()
+	ctx.fillStyle = bodyGradient(ctx, r, REAR_PAL)
+	ctx.fillRect(-r * 2, -r * 2, r * 4, r * 4)
+	specular(ctx, r, 0.5, 0.4)
+	ctx.restore()
+	rearHull(ctx, r)
+	limbStroke(ctx, r, REAR_PAL, 1.5)
+	rearFin(ctx, r)
+	ctx.fillStyle = REAR_PAL.lo
+	ctx.fill()
+	rearFin(ctx, r)
+	limbStroke(ctx, r, REAR_PAL, 1.2)
+	rearCanopy(ctx, r)
+	rearEngines(ctx, r, heat)
+}
+
+// Used only in the wormhole, where the camera sits behind the
+// ship. Rotating this one with the bank is correct rather than
+// a cheat: a roll really does turn the craft about the axis
+// you are looking down, lighting and all.
+export function buildShipRear() {
+	const span = Math.ceil(SHIP_R * 4)
+	const frames = []
+	for (let i = 0; i < 6; i++) {
+		const { canvas, ctx } = centred(span)
+		const heat = 0.5 + 0.5 * Math.sin(
+			(i / 6) * Math.PI * 2)
+		drawRearFrame(ctx, SHIP_R, heat)
+		frames.push(canvas)
+	}
+	return frames
+}

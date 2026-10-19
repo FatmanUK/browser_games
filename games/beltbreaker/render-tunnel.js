@@ -6,7 +6,7 @@
 import { W, H } from './common.js'
 import { FOCAL, Z_FAR, Z_SHIP, TR, project } from './tunnel.js'
 import { ROCK_R, frameFor } from './rocks.js'
-import { FOE_R, SHIP_R } from './craft.js'
+import { FOE_R } from './craft.js'
 
 const RINGS = 15
 const SHIP_SCALE = 1.8
@@ -115,32 +115,28 @@ function drawTParts(ctx, atlas, tn, cx, cy) {
 	ctx.globalCompositeOperation = 'source-over'
 }
 
+// The camera in the wormhole sits behind the ship, so this
+// draws the rear-view sprite rolled by the bank — not the
+// top-down hull with a plume trailing off its tail, which read
+// as a rocket dropping down the screen rather than as a ship
+// flying away from you. The exhaust comes straight at the
+// viewer instead, which is what sells the direction.
 function drawTShip(ctx, atlas, tn, cx, cy) {
 	const p = project(
 		{ ox: tn.tx, oy: tn.ty, z: Z_SHIP }, cx, cy)
 	const blink = tn.inv > 0
 		? 0.45 + 0.55 * Math.abs(Math.sin(tn.inv * 11))
 		: 1
-	const img = frameFor(
-		atlas.ship, -Math.PI / 2 + tn.bank * 0.5)
-	ctx.globalCompositeOperation = 'lighter'
-	const fl = atlas.flame[
-		Math.floor(tn.t * 24) % atlas.flame.length]
-	ctx.save()
-	ctx.translate(p.x, p.y)
-	// Same heading as the hull frame, so the plume sits
-	// behind the ship rather than ahead of it.
-	ctx.rotate(-Math.PI / 2 + tn.bank * 0.5)
-	ctx.scale(SHIP_SCALE, SHIP_SCALE)
-	ctx.drawImage(
-		fl, -fl.width / 2 - SHIP_R * 0.95,
-		-fl.height / 2)
-	ctx.restore()
-	ctx.globalCompositeOperation = 'source-over'
-	ctx.globalAlpha = blink
+	const frames = atlas.shipRear
+	const img = frames[
+		Math.floor(tn.t * 15) % frames.length]
 	const sw = img.width * SHIP_SCALE
-	ctx.drawImage(img, p.x - sw / 2, p.y - sw / 2, sw, sw)
-	ctx.globalAlpha = 1
+	ctx.save()
+	ctx.globalAlpha = blink
+	ctx.translate(p.x, p.y)
+	ctx.rotate(tn.bank * 0.55)
+	ctx.drawImage(img, -sw / 2, -sw / 2, sw, sw)
+	ctx.restore()
 	if (tn.inv <= 0) return
 	ctx.globalCompositeOperation = 'lighter'
 	ctx.globalAlpha = Math.min(1, tn.inv) * 0.75
