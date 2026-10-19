@@ -58,11 +58,11 @@ export const DRIVERS = {
 		stubble: true,
 	},
 	IBBOTT: {
-		skin: '#f2cfae', shade: '#d6ad8a', hair: '#b7bcc2',
+		skin: '#f2cfae', shade: '#d6ad8a', hair: '#9c4a21',
 		w: 0.26, h: 0.325, jaw: 0.72, style: 'ibbott',
 		look: 0, open: 0.8, browLift: 0.105,
 		browTilt: 0.006, browW: 0.022, nose: 0.018,
-		mouth: 0.05, smile: -0.008, crown: 0.03,
+		mouth: 0.055, smile: 0.01, crown: 0.0,
 		lashes: true,
 	},
 }
@@ -254,19 +254,23 @@ function hairBack(ctx, d) {
 		ink(ctx, 0.018)
 	}
 	if (d.style === 'ibbott') {
-		// The bun sits high enough to clear the cap, which
-		// is the only part of it anyone will see.
+		// A ponytail out of the back of the cap. It was a
+		// grey bun, which aged her about thirty years all on
+		// its own — the hairstyle was doing more of that than
+		// the glasses or the lines ever did.
 		ctx.beginPath()
-		ctx.arc(0.5, 0.19, 0.12, 0, Math.PI * 2)
+		ctx.moveTo(0.5 + d.w, 0.34)
+		ctx.quadraticCurveTo(0.93, 0.34, 0.9, 0.56)
+		ctx.quadraticCurveTo(0.88, 0.72, 0.78, 0.74)
+		ctx.quadraticCurveTo(0.84, 0.56, 0.74, 0.4)
+		ctx.closePath()
 		ctx.fill()
 		ink(ctx, 0.018)
-		for (const t of [-1, 1]) {
-			ctx.beginPath()
-			ctx.ellipse(0.5 + t * (d.w + 0.03), 0.52,
-				0.05, 0.14, 0, 0, Math.PI * 2)
-			ctx.fill()
-			ink(ctx, 0.016)
-		}
+		ctx.beginPath()
+		ctx.ellipse(0.5 - d.w - 0.015, 0.5,
+			0.045, 0.12, 0, 0, Math.PI * 2)
+		ctx.fill()
+		ink(ctx, 0.016)
 	}
 }
 
@@ -371,39 +375,69 @@ function cap(ctx, d, colours, q) {
 	ink(ctx, 0.02)
 }
 
-// The Stig, in other words. A white shell and a black visor,
-// with a stripe of the livery over the crown so the row still
-// ties to the red car on the road.
-export function drawHelmet(ctx, colours) {
+// Still the Stig — nobody sees the face — but gloss black
+// now rather than white, with a gold mirror visor and the
+// livery over the crown so the row still ties to the red car
+// on the road. White read as one more pale thing in a row of
+// pale faces; black and gold is the one portrait in the list
+// that is not a person.
+const SHELL = '#16181d'
+const SHELL_LIT = '#2b3038'
+const VISOR = '#c8912f'
+const VISOR_LIT = '#f0cd7a'
+
+function helmetShell(ctx, colours) {
 	ctx.beginPath()
 	ctx.ellipse(0.5, 0.54, 0.33, 0.36, 0, 0, Math.PI * 2)
-	ctx.fillStyle = '#eceff2'
+	ctx.fillStyle = SHELL
 	ctx.fill()
 	ink(ctx, 0.024)
 	ctx.save()
 	ctx.beginPath()
 	ctx.ellipse(0.5, 0.54, 0.33, 0.36, 0, 0, Math.PI * 2)
 	ctx.clip()
-	ctx.fillStyle = '#c9d0d6'
-	ctx.fillRect(0.66, 0.1, 0.4, 0.9)
+	ctx.fillStyle = SHELL_LIT
+	ctx.fillRect(0.17, 0.1, 0.16, 0.9)
 	ctx.fillStyle = colours.body
-	ctx.fillRect(0.44, 0.1, 0.12, 0.3)
+	ctx.fillRect(0.44, 0.1, 0.12, 0.34)
+	ctx.fillStyle = colours.shell
+	ctx.fillRect(0.44, 0.1, 0.04, 0.34)
 	ctx.restore()
+}
+
+export function drawHelmet(ctx, colours) {
+	helmetShell(ctx, colours)
 	ctx.beginPath()
 	ctx.moveTo(0.26, 0.5)
 	ctx.quadraticCurveTo(0.5, 0.42, 0.74, 0.5)
 	ctx.quadraticCurveTo(0.72, 0.64, 0.5, 0.65)
 	ctx.quadraticCurveTo(0.28, 0.64, 0.26, 0.5)
 	ctx.closePath()
-	ctx.fillStyle = '#12161c'
+	ctx.fillStyle = VISOR
 	ctx.fill()
 	ink(ctx, 0.022)
+	// A streak rather than a wash: a mirror visor is dark
+	// gold with one bright line raked across it, and filled
+	// with the light tone it just reads as a gold blob.
+	ctx.save()
+	ctx.clip()
+	ctx.fillStyle = VISOR_LIT
 	ctx.beginPath()
-	ctx.moveTo(0.33, 0.56)
-	ctx.lineTo(0.45, 0.49)
-	ctx.strokeStyle = 'rgba(255,255,255,0.5)'
-	ctx.lineWidth = 0.02
-	ctx.stroke()
+	ctx.moveTo(0.3, 0.64)
+	ctx.lineTo(0.42, 0.4)
+	ctx.lineTo(0.49, 0.4)
+	ctx.lineTo(0.37, 0.64)
+	ctx.closePath()
+	ctx.fill()
+	ctx.globalAlpha = 0.5
+	ctx.beginPath()
+	ctx.moveTo(0.52, 0.64)
+	ctx.lineTo(0.6, 0.42)
+	ctx.lineTo(0.63, 0.42)
+	ctx.lineTo(0.55, 0.64)
+	ctx.closePath()
+	ctx.fill()
+	ctx.restore()
 }
 
 const EXTRAS = {

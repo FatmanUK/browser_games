@@ -87,10 +87,11 @@ files in its own `music/` folder — see
   inside an ink line, the way a comic panel is — because a
   face is a set of marks rather than a solid: Voss behind his
   shades, Kestrel's bob and narrowed eyes, Marlo's grin,
-  Drake's brow and stubble, Ibbott's bun and round specs, each
-  in a cap in its own livery. You keep a white helmet with a
-  black visor, which is both what you would see of yourself
-  and the quickest way to pick your own row out of six. Each drives differently
+  Drake's brow and stubble, Ibbott's ponytail and round specs,
+  each in a cap in its own livery. You keep a black helmet
+  with a gold mirror visor, which is both what you would see
+  of yourself and the quickest way to pick your own row out
+  of six. Each drives differently
   rather than just faster or slower: its own top speed, how
   hard it leans on a corner, how late it brakes, and how
   readily it takes a missile shot. Voss is quick and tidy,
@@ -106,7 +107,8 @@ files in its own `music/` folder — see
   zero lives your race is over where you stand. The road keeps
   a record of all this: a scorch mark where a missile went off,
   and rubber wherever a car pulled away hard or stood on the
-  brakes. Twelve checkpoint gates are
+  brakes. Neither fades: the marks are there for the rest of
+  the race, so by the last lap the braking zones are black. Twelve checkpoint gates are
   painted across the road, and a lap only counts if every one
   of them was passed inside the track's boundary — cutting
   covers the same ground the long way round does as far as any

@@ -70,9 +70,15 @@ const TELEPORT = 10
 // crater is belongs with the crater.
 export const BLAST_R = 13
 
-const RUBBER_LIFE = 7
+// Rubber does not fade. It is laid on the road and it stays
+// there, and the only thing that takes it away is the cap —
+// so the cap is what a lap's worth of marks costs, not a
+// timer. Raised a long way because dropping the fade also
+// dropped the four stroke passes it needed: with one alpha
+// there is one path and one stroke however many segments it
+// holds.
 const BLAST_LIFE = 22
-const MAX_RUBBER = 900
+const MAX_RUBBER = 2600
 const MAX_BLASTS = 24
 
 export function createMarks() {
@@ -88,16 +94,11 @@ export function armScrub(car) {
 	return car
 }
 
-function reap(list, dt) {
-	return list.filter((m) => {
+export function updateMarks(marks, dt) {
+	marks.blasts = marks.blasts.filter((m) => {
 		m.t -= dt
 		return m.t > 0
 	})
-}
-
-export function updateMarks(marks, dt) {
-	marks.rubber = reap(marks.rubber, dt)
-	marks.blasts = reap(marks.blasts, dt)
 }
 
 export function addBlast(marks, x, y) {
@@ -172,7 +173,6 @@ function layOne(marks, track, car, dt) {
 		marks.rubber.push({
 			x0: from[i].x, y0: from[i].y,
 			x1: wheels[i].x, y1: wheels[i].y,
-			t: RUBBER_LIFE, life: RUBBER_LIFE,
 		})
 	}
 }

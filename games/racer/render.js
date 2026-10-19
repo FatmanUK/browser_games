@@ -558,35 +558,24 @@ function drawMissiles(ctx, state) {
 
 // Rubber and scorch, drawn over the paint and under the cars.
 //
-// The alpha is quantised into a handful of bands so the whole
-// lot strokes in four passes. A per-segment alpha means a
-// per-segment stroke, and there are nine hundred segments.
-// Dark enough to read on a road that is already dark and
-// then dimmed again by the dusk, which is what the rubber
-// sits in: the trail is behind the car and the headlamps
-// point the other way.
+// One alpha and one stroke for the whole lot. It used to be
+// quantised into four bands by age, which is what a fading
+// mark needs; rubber does not fade, so there is one path with
+// every visible segment in it.
 const RUBBER_W = 3
 const RUBBER_DARK = 0.55
-const RUBBER_BANDS = 4
 
 function drawRubber(ctx, marks, cam) {
 	ctx.lineWidth = RUBBER_W
 	ctx.lineCap = 'round'
-	for (let b = 1; b <= RUBBER_BANDS; b++) {
-		const lo = (b - 1) / RUBBER_BANDS
-		const hi = b / RUBBER_BANDS
-		const a = RUBBER_DARK * hi
-		ctx.strokeStyle = `rgba(26, 23, 26, ${a})`
-		ctx.beginPath()
-		for (const m of marks.rubber) {
-			const f = m.t / m.life
-			if (f <= lo || f > hi) continue
-			if (!onScreen(m.x0, m.y0, cam)) continue
-			ctx.moveTo(m.x0, m.y0)
-			ctx.lineTo(m.x1, m.y1)
-		}
-		ctx.stroke()
+	ctx.strokeStyle = `rgba(26, 23, 26, ${RUBBER_DARK})`
+	ctx.beginPath()
+	for (const m of marks.rubber) {
+		if (!onScreen(m.x0, m.y0, cam)) continue
+		ctx.moveTo(m.x0, m.y0)
+		ctx.lineTo(m.x1, m.y1)
 	}
+	ctx.stroke()
 }
 
 // A scorched disc with cracks running out of it. The crack
@@ -741,39 +730,27 @@ const POOL_AHEAD = 28
 const POOL_R = 13
 const SPLAY = 0.28
 
-// Wide enough to touch the circle, which is asin and not
-// atan. The far end of a wedge is an arc of radius
-// POOL_AHEAD, not a straight line across it, so at atan the
-// arc's ends come in to about twelve where the circle is
-// thirteen — the beam arrived a little narrower than the
-// circle it was supposed to be opening into. asin(r/d) is
-// the angle of the tangent from the lamp to the circle, so
-// the wedge now just contains it.
-const BEAM_SPREAD = Math.asin(POOL_R / POOL_AHEAD)
-
-// Both wedges start from the middle of the nose, and that is
-// not laziness about where a headlamp is.
+// The beams come off the two headlamps, out on the corners
+// of the nose, and the shape of one is the hull of its lamp
+// and its circle: a small disc at the lamp, the big circle at
+// the far end, and the two straight sides between them. A
+// cone, in other words, with a real source — and no spread
+// angle to set, because the two circles already say how wide
+// it is at both ends.
 //
-// Set them five units apart, where the lamps actually are,
-// and each one aims away from the other: the strip straight
-// ahead of the car is then outside the left lamp's cone and
-// outside the right lamp's too, and stays outside both until
-// twelve units out, where the splay finally wins. That strip
-// is a dark wedge sitting between the two beams, which is
-// what reads as one headlight shadowing the other. No spread
-// closes it either — the angle to the centreline goes to a
-// right angle as you approach the lamp.
-//
-// The lamps themselves are still drawn out on the corners
-// (drawLamps), which is the part you actually see.
+// Taking it as a wedge from a point, which is the obvious
+// thing, is what put a shadow between the two beams. Each
+// lamp aims away from the other, so the strip straight ahead
+// of the car fell outside the left cone and outside the right
+// one too, and stayed outside both until twelve units out. No
+// spread closes that: the angle from a point on the
+// centreline to a lamp beside it goes to a right angle as you
+// approach. A mouth as wide as the lamps are apart closes it
+// at the nose instead, where it belongs, and looks more like
+// a headlight anyway.
+const LAMP_R = 4
+const LAMP_SIDE = 2.5
 const NOSE = CAR_LENGTH / 2
-
-// The lamps are on the nose, and the beams start there. They
-// used to start at the middle of the car so that the car sat
-// in its own light, which was the wrong fix for a real
-// problem — the car is marked by its own lamps now (see
-// drawLamps), so the beams can come off the front where they
-// belong.
 
 // Where a car's lamps are, in viewport units. The player sits
 // at the centre of the window and a rival is wherever it is
@@ -783,40 +760,47 @@ function lampsOf(car, cam) {
 	const sx = VIEWPORT_WIDTH / 2 + (car.x - cam.x)
 	const sy = VIEWPORT_HEIGHT / 2 + (car.y - cam.y)
 	const f = car.facing
+	const px = Math.cos(f + Math.PI / 2) * LAMP_SIDE
+	const py = Math.sin(f + Math.PI / 2) * LAMP_SIDE
 	const cx = sx + Math.cos(f) * NOSE
 	const cy = sy + Math.sin(f) * NOSE
-	// One origin, two aims: see the note on the nose above.
 	return [-1, 1].map((side) => ({
-		x: cx, y: cy, aim: f + SPLAY * side,
+		x: cx + px * side,
+		y: cy + py * side,
+		aim: f + SPLAY * side,
 	}))
 }
 
-// The wedge and the circle as one path, so a single clip
-// covers both. Two subpaths union under the nonzero rule,
-// which is why this can be a union where cutting holes in a
-// shared fill could not (see the note on revealLamp).
+// One convex outline for the whole beam: round the front of
+// the far circle, then round the back of the lamp, which
+// joins them with the two straight sides. Traversed with the
+// angle only ever increasing, so every subpath winds the same
+// way — and that matters, because nonzero only unions shapes
+// that agree about which way is in. Mixed windings would cut
+// holes wherever two beams crossed.
 function lampPath(ctx, lamp) {
-	const cx = lamp.x + Math.cos(lamp.aim) * POOL_AHEAD
-	const cy = lamp.y + Math.sin(lamp.aim) * POOL_AHEAD
-	ctx.moveTo(lamp.x, lamp.y)
-	ctx.arc(
-		lamp.x, lamp.y, POOL_AHEAD,
-		lamp.aim - BEAM_SPREAD, lamp.aim + BEAM_SPREAD)
+	const a = lamp.aim
+	const cx = lamp.x + Math.cos(a) * POOL_AHEAD
+	const cy = lamp.y + Math.sin(a) * POOL_AHEAD
+	const q = Math.PI / 2
+	ctx.moveTo(
+		cx + Math.cos(a - q) * POOL_R,
+		cy + Math.sin(a - q) * POOL_R)
+	ctx.arc(cx, cy, POOL_R, a - q, a + q)
+	ctx.arc(lamp.x, lamp.y, LAMP_R, a + q, a + q * 3)
 	ctx.closePath()
-	ctx.moveTo(cx + POOL_R, cy)
-	ctx.arc(cx, cy, POOL_R, 0, Math.PI * 2)
 	return { cx, cy }
 }
 
 // The box a lamp can reach into, so a frame blits the part
-// of the world that is lit rather than all of it. The wedge
-// is widest where it meets the circle, so the circle's box
-// contains it.
+// of the world that is lit rather than all of it. A beam is
+// the hull of two circles, so the two circles' boxes between
+// them contain it.
 function lampBox(lamp, c) {
-	const x0 = Math.min(lamp.x, c.cx - POOL_R) - 2
-	const y0 = Math.min(lamp.y, c.cy - POOL_R) - 2
-	const x1 = Math.max(lamp.x, c.cx + POOL_R) + 2
-	const y1 = Math.max(lamp.y, c.cy + POOL_R) + 2
+	const x0 = Math.min(lamp.x - LAMP_R, c.cx - POOL_R) - 2
+	const y0 = Math.min(lamp.y - LAMP_R, c.cy - POOL_R) - 2
+	const x1 = Math.max(lamp.x + LAMP_R, c.cx + POOL_R) + 2
+	const y1 = Math.max(lamp.y + LAMP_R, c.cy + POOL_R) + 2
 	return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
 }
 
