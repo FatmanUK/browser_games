@@ -14,7 +14,7 @@ import {
 } from './race.js'
 import { PLAYER_NAME, PLAYER_COLOURS } from './car.js'
 import { MAX_AMMO, LIVES } from './missiles.js'
-import { portrait, ROW_R } from './sprites.js'
+import { portrait, ROW_PX } from './sprites.js'
 
 function countBits(n) {
 	let c = 0
@@ -68,9 +68,11 @@ function banner(ctx, text, size, y, colour) {
 // compete with it. The player's own row is LIVE, the rest DIM,
 // which is the suite's existing live/inactive distinction
 // rather than a new colour.
-const ROW_H = 15
-const BOARD_X = W - 150
-const BOARD_Y = 108
+// Twenty-six, not fifteen: a row holds a face now, and a
+// face worth having is taller than a line of text.
+const ROW_H = 26
+const BOARD_X = W - 158
+const BOARD_Y = 104
 
 function boardRow(ctx, car, place, mine, y) {
 	const colour = mine ? LIVE : DIM
@@ -83,16 +85,16 @@ function boardRow(ctx, car, place, mine, y) {
 	// swatch beside it is kept anyway, because a cap at
 	// sixteen pixels is a smaller patch of colour than the
 	// swatch was and the road is where you have to match it.
-	const img = portrait(name, livery, ROW_R)
-	ctx.drawImage(img, BOARD_X + 26, y - img.height + 4)
-	label(ctx, BOARD_X + 48, y, name, 'left', colour)
+	const img = portrait(name, livery, ROW_PX)
+	ctx.drawImage(img, BOARD_X + 28, y - img.height + 6)
+	label(ctx, BOARD_X + 56, y, name, 'left', colour)
 	ctx.fillStyle = livery.body
-	ctx.fillRect(BOARD_X + 118, y - 7, 14, 7)
+	ctx.fillRect(BOARD_X + 126, y - 7, 14, 7)
 }
 
 function drawBoard(ctx, state) {
 	const field = orderOf(state.track, state, state.rivals)
-	brackets(ctx, BOARD_X - 10, BOARD_Y - 14, 148, 100)
+	brackets(ctx, BOARD_X - 10, BOARD_Y - 14, 158, 168)
 	label(ctx, BOARD_X, BOARD_Y - 3, 'STANDINGS')
 	field.forEach((car, i) => {
 		boardRow(
@@ -189,21 +191,21 @@ function drawMeters(ctx, state, best, maxSpeed, place) {
 // board down the side answers "where am I"; this answers "who
 // is in front", which is a different question and the one you
 // glance at mid-corner.
-const PODIUM_X = 392
-const PODIUM_Y = 54
-const PODIUM_W = 112
+const PODIUM_X = 352
+const PODIUM_Y = 50
+const PODIUM_W = 122
 
 function podiumEntry(ctx, car, place, mine, x) {
 	const img = portrait(
 		mine ? PLAYER_NAME : car.name,
 		mine ? PLAYER_COLOURS : car.colours)
 	ctx.drawImage(img, x, PODIUM_Y - 4)
-	const tx = x + img.width + 4
+	const tx = x + img.width + 5
 	label(
-		ctx, tx, PODIUM_Y + 14, ordinal(place), 'left',
+		ctx, tx, PODIUM_Y + 24, ordinal(place), 'left',
 		place === 1 ? '#ffe28a' : DIM)
 	label(
-		ctx, tx, PODIUM_Y + 28,
+		ctx, tx, PODIUM_Y + 40,
 		mine ? PLAYER_NAME : car.name, 'left',
 		mine ? LIVE : '#d8ecf4')
 }

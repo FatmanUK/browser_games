@@ -12,7 +12,7 @@
 // offscreen canvas first, in daylight. What happens to it
 // after that is the time of day: in the morning nothing, and
 // otherwise drawNightfall dims it and the headlights reveal
-// the parts they reach — see revealBeam for why that has to
+// the parts they reach — see revealLamp for why that has to
 // be a per-beam paste rather than a cutout.
 
 import { WIDTH, HEIGHT } from '../_shared/hud.js'
@@ -24,7 +24,7 @@ import { getAtlas, carRing, frameFor, variant } from './sprites.js'
 import { CAR_LENGTH, CAR_WIDTH, PLAYER_COLOURS } from './car.js'
 import { sampleAt, offsetPoint, deltaS } from './path.js'
 import { airLift } from './jump.js'
-import { drawRivals, drawRivalLights } from './rivals.js'
+import { drawRivals, drawCarLights } from './rivals.js'
 import { BLAST_R } from './marks.js'
 function deg(d) {
 	return (d * Math.PI) / 180
@@ -680,21 +680,26 @@ function drawWorld(ctx, state, atlas, cam) {
 //
 // Night is 0.88 of something much nearer black, which is dark
 // enough that the beams are the only way to read the road.
-// `pool` is the lit circle a lamp throws on the ground right
-// in front of it, and only night has one: in the dusk there
-// is enough light left that a pool would not show, and at
-// night without one the beams start from nothing.
+// Night is 0.965 of something very near black, which is dark
+// enough that the beams and the circles at the end of them
+// are the only way to read the road at all.
+//
+// `wash` is the warm light a lamp adds along its wedge and
+// `glow` the stronger one in the circle, both added rather
+// than painted over, because a lamp is emissive. Restoring
+// the daylight colours under a beam says "not dimmed here";
+// it does not say "lit from here".
 const LIGHT = {
 	morning: null,
 	evening: {
 		fill: 'rgba(18, 22, 48, 0.45)',
-		clear: 'rgba(18, 22, 48, 0)',
-		pool: 0,
+		wash: 'rgba(255, 214, 140, 0.05)',
+		glow: 'rgba(255, 236, 186, 0.12)',
 	},
 	night: {
-		fill: 'rgba(5, 6, 18, 0.88)',
-		clear: 'rgba(5, 6, 18, 0)',
-		pool: 9,
+		fill: 'rgba(3, 4, 12, 0.965)',
+		wash: 'rgba(255, 214, 140, 0.06)',
+		glow: 'rgba(255, 238, 192, 0.16)',
 	},
 }
 
@@ -705,125 +710,166 @@ function lightFor(state) {
 		? LIGHT[state.light] : LIGHT.evening
 }
 
-// Restoring the daylight colours inside the beam says "not
-// dimmed here". It does not say "lit from here" — for that the
-// beam has to add its own colour, which is what this is. Added
-// rather than painted over, because a lamp is emissive.
-const BEAM_WASH = 'rgba(255, 214, 140, 0.16)'
-const BEAM_SPREAD = deg(18)
-const BEAM_LENGTH = 85
+// A headlamp throws a wedge that ends in a bright circle on
+// the road, and every car on the track has two.
+//
+// The wedge and the circle are one shape, not two effects
+// layered: the spread is derived from the circle rather than
+// chosen, so the wedge is exactly as wide at its far end as
+// the circle it finishes in and the two meet instead of one
+// floating in the other. Change the reach or the radius and
+// the spread follows.
+//
+// Each lamp is also aimed well outward, by enough that the
+// two circles come out side by side and just touching.
+// Parallel beams put both circles in the same place — the
+// lamps are five units apart and a circle is twenty-six
+// across — and two circles in the same place are one circle.
+//
+// The reach is bounded by the window, not by taste. The
+// viewport is a hundred units tall, so the camera sees fifty
+// either side of the car: a circle thrown further than that
+// is off the top of the screen whenever the car is pointing
+// up it. At 58 it always was, and the player's own headlights
+// were the two that could never be seen. Thrown 32 with a
+// radius of 13, the far edge sits at 42 and stays in frame
+// whichever way the car faces.
+const POOL_AHEAD = 32
+const POOL_R = 13
+const SPLAY = 0.42
+
+// Half the circle's width where the two meet, so the circle
+// visibly bulges out of the end of the beam. Derived, so that
+// changing the reach or the radius keeps the proportion.
+// Made exactly as wide as the circle — the obvious thing to
+// do — the wedge and the disc merge into one fat teardrop and
+// there is no circle left to see.
+const BEAM_SPREAD = Math.atan(POOL_R * 0.5 / POOL_AHEAD)
 const HEADLIGHT_OFFSET = 2.5
 
-// The two headlamps sit a little either side of the car's front
-// center, so their beams overlap for almost their whole length —
-// see revealBeam for why that overlap has to be handled by
-// layering independent reveals rather than cutting both wedges
-// out of one dusk fill (evenodd parity breaks on overlapping
-// holes: a point inside both wedges gets toggled back "outside").
-function headlightOrigins(facing, offset) {
-	const frontDist = CAR_LENGTH / 2
-	const perp = facing + Math.PI / 2
-	const cx = VIEWPORT_WIDTH / 2 + Math.cos(facing) * frontDist
-	const cy = VIEWPORT_HEIGHT / 2 + Math.sin(facing) * frontDist
-	const off = offset === undefined ? HEADLIGHT_OFFSET : offset
-	const ox = Math.cos(perp) * off
-	const oy = Math.sin(perp) * off
-	return [
-		{ x: cx - ox, y: cy - oy },
-		{ x: cx + ox, y: cy + oy },
-	]
+// The wedges start at the car's middle rather than its nose.
+// The lamps are on the nose, but the two of them splay apart
+// from there and leave the car itself in the one patch of
+// unlit road on the screen — and at this darkness that means
+// the player cannot see their own car.
+const LAMP_BACK = 0
+
+// Where a car's lamps are, in viewport units. The player sits
+// at the centre of the window and a rival is wherever it is
+// relative to the player, so one function covers both and the
+// player is simply the car the camera is on.
+function lampsOf(car, cam) {
+	const sx = VIEWPORT_WIDTH / 2 + (car.x - cam.x)
+	const sy = VIEWPORT_HEIGHT / 2 + (car.y - cam.y)
+	const f = car.facing
+	const nose = LAMP_BACK
+	const px = Math.cos(f + Math.PI / 2) * HEADLIGHT_OFFSET
+	const py = Math.sin(f + Math.PI / 2) * HEADLIGHT_OFFSET
+	const cx = sx + Math.cos(f) * nose
+	const cy = sy + Math.sin(f) * nose
+	return [-1, 1].map((side) => ({
+		x: cx + px * side,
+		y: cy + py * side,
+		aim: f + SPLAY * side,
+	}))
 }
 
-function beamPath(ctx, origin, facing) {
-	ctx.moveTo(origin.x, origin.y)
+// The wedge and the circle as one path, so a single clip
+// covers both. Two subpaths union under the nonzero rule,
+// which is why this can be a union where cutting holes in a
+// shared fill could not (see the note on revealLamp).
+function lampPath(ctx, lamp) {
+	const cx = lamp.x + Math.cos(lamp.aim) * POOL_AHEAD
+	const cy = lamp.y + Math.sin(lamp.aim) * POOL_AHEAD
+	ctx.moveTo(lamp.x, lamp.y)
 	ctx.arc(
-		origin.x, origin.y, BEAM_LENGTH,
-		facing - BEAM_SPREAD, facing + BEAM_SPREAD)
+		lamp.x, lamp.y, POOL_AHEAD,
+		lamp.aim - BEAM_SPREAD, lamp.aim + BEAM_SPREAD)
 	ctx.closePath()
+	ctx.moveTo(cx + POOL_R, cy)
+	ctx.arc(cx, cy, POOL_R, 0, Math.PI * 2)
+	return { cx, cy }
 }
 
-// Clips to one beam's wedge and pastes the true-color world
-// (pre-rendered to worldCanvas, see draw) back in over the dusk
-// fill, then fades that back toward dusk with distance. Confined
-// entirely to its own clip, so a second beam's reveal just lays
-// over this one wherever they overlap — always correct, however
-// much the wedges intersect, unlike a shared fill-rule cutout.
-function revealBeam(ctx, worldCanvas, origin, facing, light) {
+// Only the part of the world the lamp can reach, so six cars
+// with two lamps each is twelve small blits rather than
+// twelve full-canvas ones. The wedge is widest where it meets
+// the circle, so the circle's box contains it.
+function lampBox(lamp, c) {
+	const x0 = Math.min(lamp.x, c.cx - POOL_R) - 2
+	const y0 = Math.min(lamp.y, c.cy - POOL_R) - 2
+	const x1 = Math.max(lamp.x, c.cx + POOL_R) + 2
+	const y1 = Math.max(lamp.y, c.cy + POOL_R) + 2
+	return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
+}
+
+function blitPatch(ctx, world, b) {
+	ctx.drawImage(
+		world,
+		b.x * VIEW_SCALE, b.y * VIEW_SCALE,
+		b.w * VIEW_SCALE, b.h * VIEW_SCALE,
+		b.x, b.y, b.w, b.h)
+}
+
+// Clips to one lamp's reach and pastes the daylight world
+// back in over the fill, undimmed and with a hard edge — the
+// circle is meant to be sharp, so nothing fades it back out
+// at the rim. Confined entirely to its own clip, so a second
+// lamp's reveal just lays over this one wherever they
+// overlap: always correct however much they intersect, unlike
+// cutting both out of one fill, where the even-odd rule
+// toggles the overlap back to "outside".
+function revealLamp(ctx, world, lamp, light) {
 	ctx.save()
 	ctx.beginPath()
-	beamPath(ctx, origin, facing)
+	const c = lampPath(ctx, lamp)
 	ctx.clip()
-	blitWorld(ctx, worldCanvas)
-	const wash = ctx.createRadialGradient(
-		origin.x, origin.y, 0,
-		origin.x, origin.y, BEAM_LENGTH)
-	wash.addColorStop(0, BEAM_WASH)
-	wash.addColorStop(1, light.clear)
+	const b = lampBox(lamp, c)
+	blitPatch(ctx, world, b)
 	ctx.globalCompositeOperation = 'lighter'
-	ctx.fillStyle = wash
-	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
-	ctx.globalCompositeOperation = 'source-over'
-	const grad = ctx.createRadialGradient(
-		origin.x, origin.y, BEAM_LENGTH * 0.4,
-		origin.x, origin.y, BEAM_LENGTH)
-	grad.addColorStop(0, light.clear)
-	grad.addColorStop(1, light.fill)
-	ctx.fillStyle = grad
-	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+	ctx.fillStyle = light.wash
+	ctx.fillRect(b.x, b.y, b.w, b.h)
+	// Brighter in the circle than along the wedge: the lamp
+	// is pointed at it.
+	const g = ctx.createRadialGradient(
+		c.cx, c.cy, 0, c.cx, c.cy, POOL_R)
+	g.addColorStop(0, light.glow)
+	g.addColorStop(1, 'rgba(255, 228, 170, 0)')
+	ctx.fillStyle = g
+	ctx.fillRect(b.x, b.y, b.w, b.h)
 	ctx.restore()
 }
 
-// The two bright circles a pair of lamps throws on the ground
-// at night. Drawn after the beams and added rather than
-// painted, because a lamp is emissive — and drawn a little
-// ahead of the lamp itself so the pool sits on the road in
-// front of the car rather than under its own bonnet.
-// Far enough ahead, and dim enough, to leave the car itself
-// out of the glare: at 9 units and half alpha the two pools
-// met over the bonnet and the player's own car was the one
-// thing on screen you could not see.
-//
-// Thrown wider apart than the lamps that cast them, because
-// at the lamps' own 5 units apart two circles of any useful
-// size are one circle. A beam spreads on its way to the
-// ground, so the pools belong further out than their lamps
-// as well as further forward.
-const POOL_AHEAD = 15
-const POOL_OFFSET = 7
-const POOL_CORE = 'rgba(255, 240, 205, 0.34)'
-const POOL_EDGE = 'rgba(255, 228, 170, 0)'
-
-function drawPool(ctx, origin, facing, r) {
-	const x = origin.x + Math.cos(facing) * POOL_AHEAD
-	const y = origin.y + Math.sin(facing) * POOL_AHEAD
-	const g = ctx.createRadialGradient(x, y, 0, x, y, r)
-	g.addColorStop(0, POOL_CORE)
-	g.addColorStop(1, POOL_EDGE)
-	ctx.fillStyle = g
-	ctx.beginPath()
-	ctx.arc(x, y, r, 0, Math.PI * 2)
-	ctx.fill()
+// Off the window by more than a lamp can reach, so nothing it
+// lights could be on screen either.
+function lit(car, cam) {
+	return Math.abs(car.x - cam.x) <
+			VIEWPORT_WIDTH / 2 + POOL_AHEAD + POOL_R &&
+		Math.abs(car.y - cam.y) <
+			VIEWPORT_HEIGHT / 2 + POOL_AHEAD + POOL_R
 }
 
-function drawNightfall(ctx, worldCanvas, facing, light) {
+function litCars(state) {
+	const all = state.out ? [] : [state]
+	for (const r of state.rivals) {
+		if (!r.out && lit(r, state)) all.push(r)
+	}
+	return all
+}
+
+function drawNightfall(ctx, world, state, light) {
 	ctx.fillStyle = light.fill
 	ctx.fillRect(0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
-	const lamps = headlightOrigins(facing)
-	for (const origin of lamps) {
-		revealBeam(ctx, worldCanvas, origin, facing, light)
+	for (const car of litCars(state)) {
+		for (const lamp of lampsOf(car, state)) {
+			revealLamp(ctx, world, lamp, light)
+		}
 	}
-	if (!light.pool) return
-	ctx.save()
-	ctx.globalCompositeOperation = 'lighter'
-	for (const o of headlightOrigins(facing, POOL_OFFSET)) {
-		drawPool(ctx, o, facing, light.pool)
-	}
-	ctx.restore()
 }
 
 // Renders world-space (true daylight colors) to its own
 // offscreen canvas so drawNightfall can paste pieces back in
-// per-beam — see revealBeam. It's a full-size canvas with
+// per-lamp — see revealLamp. It's a full-size canvas with
 // VIEW_SCALE baked in, exactly like the visible one: rendering
 // it at viewport units instead and letting the blit magnify it
 // would throw away VIEW_SCALE's worth of detail and pixellate
@@ -848,18 +894,20 @@ function blitWorld(ctx, worldCanvas) {
 		worldCanvas, 0, 0, VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
 }
 
-// The rivals' lamps go on over the fill, not under it: a
-// light is emissive, so dimming it with the scenery it sits on
-// would hide the one thing that makes a car visible out there.
-// Without this a rival behind you, or alongside but outside the
+// The lamps go on over the fill, not under it: a light is
+// emissive, so dimming it with the scenery it sits on would
+// hide the one thing that makes a car visible out there.
+// Without this a car behind you, or alongside but outside the
 // beams, is simply not on screen.
-function drawCarLights(ctx, state) {
+function drawLamps(ctx, state) {
+	const cars = state.out ?
+		state.rivals : [state, ...state.rivals]
 	ctx.save()
 	ctx.globalCompositeOperation = 'lighter'
 	ctx.translate(
 		VIEWPORT_WIDTH / 2 - state.x,
 		VIEWPORT_HEIGHT / 2 - state.y)
-	drawRivalLights(ctx, state.rivals)
+	drawCarLights(ctx, cars.filter((c) => !c.out))
 	ctx.restore()
 }
 
@@ -873,8 +921,8 @@ export function draw(ctx, world, state, atlas) {
 	// is nothing for a lamp to show against either: headlamps
 	// belong to the times of day that need them.
 	if (light) {
-		drawNightfall(ctx, world.canvas, state.facing, light)
-		drawCarLights(ctx, state)
+		drawNightfall(ctx, world.canvas, state, light)
+		drawLamps(ctx, state)
 	}
 	ctx.restore()
 }

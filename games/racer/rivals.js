@@ -342,10 +342,16 @@ const HEAD_R = 4.2
 
 // Across the car, not along it: two lamps a car-width apart
 // read as a car at a glance, where one lamp reads as a dot.
-export function drawRivalLights(ctx, rivals) {
+//
+// Every car, the player's included. The lamps themselves are
+// the only thing marking a car in the dark — the beams they
+// throw splay apart and leave the car itself in the one
+// unlit patch on the screen, so without these the player
+// cannot see their own car at night.
+export function drawCarLights(ctx, cars) {
 	const half = CAR_LENGTH / 2
 	const side = CAR_WIDTH / 2 - 1
-	for (const rival of rivals) {
+	for (const rival of cars) {
 		const cos = Math.cos(rival.facing)
 		const sin = Math.sin(rival.facing)
 		for (const s of [-side, side]) {

@@ -8,11 +8,12 @@
 // createRuntime, and the car rings bake lazily on top of that.
 
 import { rng } from '../_shared/art.js'
+import { paintPortrait } from './portraits.js'
 import { bakeOne, ringOf, frameFor } from '../_shared/bake.js'
 import { PX } from './view.js'
 import {
 	carModel, tyreModel, barrelModel, treeModel,
-	buildingModel, faceModel,
+	buildingModel,
 } from './models.js'
 
 export { frameFor }
@@ -38,10 +39,6 @@ const CAR_FRAMES = 32
 // camera's scale (see view.js).
 const CAR_R = 11
 
-// Straight on, with no tilt: a portrait looks out of the
-// panel rather than down at the road.
-const HEAD_ON = { x: 0, z: 0 }
-const PORTRAIT_R = 19
 const SIZES = {
 	tyre: 4, barrel: 4.5, tree: 15, building: 20,
 }
@@ -96,25 +93,32 @@ export function carRing(colours) {
 	return cars.get(key)
 }
 
-// One portrait per driver, built on first use like the cars.
-// These are drawn in the HUD, which is not inside the
-// camera's scale, so they bake at their own pixel size and
-// not at PX times it.
+// One portrait per driver and size, drawn on first use.
 //
-// Two sizes, because the standings rows are a third of the
-// podium's size and a face drawn down to fourteen pixels is
-// a smudge — the small one is modelled the same and baked
-// small, not shrunk.
+// Not baked from a mesh like everything else: a face is marks
+// rather than planes, so portraits.js draws it. Still cached
+// the same way, because the drawing is ink lines and clipped
+// fills and is not worth doing sixty times a second.
+//
+// Two sizes, and the small one is drawn small rather than
+// shrunk — the marks are authored in a unit square and scale
+// with the canvas, so the lines stay as crisp at twenty
+// pixels as at sixty.
 const heads = new Map()
 
-export const ROW_R = 8
+export const PODIUM_PX = 62
+export const ROW_PX = 22
 
-export function portrait(name, colours, r) {
-	const radius = r || PORTRAIT_R
-	const key = name + colours.shell + colours.body + radius
+export function portrait(name, colours, px) {
+	const size = px || PODIUM_PX
+	const key = name + colours.shell + colours.body + size
 	if (!heads.has(key)) {
-		heads.set(key, bakeOne(
-			faceModel(name, colours), radius, HEAD_ON))
+		const canvas = document.createElement('canvas')
+		canvas.width = size
+		canvas.height = size
+		paintPortrait(
+			canvas.getContext('2d'), size, name, colours)
+		heads.set(key, canvas)
 	}
 	return heads.get(key)
 }

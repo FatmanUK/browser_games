@@ -83,11 +83,14 @@ files in its own `music/` folder — see
   is Voss rather than the blue one, with the current top three
   shown across the top of the window as faces and names, and
   the whole field down the side with the same faces smaller.
-  Each rival has one: Voss behind his shades, Kestrel's beak,
-  Marlo's grin, Drake's brow, Ibbott's glasses and walrus
-  moustache, each in a cap in its own livery. You keep a
-  helmet, which is both what you would see of yourself and
-  the quickest way to pick your own row out of six. Each drives differently
+  The rivals are drawn rather than modelled — flat colour
+  inside an ink line, the way a comic panel is — because a
+  face is a set of marks rather than a solid: Voss behind his
+  shades, Kestrel's bob and narrowed eyes, Marlo's grin,
+  Drake's brow and stubble, Ibbott's bun and round specs, each
+  in a cap in its own livery. You keep a white helmet with a
+  black visor, which is both what you would see of yourself
+  and the quickest way to pick your own row out of six. Each drives differently
   rather than just faster or slower: its own top speed, how
   hard it leans on a corner, how late it brakes, and how
   readily it takes a missile shot. Voss is quick and tidy,
@@ -119,11 +122,13 @@ files in its own `music/` folder — see
   Every run rolls a time of day — bright morning, dusk, or
   pitch dark — with the camera zoomed in and following the car
   (you can't see the whole track at once). Morning is plain
-  daylight and the headlamps stay off; dusk and night dim the
-  world and twin beams cut through it to light whatever's
-  ahead with its true colours, not a white wash, and at night
-  each lamp also throws a bright circle on the road in front
-  of it. Title and buttons overlay the
+  daylight and the headlamps stay off. Dusk and night dim the
+  world, and every car on the track throws two beams that
+  finish in two big sharp circles of light on the road ahead
+  of it, lighting whatever is in them with its true colours
+  rather than a white wash. At night the dimming is almost
+  total, so those circles and the cars' own lamps are all
+  there is to drive by. Title and buttons overlay the
   top of the canvas rather than sitting beside it, and the
   Lap/Speed/Best lap meters are drawn on the canvas itself as a
   dashboard, so the canvas can fill the window. Bounded by
@@ -208,7 +213,8 @@ games/racer/            Dash (+ audio.js, same pattern;
                         jump.js the flyover, progress.js the
                         track ladder, missiles.js the weapons
                         and lives, marks.js the rubber and the
-                        blast scorch)
+                        blast scorch, portraits.js the drawn
+                        faces)
 games/beltbreaker/      Belt Breaker (rocks.js/craft.js/
                         sprites.js pre-render the art over
                         games/_shared/mesh.js;
