@@ -44,9 +44,23 @@ export function tickCountdown(race, dt, audio) {
 	if (race.ready <= -GO_HOLD) race.phase = 'racing'
 }
 
-// How far past the kerb a car may be and still be credited
-// with a gate: a wheel over it and no more.
-const GATE_SLACK = 12
+// A gate credits anywhere inside the track's own boundary —
+// the verge counts, not just the tarmac.
+//
+// It used to be the kerb plus twelve, which sounds reasonable
+// and is not: the boundary clamp already makes it impossible
+// to leave a corridor 90 units wide either side, so a car out
+// in the grass has not cut anything, it is just having a bad
+// corner. With twelve gates a lap and a human running wide at
+// one of them now and then, two laps in three were being
+// thrown away. Nine driven for three recorded.
+//
+// What the gates are actually for, once the clamp has ruled
+// out leaving the track at all, is order: you cannot reverse
+// over the line, and on a track that runs back through itself
+// you cannot lap one lobe over and over. Neither of those
+// cares how wide you were.
+const GATE_SLACK = 0
 
 export function allGates(track) {
 	return (1 << track.GATES.length) - 1
@@ -90,20 +104,30 @@ export function trackGates(track, car) {
 	// big to be one frame of driving.
 	if (moved <= 0 || moved > track.L / 4) return
 	const wide = Math.abs(car.off) >
-		track.halfWidth + GATE_SLACK
-	track.GATES.forEach((g, i) => {
-		// In the stretch just driven, which deltaS answers
-		// across the lap's seam as well as inside it.
-		const d = deltaS(track, prev, g)
-		if (d <= 0 || d > moved) return
-		if (i === 0) { closeLap(track, car); return }
-		if (wide) return
+		track.boundOff + GATE_SLACK
+	for (const i of gatesIn(track, prev, moved)) {
+		if (i === 0) { closeLap(track, car); continue }
+		if (wide) continue
 		car.gates |= 1 << i
 		// Where a wrecked car comes back. Tracked here
 		// because this is the one place that already knows
 		// which gate was just gone through.
 		car.lastGate = i
+	}
+}
+
+// The gates in the stretch just driven, nearest first. Order
+// matters: a frame that covers both the last gate and the
+// line has to credit the gate before the line closes the lap
+// on it, and taking them in index order put gate zero first
+// and threw the lap away.
+function gatesIn(track, from, moved) {
+	const hit = []
+	track.GATES.forEach((g, i) => {
+		const d = deltaS(track, from, g)
+		if (d > 0 && d <= moved) hit.push([d, i])
 	})
+	return hit.sort((a, b) => a[0] - b[0]).map((h) => h[1])
 }
 
 // Laps come off arc length, not off swept angle about a

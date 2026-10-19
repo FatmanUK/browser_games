@@ -92,11 +92,10 @@ files in its own `music/` folder — see
   checkpoint a life down and a long way back. At zero lives
   your race is over where you stand. Twelve checkpoint gates are
   painted across the road, and a lap only counts if every one
-  of them was passed *on* the road — cutting covers the same
-  ground the long way round does as far as any counter can
-  tell, so being there is what gets checked. Amber chevrons warn of the sharper corners,
-  pointing the way they bend, painted on the tarmac in white
-  rather than hung over it. Their lamps are drawn over the dusk rather than
+  of them was passed inside the track's boundary — cutting
+  covers the same ground the long way round does as far as any
+  counter can tell, so being there is what gets checked. Amber chevrons warn of the sharper corners,
+  pointing the way they bend, painted on the tarmac in white. Their lamps are drawn over the dusk rather than
   under it, so a car outside your headlights is still
   something you can see coming. Crossing the line for the
   third time ends your race with a finishing place. Win one

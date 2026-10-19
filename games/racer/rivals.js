@@ -108,16 +108,29 @@ function steer(rival, dt, sharp, aim) {
 const RUN_UP = 220
 
 // The speed the nearest ramp ahead actually needs, or zero if
-// there is not one. Coming up short is survivable now — the
-// car drops onto the road below and loses the stretch — so
-// this is about not throwing a lap away rather than about
-// avoiding a deadlock.
+// there is not one.
+//
+// The margin over it is the driver's nerve. Everyone used to
+// get the same comfortable 8%, which is why nobody had ever
+// failed a jump outside a test.
+//
+// The numbers are set from measured arrivals rather than
+// guessed, and the threshold they are set against is not 1.0:
+// landing is credited a few units short of the far ramp, so a
+// car can arrive about 3% under what the gap nominally needs
+// and still get down on it. Marlo at full nerve clears by a
+// tenth and never fails; Drake's target puts him on the edge
+// and he goes through about one in five, which costs him six
+// seconds a race. One driver you cannot trust over a jump is
+// the point — a thinner margin still made it three in four
+// and he stopped finishing.
 function jumpTarget(track, rival) {
+	const margin = 0.905 + rival.skill.nerve * 0.195
 	let want = 0
 	for (const j of track.JUMPS) {
 		const d = deltaS(track, rival.s, j.s0)
 		if (d <= 0 || d > RUN_UP) continue
-		want = Math.max(want, speedToClear(j) * 1.08)
+		want = Math.max(want, speedToClear(j) * margin)
 	}
 	return want
 }
@@ -125,13 +138,15 @@ function jumpTarget(track, rival) {
 function drive(track, rival, dt, drag) {
 	const aim = aimAngle(track, rival)
 	const sharp = Math.abs(angleDelta(rival.angle, aim))
-	// Floor it into a ramp, with a margin over what the gap
-	// needs. A rival that lifts off for the corner beyond the
-	// jump arrives too slowly, drops through, and loses half
-	// a lap for it.
-	const want = Math.max(
-		wantedSpeed(track, rival, drag),
-		jumpTarget(track, rival))
+	// In the run-up to a ramp the driver is thinking about
+	// the jump rather than about the straight, so its target
+	// replaces the usual pace instead of merely raising it.
+	// Making it a floor, as it was, meant everyone arrived at
+	// whatever the straight allowed — comfortably over what
+	// the gap needed — and nobody ever came up short.
+	const pace = wantedSpeed(track, rival, drag)
+	const jump = jumpTarget(track, rival)
+	const want = jump > 0 ? Math.min(pace, jump) : pace
 	if (rival.speed < want) rival.speed += ACCEL * dt
 	else rival.speed -= BRAKE * dt
 	rival.speed -= rival.speed * drag * dt
@@ -204,26 +219,54 @@ export function updateRivals(track, rivals, dt, terrainOf) {
 	}
 }
 
-// Car-to-car contact, resolved as two equal discs: both get
-// pushed clear and both lose speed, so leaning on a rival
-// through a corner is a trade rather than a free pass.
-const CONTACT_LOSS = 0.82
+// Car-to-car contact, resolved as two equal discs.
+//
+// Separating them by exactly the overlap, which is what this
+// did, puts them back in contact on the next frame: they are
+// still closing, so they touch, separate by a hair, touch
+// again. That is the grinding — a continuous scrape with the
+// wall thud playing over and over, for as long as two cars
+// are side by side.
+//
+// Pushing them past touching, and pushing them sideways
+// rather than only apart, breaks the contact properly. They
+// come away from each other and the noise happens once.
+const CONTACT_LOSS = 0.94
+const SEPARATE = 1.35
+const SHOVE = 26
 
 function bumpApart(a, b) {
 	const dx = b.x - a.x
 	const dy = b.y - a.y
 	const dist = Math.hypot(dx, dy)
 	if (dist >= CAR_LENGTH || dist === 0) return false
-	const push = (CAR_LENGTH - dist) / 2
+	const push = ((CAR_LENGTH - dist) / 2) * SEPARATE
 	const nx = dx / dist
 	const ny = dy / dist
 	a.x -= nx * push
 	a.y -= ny * push
 	b.x += nx * push
 	b.y += ny * push
+	// A nudge off line as well as apart, so the two are no
+	// longer travelling into each other.
+	shove(a, -nx, -ny)
+	shove(b, nx, ny)
 	a.speed *= CONTACT_LOSS
 	b.speed *= CONTACT_LOSS
 	return true
+}
+
+// Turn a little of the car's travel sideways. Steering the
+// heading is what the driver notices; it is also what stops
+// the pair re-colliding next frame.
+function shove(car, nx, ny) {
+	const vx = Math.cos(car.angle) * car.speed + nx * SHOVE
+	const vy = Math.sin(car.angle) * car.speed + ny * SHOVE
+	const sp = Math.hypot(vx, vy)
+	if (sp < 1) return
+	car.angle = Math.atan2(vy, vx)
+	car.facing = car.angle
+	car.speed = Math.min(car.speed, sp)
 }
 
 // Returns true if the player was in any of the contacts, so the

@@ -451,7 +451,16 @@ function assemble(seed, dense, wantJumps) {
 	return populate(track, seed)
 }
 
+// The kerb block length, chosen so a whole number of pairs
+// fits the lap exactly. Anything else leaves a seam of two
+// same-coloured blocks where the lap closes.
+function kerbPitch(track) {
+	const pairs = Math.max(2, Math.round(track.L / 22))
+	return track.L / (pairs * 2)
+}
+
 function populate(track, seed) {
+	track.kerb = kerbPitch(track)
 	track.CORNERS = findCorners(track)
 	if (!track.CORNERS.length) return null
 	track.ARROWS = buildArrows(track.CORNERS)

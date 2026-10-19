@@ -64,16 +64,6 @@ function visibleRuns(track, cam) {
 	return runs
 }
 
-function runEdge(ctx, track, run, off) {
-	const [i0, len] = run
-	ctx.beginPath()
-	for (let d = 0; d <= len; d++) {
-		const p = offsetPoint(track, (i0 + d) * track.ds, off)
-		if (d === 0) ctx.moveTo(p.x, p.y)
-		else ctx.lineTo(p.x, p.y)
-	}
-}
-
 function runBand(ctx, track, run, a, b) {
 	const [i0, len] = run
 	ctx.beginPath()
@@ -135,19 +125,54 @@ function drawRoad(ctx, track, cam) {
 	}
 }
 
+// The kerb, as blocks at fixed arc length rather than as a
+// dashed stroke.
+//
+// This is what was making the track edge crawl. A dash pattern
+// starts at the beginning of the path it is stroked along, and
+// the path starts wherever the visible stretch of road
+// happens to begin — which moves every frame as the camera
+// does. So the red and white blocks slid along the kerb
+// continuously, at a speed unrelated to the car's. Drawing a
+// block per fixed stretch of lap pins them to the track
+// instead, and the pitch divides the lap exactly so there is
+// no double-width block at the seam either.
+const KERB_IN = 9
+const KERB_STEP = 5
+
+function kerbQuad(ctx, track, s0, s1, side) {
+	const a = side * (track.halfWidth - KERB_IN)
+	const b = side * track.halfWidth
+	const steps = Math.max(1, Math.ceil((s1 - s0) / KERB_STEP))
+	ctx.beginPath()
+	for (let i = 0; i <= steps; i++) {
+		const p = offsetPoint(
+			track, s0 + ((s1 - s0) * i) / steps, a)
+		if (i === 0) ctx.moveTo(p.x, p.y)
+		else ctx.lineTo(p.x, p.y)
+	}
+	for (let i = steps; i >= 0; i--) {
+		const p = offsetPoint(
+			track, s0 + ((s1 - s0) * i) / steps, b)
+		ctx.lineTo(p.x, p.y)
+	}
+	ctx.closePath()
+	ctx.fill()
+}
+
 function kerbs(ctx, track, run) {
-	for (const side of [-1, 1]) {
-		runEdge(
-			ctx, track, run, side * (track.halfWidth - 4))
-		ctx.save()
-		ctx.setLineDash([10, 10])
-		ctx.lineWidth = 6
-		ctx.strokeStyle = '#fff'
-		ctx.stroke()
-		ctx.lineDashOffset = 10
-		ctx.strokeStyle = '#e53935'
-		ctx.stroke()
-		ctx.restore()
+	const pitch = track.kerb
+	const sA = run[0] * track.ds
+	const sB = (run[0] + run[1]) * track.ds
+	for (let b = Math.floor(sA / pitch);
+			b * pitch < sB; b++) {
+		const s0 = Math.max(sA, b * pitch)
+		const s1 = Math.min(sB, (b + 1) * pitch)
+		if (s1 <= s0) continue
+		ctx.fillStyle = (b & 1) ? '#e03a33' : '#eceff2'
+		for (const side of [-1, 1]) {
+			kerbQuad(ctx, track, s0, s1, side)
+		}
 	}
 }
 
@@ -422,54 +447,58 @@ function drawGates(ctx, track, state) {
 	})
 }
 
-// A painted arrow on the road, pointing the way the corner
-// bends. White and flat on the tarmac, the way a real one is
-// — the amber chevrons this replaces read as signage hanging
-// over the road rather than as paint on it.
+// A painted arrow on the road: a rectangular shaft and a
+// triangular head, square-cut, the way one is actually
+// painted on tarmac.
 //
-// Drawn in the road's own frame: down the lane, then bending
-// off toward the inside, so it follows the camber instead of
-// sitting on top of it at an angle.
-const ARROW_LEN = 46
-const ARROW_PAINT = 'rgba(244, 248, 255, 0.82)'
+// The first attempt was a tapering curved stroke that bent
+// toward the inside of the corner. It read as a smear. The
+// shape wants hard edges and straight lines — the whole
+// arrow is eight points, and that is what makes it look
+// stencilled rather than drawn.
+const SHAFT_LEN = 34
+const SHAFT_W = 9
+const HEAD_LEN = 20
+const HEAD_W = 23
+const ARROW_PAINT = 'rgba(246, 249, 255, 0.86)'
 
-function arrowShape(ctx, track, s, dir, scale) {
-	const lane = dir * track.halfWidth * 0.42
-	const tail = offsetPoint(track, s - ARROW_LEN, 0)
-	const mid = offsetPoint(track, s, lane * 0.45)
-	const head = offsetPoint(track, s + ARROW_LEN * 0.5, lane)
-	ctx.beginPath()
-	ctx.moveTo(tail.x, tail.y)
-	ctx.quadraticCurveTo(mid.x, mid.y, head.x, head.y)
-	ctx.lineWidth = 7 * scale
-	ctx.lineCap = 'round'
-	ctx.strokeStyle = ARROW_PAINT
-	ctx.stroke()
-	return head
-}
+// Canted toward the inside of the bend rather than lying
+// along the road, so it points where the corner goes.
+const ARROW_CANT = 0.5
 
-function arrowHead(ctx, track, s, dir, head) {
-	const back = offsetPoint(
-		track, s + ARROW_LEN * 0.14,
-		dir * track.halfWidth * 0.42)
-	const ang = Math.atan2(head.y - back.y, head.x - back.x)
-	const wing = 13
+function arrowPoly(ctx, cx, cy, ang, k) {
+	const co = Math.cos(ang), si = Math.sin(ang)
+	const put = (x, y) => [
+		cx + (x * co - y * si) * k,
+		cy + (x * si + y * co) * k,
+	]
+	const tail = -(SHAFT_LEN + HEAD_LEN) / 2
+	const neck = tail + SHAFT_LEN
+	const tip = neck + HEAD_LEN
+	const pts = [
+		put(tail, -SHAFT_W / 2), put(neck, -SHAFT_W / 2),
+		put(neck, -HEAD_W / 2), put(tip, 0),
+		put(neck, HEAD_W / 2), put(neck, SHAFT_W / 2),
+		put(tail, SHAFT_W / 2),
+	]
 	ctx.beginPath()
-	ctx.moveTo(head.x, head.y)
-	for (const side of [-1, 1]) {
-		const a = ang + Math.PI + side * 0.6
-		ctx.lineTo(
-			head.x + Math.cos(a) * wing,
-			head.y + Math.sin(a) * wing)
-	}
+	pts.forEach((p, i) => {
+		if (i === 0) ctx.moveTo(p[0], p[1])
+		else ctx.lineTo(p[0], p[1])
+	})
 	ctx.closePath()
 	ctx.fillStyle = ARROW_PAINT
 	ctx.fill()
 }
 
-function paintArrow(ctx, track, s, dir, scale) {
-	const head = arrowShape(ctx, track, s, dir, scale)
-	arrowHead(ctx, track, s, dir, head)
+function paintArrow(ctx, track, s, dir, k) {
+	const p = sampleAt(track, s)
+	const ang = Math.atan2(p.uy, p.ux) + dir * ARROW_CANT
+	// Set over toward the side the corner turns, so it sits
+	// on the line you want to be taking.
+	const off = dir * track.halfWidth * 0.3
+	const at = offsetPoint(track, s, off)
+	arrowPoly(ctx, at.x, at.y, ang, k)
 }
 
 function drawArrows(ctx, track, cam) {
@@ -481,7 +510,7 @@ function drawArrows(ctx, track, cam) {
 		// A second, smaller one further back for the ones
 		// worth slowing down for.
 		if (a.hard) {
-			paintArrow(ctx, track, a.s - 78, a.dir, 0.8)
+			paintArrow(ctx, track, a.s - 74, a.dir, 0.78)
 		}
 	}
 }

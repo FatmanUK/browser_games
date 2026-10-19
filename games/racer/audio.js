@@ -37,6 +37,20 @@ function jumpFx(audio) {
 	}
 }
 
+// Contact: the wall, and another car. They are not the same
+// event and should not sound alike — hearing the wall's thud
+// every time you touched a rival was most of why the contact
+// felt so bad.
+function contactFx(audio) {
+	return {
+		bump: () => audio.tone(90, 0.12, 'square', 0.1),
+		nudge: () =>
+			audio.toneSequence(
+				[[430, 0.04], [620, 0.05]],
+				'triangle', 0.055, 18),
+	}
+}
+
 // The weapons: picking one up, firing it, and being hit by it.
 function weaponFx(audio) {
 	return {
@@ -64,8 +78,8 @@ function weaponFx(audio) {
 function effects(audio) {
 	return {
 		...weaponFx(audio),
+		...contactFx(audio),
 		...jumpFx(audio),
-		bump: () => audio.tone(90, 0.12, 'square', 0.1),
 		splash: () =>
 			audio.toneSequence(
 				[[300, 0.1], [180, 0.15]],

@@ -330,7 +330,7 @@ function update(state, dt, best, audio) {
 	if (state.wrecked <= 0 && !state.out &&
 			!isAirborne(state) &&
 			resolveContacts(state, live)) {
-		audio.bump()
+		audio.nudge()
 	}
 	if (checkFinishes(state.track, race, state, state.rivals)) {
 		audio.finish()

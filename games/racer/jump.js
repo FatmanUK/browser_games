@@ -18,7 +18,7 @@
 // road you land on is one you have already driven, so landing
 // on it costs time and nothing else.
 
-import { deltaS, locate } from './path.js'
+import { deltaS, locate, headingAt } from './path.js'
 
 // Fixed, so speed is what decides whether a car clears. The
 // first version solved the lift from the launch speed, which
@@ -126,11 +126,14 @@ function dropThrough(track, car, a, j) {
 	car.s = got.s
 	car.off = got.off
 	car.gateAt = got.s
-	// Still pointing the way it was flying, which is across
-	// the road it has come down on. Most of the speed goes
-	// with the impact; the real cost is the stretch of lap it
-	// now has to drive again.
-	car.angle = Math.atan2(a.uy, a.ux)
+	// Pointed along the road it has landed on, not along the
+	// jump it failed. Keeping the flight heading looked more
+	// honest and was a trap: a car that comes down across the
+	// road is left facing up to 150 degrees the wrong way,
+	// and on one track in forty a rival spent the rest of the
+	// race driving backwards because of it. A car landing on
+	// a road ends up going the way the road goes.
+	car.angle = headingAt(track, got.s)
 	car.facing = car.angle
 	car.speed *= 0.25
 }
