@@ -102,12 +102,8 @@ function drive(rival, dt, drag) {
 	steer(rival, dt, sharp, aim)
 }
 
-// Rivals take the same hazard drag the player does but never
-// spin on oil: the spin is the player's punishment for running
-// wide, and a field of cars pirouetting in the background reads
-// as a bug rather than as a hazard.
+// Rivals take the same hazard drag the player does.
 function dragFor(terrain, x, y) {
-	if (terrain === 'oil') return 0.15
 	if (terrain === 'sand') return 3.2
 	if (terrain === 'water') return 2.5
 	const frac = bandFrac(x, y)

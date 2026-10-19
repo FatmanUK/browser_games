@@ -69,78 +69,19 @@ function offsetTable(table, inset) {
 	return table.map((r) => r + inset)
 }
 
-const OIL_COUNT = 5
-const OIL_RADIUS_MIN = 7
-const OIL_RADIUS_RANGE = 5
-
-// Keeps oil off the starting straight — same angular-clearance
-// trick tools/generate_track.py already uses to keep the other
-// hazards off the grid, just applied at runtime since oil is
-// randomized fresh every New Game rather than baked into the
-// track data.
-const GRID_CLEAR_ANGLE = deg(20)
-const GRID_ANGLE = Math.atan2(TRACK.START.y, TRACK.START.x)
-
-function nearGridZone(angle) {
-	return Math.abs(angleDelta(GRID_ANGLE, angle)) <
-		GRID_CLEAR_ANGLE
-}
-
-// Oil goes on the corners (CORNERS comes from the generator's
-// own curvature pass), where losing the steering and brakes to
-// it actually costs you something — a slick on a straight is
-// just scenery you drive through.
-function cornerAngle() {
-	const corners = TRACK.CORNERS
-	const corner = corners[
-		Math.floor(Math.random() * corners.length)]
-	return corner.angle +
-		(Math.random() * 2 - 1) * corner.spread
-}
-
-function randomOilAngle() {
-	let angle = cornerAngle()
-	for (let i = 0; nearGridZone(angle) && i < 50; i++) {
-		angle = cornerAngle()
-	}
-	return angle
-}
-
-// Small randomly-scattered puddles on the track surface —
-// regenerated each New Game, so the hazard layout isn't the
-// same lap after lap. trackBandPoint keeps them inside the
-// actual road band, and the 0.3..0.7 fraction keeps them off
-// its very edges, so a puddle never ends up partly off-track.
-function randomOilPatches() {
-	const patches = []
-	for (let i = 0; i < OIL_COUNT; i++) {
-		const angle = randomOilAngle()
-		const frac = 0.3 + Math.random() * 0.4
-		const p = trackBandPoint(angle, frac)
-		patches.push({
-			x: p.x,
-			y: p.y,
-			r: OIL_RADIUS_MIN +
-				Math.random() * OIL_RADIUS_RANGE,
-			seed: Math.random() * Math.PI * 2,
-		})
-	}
-	return patches
-}
-
 function createState() {
 	const pole = TRACK.GRID_SLOTS[0]
 	return {
 		x: pole.x,
 		y: pole.y,
 		// `angle` is the true heading (travel direction);
-		// `facing` is just how the sprite/headlamps are drawn
-		// — normally the same, but oil lets facing spin on
-		// its own so the car visibly spins while still
-		// sliding along its actual heading.
+		// `facing` is how the sprite and the headlamps are
+		// drawn. They are the same while the car is driving,
+		// and the split is kept because the two do come apart
+		// — a car can be pointing somewhere other than where
+		// it is going.
 		angle: pole.angle,
 		facing: pole.angle,
-		spin: 0,
 		speed: 0,
 		totalAngle: 0,
 		elapsed: 0,
@@ -148,7 +89,6 @@ function createState() {
 		lastLapAt: 0,
 		terrain: null,
 		wasColliding: false,
-		oilPatches: randomOilPatches(),
 		rivals: createRivals(),
 		race: createRace(),
 		keys: new Set(),
@@ -160,16 +100,10 @@ function waterAt(x, y) {
 		(w) => Math.hypot(x - w.x, y - w.y) <= w.r)
 }
 
-function oilAt(x, y, patches) {
-	return patches.some(
-		(p) => Math.hypot(x - p.x, y - p.y) <= p.r)
-}
-
 // Takes bare coordinates rather than a car, because the rivals
 // need to ask about their own patch of ground too and they are
 // not shaped like the player's state object.
-function terrainAt(x, y, patches) {
-	if (oilAt(x, y, patches)) return 'oil'
+function terrainAt(x, y) {
 	const outerNorm = normFor(x, y, TRACK.OUTER_RADIUS)
 	const boundNorm = normFor(x, y, TRACK.BOUND_RADIUS)
 	const inVerge = outerNorm > 1 && boundNorm <= 1
@@ -181,7 +115,6 @@ function terrainAt(x, y, patches) {
 }
 
 function dragFor(x, y, terrain) {
-	if (terrain === 'oil') return 0.1
 	// Higher than water: sand grabs the car hard and hauls it
 	// down to a stop quickly, just not instantly — it's still
 	// the same exponential-decay drag model as everything else,
@@ -193,21 +126,14 @@ function dragFor(x, y, terrain) {
 }
 
 function turnMultiplier(terrain) {
-	// Zero on oil: no grip, so the wheel does nothing at all.
-	if (terrain === 'oil') return 0
 	if (terrain === 'sand') return 0.8
 	if (terrain === 'water') return 0.6
 	return 1
 }
 
 function applyControls(state, dt, terrain) {
-	const onOil = terrain === 'oil'
 	if (state.keys.has('accel')) state.speed += ACCEL * dt
-	// Oil takes the brakes away along with the steering — all
-	// you can do is ride it out and wait for grip to return.
-	if (state.keys.has('brake') && !onOil) {
-		state.speed -= BRAKE * dt
-	}
+	if (state.keys.has('brake')) state.speed -= BRAKE * dt
 
 	const drag = dragFor(state.x, state.y, terrain)
 	state.speed -= state.speed * drag * dt
@@ -219,32 +145,7 @@ function applyControls(state, dt, terrain) {
 	if (state.keys.has('left')) state.angle -= turn
 	if (state.keys.has('right')) state.angle += turn
 
-	// Oil spins the sprite's facing, not the heading — the car
-	// keeps sliding along whatever line it was already on
-	// (slippery, barely any drag) while it visibly spins on top
-	// of that slide. Off oil, facing snaps back to the real
-	// heading and the spin stops.
-	if (onOil) {
-		state.facing += state.spin * dt
-	} else {
-		state.facing = state.angle
-		state.spin = 0
-	}
-}
-
-// Hitting oil sets the car spinning at a steady rate for as long
-// as it stays on the slick (applied by applyControls above, and
-// started here from integrate's terrain edge). A constant rate
-// reads as a spin; the per-frame random wobble this replaces
-// just looked like jitter. Only ever touches `facing`, never the
-// real heading — see createState.
-const SPIN_RATE_MIN = deg(220)
-const SPIN_RATE_RANGE = deg(300)
-
-function startSpin(state) {
-	const dir = Math.random() < 0.5 ? -1 : 1
-	state.spin = dir *
-		(SPIN_RATE_MIN + Math.random() * SPIN_RATE_RANGE)
+	state.facing = state.angle
 }
 
 function bounceOff(state, normalAngle, damping) {
@@ -295,8 +196,7 @@ function clampToBound(state) {
 }
 
 function playTerrainSound(terrain, audio) {
-	if (terrain === 'oil') audio.skid()
-	else if (terrain === 'sand') audio.slow()
+	if (terrain === 'sand') audio.slow()
 	else if (terrain === 'water') audio.splash()
 }
 
@@ -311,11 +211,9 @@ function integrate(state, dt, audio) {
 	if (collided && !state.wasColliding) audio.bump()
 	state.wasColliding = collided
 
-	const newTerrain = terrainAt(
-		state.x, state.y, state.oilPatches)
+	const newTerrain = terrainAt(state.x, state.y)
 	if (newTerrain !== state.terrain) {
 		playTerrainSound(newTerrain, audio)
-		if (newTerrain === 'oil') startSpin(state)
 	}
 	state.terrain = newTerrain
 
@@ -335,8 +233,7 @@ function recordLap(state, best) {
 }
 
 function drivePlayer(state, dt, best, audio) {
-	const terrain = terrainAt(
-		state.x, state.y, state.oilPatches)
+	const terrain = terrainAt(state.x, state.y)
 	applyControls(state, dt, terrain)
 	integrate(state, dt, audio)
 	// Nothing after the flag: the car is still coasting to a
@@ -363,9 +260,7 @@ function update(state, dt, best, audio) {
 	if (!isRunning(race)) return
 	if (isOver(race)) state.keys.clear()
 	drivePlayer(state, dt, best, audio)
-	updateRivals(
-		state.rivals, dt,
-		(x, y) => terrainAt(x, y, state.oilPatches))
+	updateRivals(state.rivals, dt, terrainAt)
 	if (resolveContacts(state, state.rivals)) audio.bump()
 	if (checkFinishes(race, state, state.rivals)) {
 		audio.finish()
@@ -546,7 +441,6 @@ function drawWedge(ctx, innerTable, outerTable, wedge, color) {
 	ctx.fill()
 }
 
-const OIL_COLOR = 'rgba(15, 15, 25, 0.7)'
 const SAND_COLOR = 'rgba(216, 186, 128, 0.85)'
 
 function drawWedges(ctx) {
@@ -557,30 +451,6 @@ function drawWedges(ctx) {
 	}
 }
 
-function drawBlob(ctx, patch) {
-	const { x, y, r, seed } = patch
-	ctx.fillStyle = OIL_COLOR
-	const lobes = 5
-	for (let i = 0; i < lobes; i++) {
-		const a = seed + (i / lobes) * Math.PI * 2
-		const wobble = 0.5 +
-			0.3 * Math.abs(Math.sin(seed * (i + 2)))
-		ctx.beginPath()
-		ctx.arc(
-			x + Math.cos(a) * r * 0.4,
-			y + Math.sin(a) * r * 0.4,
-			r * wobble, 0, Math.PI * 2)
-		ctx.fill()
-	}
-	ctx.beginPath()
-	ctx.arc(x, y, r * 0.55, 0, Math.PI * 2)
-	ctx.fill()
-}
-
-function drawOilPatches(ctx, patches) {
-	for (const patch of patches) drawBlob(ctx, patch)
-}
-
 function drawWorld(ctx, state) {
 	drawTreeLine(ctx)
 	drawTrackRing(ctx, TRACK.OUTER_RADIUS, '#555')
@@ -588,7 +458,6 @@ function drawWorld(ctx, state) {
 	drawRumbleRing(ctx, OUTER_RUMBLE)
 	drawRumbleRing(ctx, INNER_RUMBLE)
 	drawWedges(ctx)
-	drawOilPatches(ctx, state.oilPatches)
 	drawObstacles(ctx)
 	drawStartGrid(ctx)
 	drawStartLine(ctx)
@@ -810,7 +679,7 @@ export default {
 	description:
 		'A top-down racer. Arrow keys / WASD to race five ' +
 		'rivals over three laps of a randomly generated ' +
-		'track — mind the oil, sand and obstacles.',
+		'track — mind the sand, water and obstacles.',
 
 	init(container, controls) {
 		let runtime = null

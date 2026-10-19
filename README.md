@@ -88,14 +88,10 @@ files in its own `music/` folder — see
   scattered off the track surface — either in the infield or out
   past the rumble strips — and water hazards that drag rather
   than block. Tyres bounce the car off; everything else stops it
-  dead. Oil blobs are the only hazard on the track surface
-  itself: they're scattered over the corners (never the starting
-  grid, and a new layout each game), and hitting one takes away
-  your steering and brakes entirely while the car spins and
-  slides on through the bend; sand traps sit
-  off-track in the verge (higher friction than anything else,
-  hauling the car down to a stop fast but not instantly), so you
-  only hit one by running wide. Each generated track keeps its
+  dead. Sand traps sit off-track in the verge (higher friction
+  than anything else, hauling the car down to a stop fast but
+  not instantly), so you only hit one by running wide. Nothing
+  is scattered on the track surface itself. Each generated track keeps its
   own best-lap time. Arrow keys / WASD to drive; the lap counter
   never decreases. Has its own "Sound"/"Music" toggles, with a
   replaceable ProTracker module in `games/racer/music/` for the

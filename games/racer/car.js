@@ -11,15 +11,19 @@ export const CAR_WIDTH = 9
 // by its own caution (see rivals.js), not by a lower top speed.
 export const ACCEL = 220
 export const BRAKE = 260
-export const MAX_SPEED = 260
+// 225 rather than 260: at the old top speed the camera's
+// 240-unit-wide window gave about a second of warning before
+// anything you were about to hit, which is not enough to react
+// to it. ACCEL and BRAKE are untouched, so the car is as
+// responsive as it was and only slower flat out.
+export const MAX_SPEED = 225
 export const MAX_REVERSE = -80
 export const FRICTION = 0.6
 export const OFF_TRACK_DRAG = 2.2
 export const TURN_RATE = 2.6
 
-// `facing` rather than heading: on oil the sprite spins while
-// the car keeps sliding along the line it was already on, so
-// the two come apart (see game.js applyControls).
+// `facing` rather than heading: the two come apart whenever a
+// car is pointing somewhere other than where it is going.
 export function drawCar(ctx, car, colours) {
 	ctx.save()
 	ctx.translate(car.x, car.y)

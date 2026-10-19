@@ -33,10 +33,6 @@ const MUSIC = {
 function effects(audio) {
 	return {
 		bump: () => audio.tone(90, 0.12, 'square', 0.1),
-		skid: () =>
-			audio.toneSequence(
-				[[500, 0.08], [350, 0.1]],
-				'sawtooth', 0.06, 60),
 		splash: () =>
 			audio.toneSequence(
 				[[300, 0.1], [180, 0.15]],

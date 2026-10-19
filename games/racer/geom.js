@@ -57,8 +57,7 @@ export function inWedge(angle, wedges) {
 }
 
 // A point on the road surface: `frac` is 0 at the inner edge, 1
-// at the outer. Used both to scatter oil and to give each rival
-// its own line round the lap.
+// at the outer. Gives each rival its own line round the lap.
 export function trackBandPoint(angle, frac) {
 	const innerR = lerpArray(TRACK.INNER_RADIUS, angle)
 	const outerR = lerpArray(TRACK.OUTER_RADIUS, angle)
