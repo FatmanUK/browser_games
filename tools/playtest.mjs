@@ -295,19 +295,35 @@ function countHeld(w) {
 	return held
 }
 
-function scoreFor(w, held, colour) {
+// How much of the board's slot space is occupied.
+function pressure(st) {
+	let held = 0
+	for (const w of st.wheels) {
+		for (const x of w.slots) if (x) held++
+	}
+	return held / (st.wheels.length * 4)
+}
+
+function scoreFor(w, held, colour, brokenCost) {
 	const full = w.slots.every((x) => x !== null)
 	return (held[colour] || 0) * 10
-		- (w.broken ? 15 : 0)
+		- (w.broken ? brokenCost : 0)
 		- (full ? 25 : 0)
 }
 
+// Chase unbroken wheels while there is room to, and fall back
+// on broken ones as somewhere to put rubbish only once the
+// board is tight. At a flat cost a broken wheel holding three
+// of a colour always beat an empty unbroken one, so the far
+// wheel at the end of a chain never saw a marble all game and
+// the level could not be finished at all.
 function aimAt(st) {
 	let best = null
+	const cost = pressure(st) > 0.65 ? 15 : 40
 	for (const w of st.wheels) {
 		const held = countHeld(w)
 		for (const colour of st.palette) {
-			const score = scoreFor(w, held, colour)
+			const score = scoreFor(w, held, colour, cost)
 			if (!best || score > best.score) {
 				best = { wheel: w, colour, score }
 			}
