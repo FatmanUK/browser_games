@@ -131,18 +131,29 @@ function spectrum(ctx, s) {
 	})
 }
 
-function rivets(ctx, s, col) {
+// Chequer plate. This band used to be scattered rivets, which
+// stopped working the moment the board itself grew a rivet at
+// every cell corner: two sizes of the same idea, one of them
+// structure and one of them wallpaper, and the eye has to work
+// out which is which. Alternating treads say foundry just as
+// plainly and cannot be mistaken for a fastening.
+function treads(ctx, s, col) {
+	ctx.strokeStyle = col
+	ctx.lineWidth = 3
+	ctx.lineCap = 'round'
 	const step = s / 3
+	ctx.beginPath()
 	for (let gx = 0; gx < 3; gx++) {
 		for (let gy = 0; gy < 3; gy++) {
 			const x = (gx + 0.5) * step
 			const y = (gy + 0.5) * step
-			ctx.fillStyle = col
-			dot(ctx, x, y, 3)
-			ctx.fillStyle = 'rgba(255,255,255,0.45)'
-			dot(ctx, x - 0.9, y - 0.9, 1.2)
+			const d = (gx + gy) % 2 ? 1 : -1
+			ctx.moveTo(x - 7, y - 7 * d)
+			ctx.lineTo(x + 7, y + 7 * d)
 		}
 	}
+	ctx.stroke()
+	ctx.lineCap = 'butt'
 }
 
 function shards(ctx, s, col) {
@@ -210,7 +221,7 @@ export const BANDS = [
 	{
 		name: 'foundry', paper: '#f1e8dc', trough: '#e2d4c1',
 		pipe: '#d5c5ae', edge: 'rgba(100,72,40,0.34)',
-		tex: rivets, ink: 'rgba(150,110,65,0.24)',
+		tex: treads, ink: 'rgba(150,110,65,0.26)',
 	},
 	{
 		name: 'ice', paper: '#eaf1f7', trough: '#d9e5f0',

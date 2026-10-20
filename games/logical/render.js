@@ -13,9 +13,9 @@
 // they are sitting in the near face of it.
 
 import {
-	BOARD_W, BOARD_H, COLS, GUTTER_H, DX, DY, MARBLE_R,
-	PIPE_R, ROWS, SLOT_R, WHEEL_R, accepts, at, carries,
-	centreX, centreY, step,
+	BOARD_W, BOARD_H, CELL_H, CELL_W, COLS, GUTTER_H, DX, DY,
+	MARBLE_R, PIPE_R, ROWS, SLOT_R, WHEEL_R, accepts, at,
+	carries, centreX, centreY, step,
 } from './board.js'
 import { wheelFrame } from './sprites.js'
 import { slotPoint } from './travel.js'
@@ -247,9 +247,83 @@ function drawGutter(ctx, atlas, state, band) {
 		state.gutter.x, GUTTER_H / 2)
 }
 
+// The board is an eight by five grid, and until it was scored
+// it did not look like one: wheels and pipe sat on a blank
+// sheet with no way to tell where one cell ended and the next
+// began. A groove is two lines rather than one — a dark seam
+// with a pale highlight just below and to the right of it,
+// because the light in this game comes from the upper left, so
+// that order of the two reads as cut into the surface. The
+// other way round and the same two lines read as a ridge
+// standing proud of it.
+const GROOVE = 'rgba(42,52,66,0.13)'
+const GROOVE_LIT = 'rgba(255,255,255,0.5)'
+const GROOVE_OFF = 1.6
+
+function seams(ctx, colour, width, off) {
+	ctx.strokeStyle = colour
+	ctx.lineWidth = width
+	ctx.beginPath()
+	for (let c = 1; c < COLS; c++) {
+		const x = c * CELL_W + off
+		ctx.moveTo(x, GUTTER_H)
+		ctx.lineTo(x, BOARD_H)
+	}
+	for (let r = 1; r < ROWS; r++) {
+		const y = GUTTER_H + r * CELL_H + off
+		ctx.moveTo(0, y)
+		ctx.lineTo(BOARD_W, y)
+	}
+	ctx.stroke()
+}
+
+// A bolt at every corner of every cell, including the outer
+// ones, where they read as the plates being fastened to the
+// frame. Corners are the one place nothing else goes: a pipe
+// runs down the middle of a cell edge and a wheel sits in the
+// middle of a cell, so the nearest either comes to a corner is
+// forty-eight units.
+// Three discs, not two: a shadow cast down and right, a body
+// solid enough to be a thing rather than a stain, and a small
+// highlight up and to the left. Drawn as a translucent disc
+// with a highlight on it, a rivet reads as a pale ring — a
+// washer with a hole in it — because the highlight ends up
+// lighter than the body it is supposed to be sitting on.
+const RIVET_SHADE = 'rgba(42,52,66,0.26)'
+const RIVET_BODY = 'rgba(178,183,192,0.92)'
+const RIVET_LIT = 'rgba(255,255,255,0.82)'
+const RIVET_R = 4
+
+function disc(ctx, x, y, r, colour) {
+	ctx.fillStyle = colour
+	ctx.beginPath()
+	ctx.arc(x, y, r, 0, Math.PI * 2)
+	ctx.fill()
+}
+
+function rivet(ctx, x, y) {
+	disc(ctx, x + 0.9, y + 0.9, RIVET_R, RIVET_SHADE)
+	disc(ctx, x, y, RIVET_R, RIVET_BODY)
+	disc(ctx, x - 1.2, y - 1.2, RIVET_R * 0.34, RIVET_LIT)
+}
+
+function rivets(ctx) {
+	for (let c = 0; c <= COLS; c++) {
+		for (let r = 0; r <= ROWS; r++) {
+			rivet(ctx, c * CELL_W, GUTTER_H + r * CELL_H)
+		}
+	}
+}
+
+// Wash, then the grid scored into it, then the bolts, then the
+// frame. Pipe goes down after all of it, because the runs lie
+// on the plates rather than being part of them.
 function drawFrame(ctx) {
 	ctx.fillStyle = BOARD_WASH
 	ctx.fillRect(0, 0, BOARD_W, BOARD_H)
+	seams(ctx, GROOVE, 2, 0)
+	seams(ctx, GROOVE_LIT, 1.2, GROOVE_OFF)
+	rivets(ctx)
 	ctx.strokeStyle = FRAME
 	ctx.lineWidth = 2
 	ctx.strokeRect(-1, -1, BOARD_W + 2, BOARD_H + 2)
