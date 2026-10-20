@@ -22,7 +22,7 @@ export const ROWS = 5
 // width goes into the horizontal pipes, where it is wanted.
 export const CELL_W = 150
 export const CELL_H = 110
-export const GUTTER_H = 80
+export const GUTTER_H = 54
 
 export const BOARD_W = COLS * CELL_W
 export const BOARD_H = GUTTER_H + ROWS * CELL_H
@@ -85,13 +85,16 @@ export function centreY(r) {
 }
 
 // Does this cell carry a run along dir? A booth is pipe that
-// happens to repaint, so it answers the same way.
+// happens to repaint and a block is pipe that happens to
+// divert, so both answer on the axes they were laid on.
+//
+// A block that answered yes to every direction was the way in
+// for a marble fired out of a wheel into a block beside it
+// with no pipe between the two — a run that was not there.
 export function carries(cell, dir) {
 	if (!cell) return false
-	if (cell.kind === 'pipe' || cell.kind === 'booth') {
-		return isVertical(dir) ? cell.v : cell.h
-	}
-	return cell.kind === 'block' || cell.kind === 'wheel'
+	if (cell.kind === 'wheel') return true
+	return isVertical(dir) ? !!cell.v : !!cell.h
 }
 
 // The slot a marble occupies is identified by wheel and index,
@@ -125,20 +128,27 @@ export function slotsFull(wheel) {
 export function accepts(grid, c, r, dir) {
 	const nc = c + DX[dir]
 	const nr = r + DY[dir]
-	if (nr < 0) return { act: 'gutter' }
+	// The gutter is an inlet, not a junction: marbles come
+	// down out of it and nothing goes back up. A marble that
+	// could climb back into the lane would be swallowed by
+	// the same mouth on the next frame, and every round trip
+	// reset the feed timer — which is how the gutter came to
+	// stop producing marbles altogether. It also let a wheel
+	// in row 0 fire a marble upward into no run at all.
+	if (nr < 0) return { act: 'bounce' }
 	if (!inside(nc, nr)) return { act: 'bounce' }
 	const cell = grid[nr * COLS + nc]
 	if (!cell) return { act: 'bounce' }
 	if (cell.kind === 'wheel') {
 		return { act: 'wheel', c: nc, r: nr, id: cell.id }
 	}
+	if (!carries(cell, dir)) return { act: 'bounce' }
 	// Everything entering a one-way block leaves along the
-	// arrow, from any side. One rule with no cases: a
-	// perpendicular arrival turns, a head-on one reverses.
+	// arrow. One rule with no cases: a perpendicular arrival
+	// turns, a head-on one reverses.
 	if (cell.kind === 'block') {
 		return { act: 'go', c: nc, r: nr, dir: cell.dir }
 	}
-	if (!carries(cell, dir)) return { act: 'bounce' }
 	return { act: 'go', c: nc, r: nr, dir }
 }
 

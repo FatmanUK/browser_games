@@ -13,11 +13,14 @@
 
 import { WHEEL_R, MARBLE_R, slotsFull } from './board.js'
 
-// A quarter turn in 0.91s: the rules ask for a slow rotate,
-// and this is slow enough that a rotation started as a marble
+// A quarter turn in 0.69s. The rules ask for a slow rotate and
+// the first cut at 1.1 was slower still, but processing one
+// gutter marble costs a turn before anything can be fired, so
+// the turn sets the pace of the whole game and 0.91s made it
+// drag. Still slow enough that a rotation started as a marble
 // leaves the far wheel can have the body facing the mouth by
 // the time it arrives.
-export const ROT_RATE = 1.1
+export const ROT_RATE = 1.45
 
 // Measured off the rim, not the slot centre. The rim is where
 // a marble crosses from pipe into wheel, so the rim is where
@@ -30,7 +33,7 @@ const TOL = Math.asin((MARBLE_R + CLEAR) / WHEEL_R)
 	/ (Math.PI / 2)
 
 // Which leaves, per quarter turn: about 34 degrees of slot and
-// 56 of body, so 0.34s in which a marble gets in against 0.57s
+// 56 of body, so 0.26s in which a marble gets in against 0.43s
 // in which it bounces off. The body is the easier target,
 // which is right — bouncing off it is the skill the rules
 // single out.

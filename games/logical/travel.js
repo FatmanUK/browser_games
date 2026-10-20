@@ -15,11 +15,10 @@
 
 import {
 	DX, DY, WHEEL_R, SEG_CAP, accepts, along, at, back,
-	centreX, centreY, drop, launch, seat, segmentLoad,
-	segmentOf, step, wheelAt,
+	centreX, centreY, launch, seat, segmentLoad, segmentOf,
+	step, wheelAt,
 } from './board.js'
 import { alignedSlot } from './wheel.js'
-import { joinGutter } from './gutter.js'
 
 // Shortest pipe is 130 units of free run, which at this speed
 // is 0.68s — a shade under the 0.91s a quarter turn takes, so
@@ -80,16 +79,6 @@ function atRim(state, m, fx) {
 
 function atEdge(state, m, fx) {
 	const res = accepts(state.grid, m.c, m.r, m.dir)
-	if (res.act === 'gutter') {
-		if (state.gutter) {
-			m.dir = back(m.dir)
-			fx.bounce()
-			return true
-		}
-		joinGutter(state, m.colour, m.x)
-		drop(state, m)
-		return false
-	}
 	if (res.act === 'bounce') {
 		m.dir = back(m.dir)
 		fx.bounce()
@@ -157,7 +146,6 @@ export function canFire(state, wheel, k) {
 	if (dir < 0) return false
 	const res = accepts(state.grid, wheel.c, wheel.r, dir)
 	if (res.act === 'bounce') return false
-	if (res.act === 'gutter' && state.gutter) return false
 	return roomInSegment(state, wheel.c, wheel.r, dir)
 }
 

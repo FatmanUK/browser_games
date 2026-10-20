@@ -1,6 +1,6 @@
-// Wheelworks' meters and screens, drawn on the canvas with the
-// shared primitives in games/_shared/hud.js. What is here is
-// only what is particular to this game: the pattern ring, the
+// Wheelworks' meters and screens, drawn on the canvas in the
+// light palette that theme.js defines. What is here is only
+// what is particular to this game: the pattern ring, the
 // gutter clock, and the access-code pad.
 //
 // The pad's geometry lives in padLayout() rather than in the
@@ -9,9 +9,12 @@
 // be half a key to the left of where it looks.
 
 import {
-	WIDTH as W, HEIGHT as H, FONT, DIM, LIVE, brackets, label,
-	readout,
+	WIDTH as W, HEIGHT as H, FONT,
 } from '../_shared/hud.js'
+import {
+	FAINT, FRAME, HOT, INK, KEY_EDGE, KEY_FILL, KEY_HOT,
+	SCRIM, WARN, banner, brackets, label, readout,
+} from './theme.js'
 import { ALPHABET } from './code.js'
 import { wheelsLeft } from './world.js'
 
@@ -52,14 +55,12 @@ export function padLayout() {
 }
 
 function cell(ctx, box, text, hot, size) {
-	ctx.fillStyle = hot
-		? 'rgba(24,74,112,0.9)'
-		: 'rgba(10,32,54,0.75)'
+	ctx.fillStyle = hot ? KEY_HOT : KEY_FILL
 	ctx.fillRect(box.x, box.y, box.w, box.h)
-	ctx.strokeStyle = hot ? LIVE : 'rgba(120,214,255,0.3)'
+	ctx.strokeStyle = hot ? KEY_HOT : KEY_EDGE
 	ctx.lineWidth = 1
 	ctx.strokeRect(box.x, box.y, box.w, box.h)
-	ctx.fillStyle = hot ? '#ffffff' : '#bdf0ff'
+	ctx.fillStyle = hot ? '#ffffff' : INK
 	ctx.font = `bold ${size}px ${FONT}`
 	ctx.textAlign = 'center'
 	ctx.fillText(
@@ -87,27 +88,15 @@ function drawPad(ctx, typed) {
 	cell(ctx, pad.enter, 'ENTER', typed.length === 4, 15)
 }
 
-function title(ctx, text, y, size, colour) {
-	ctx.textAlign = 'center'
-	ctx.font = `bold ${size}px system-ui, sans-serif`
-	ctx.fillStyle = colour
-	ctx.shadowColor = 'rgba(80,200,255,0.6)'
-	ctx.shadowBlur = 18
-	ctx.fillText(text, W / 2, y)
-	ctx.shadowBlur = 0
-	ctx.textAlign = 'left'
-}
-
 export function drawIntro(ctx, ui, reached) {
-	ctx.fillStyle = 'rgba(2,4,12,0.93)'
+	ctx.fillStyle = SCRIM
 	ctx.fillRect(0, 0, W, H)
-	title(ctx, 'WHEELWORKS', 92, 46, '#d8f6ff')
+	banner(ctx, 'WHEELWORKS', W / 2, 92, 46)
 	const line = ui.bad
 		? 'NO SUCH CODE'
 		: `ENTER A CODE, OR PLAY LEVEL ${reached}`
 	label(
-		ctx, W / 2, 126, line, 'center',
-		ui.bad ? '#ff9d9d' : DIM)
+		ctx, W / 2, 126, line, 'center', ui.bad ? HOT : FAINT)
 	drawSlots(ctx, ui.typed)
 	drawPad(ctx, ui.typed)
 	label(
@@ -121,18 +110,18 @@ export function drawIntro(ctx, ui, reached) {
 // the match is strict.
 function patternRing(ctx, atlas, x, y, pattern) {
 	const r = 34
-	ctx.strokeStyle = 'rgba(120,214,255,0.3)'
+	ctx.strokeStyle = FRAME
 	ctx.lineWidth = 1
 	ctx.beginPath()
 	ctx.arc(x, y, r, 0, Math.PI * 2)
 	ctx.stroke()
-	label(ctx, x, y - r - 8, 'N', 'center', LIVE)
+	label(ctx, x, y - r - 8, 'N', 'center', INK)
 	for (let d = 0; d < 4; d++) {
 		const a = d * (Math.PI / 2)
 		const px = x + Math.sin(a) * r
 		const py = y - Math.cos(a) * r
 		if (!pattern) {
-			ctx.strokeStyle = 'rgba(120,214,255,0.25)'
+			ctx.strokeStyle = FRAME
 			ctx.beginPath()
 			ctx.arc(px, py, 10, 0, Math.PI * 2)
 			ctx.stroke()
@@ -150,11 +139,10 @@ function drawPattern(ctx, atlas, state) {
 	label(ctx, x, 96, 'PATTERN GRID', 'center')
 	patternRing(ctx, atlas, x, 150, state.pattern)
 	if (state.pattern) {
+		label(ctx, x, 204, 'LIT', 'center', WARN)
 		label(
-			ctx, x, 204, 'LIT', 'center', '#ffd36a')
-		label(
-			ctx, x, 222, 'COLOUR MATCH OFF', 'center',
-			'#ffd36a')
+			ctx, x, 222,
+			'COLOUR MATCH OFF', 'center', WARN)
 		label(ctx, x, 240, 'MATCH IT TO CLEAR', 'center')
 		return
 	}
@@ -171,18 +159,18 @@ function gutterBar(ctx, state) {
 	const y = H - 30
 	const k = Math.max(
 		0, Math.min(1, state.gutterLeft / state.gutterMs))
-	ctx.fillStyle = 'rgba(8,20,32,0.9)'
+	ctx.fillStyle = 'rgba(42,52,66,0.12)'
 	ctx.fillRect(x, y, w, 12)
 	const hot = k < 0.3
-	ctx.fillStyle = hot ? '#ff7a6a' : '#58d7ff'
+	ctx.fillStyle = hot ? HOT : '#2f6fb0'
 	if (state.gutter) ctx.fillRect(x, y, w * k, 12)
-	ctx.strokeStyle = 'rgba(120,214,255,0.4)'
+	ctx.strokeStyle = FRAME
 	ctx.lineWidth = 1
 	ctx.strokeRect(x, y, w, 12)
 	label(
 		ctx, x, y - 6,
 		state.gutter ? 'GUTTER' : 'GUTTER CLEAR', 'left',
-		hot && state.gutter ? '#ff9d9d' : DIM)
+		hot && state.gutter ? HOT : FAINT)
 }
 
 export function drawHud(ctx, atlas, state, best) {
@@ -191,10 +179,13 @@ export function drawHud(ctx, atlas, state, best) {
 	readout(ctx, 30, 86, 'SCORE', state.score, 26)
 	label(ctx, 30, 128, `BEST ${best.value}`)
 	brackets(ctx, 24, 74, 168, 62)
-	readout(ctx, 30, 196, 'LEVEL', state.level, 22)
-	label(ctx, 30, 236, `CODE ${state.code}`, 'left', LIVE)
+	readout(ctx, 30, 186, 'LEVEL', state.level, 22)
+	// The code is the one thing a player writes down, so it is
+	// sized like the score rather than tucked under the level
+	// as a caption.
+	readout(ctx, 30, 250, 'ACCESS CODE', state.code, 26)
 	readout(
-		ctx, 30, 300, 'WHEELS LEFT', wheelsLeft(state), 22)
+		ctx, 30, 322, 'WHEELS LEFT', wheelsLeft(state), 22)
 	drawPattern(ctx, atlas, state)
 	gutterBar(ctx, state)
 	label(
@@ -206,16 +197,16 @@ export function drawHud(ctx, atlas, state, best) {
 
 export function drawBanner(ctx, state) {
 	if (state.phase === 'clear') {
-		title(ctx, 'LEVEL CLEAR', H / 2, 64, '#d8f6ff')
+		banner(ctx, 'LEVEL CLEAR', W / 2, H / 2, 64)
 		return
 	}
 	if (state.phase !== 'over') return
-	ctx.fillStyle = 'rgba(2,4,12,0.72)'
+	ctx.fillStyle = 'rgba(236,238,242,0.82)'
 	ctx.fillRect(0, 0, W, H)
-	title(ctx, 'GUTTER JAMMED', H / 2 - 30, 64, '#ffd0d0')
+	banner(ctx, 'GUTTER JAMMED', W / 2, H / 2 - 30, 64, HOT)
 	label(
 		ctx, W / 2, H / 2 + 14,
-		`SCORE ${state.score}`, 'center', LIVE)
+		`SCORE ${state.score}`, 'center', INK)
 	label(
 		ctx, W / 2, H / 2 + 44,
 		'NEW GAME, OR ENTER FOR A CODE', 'center')

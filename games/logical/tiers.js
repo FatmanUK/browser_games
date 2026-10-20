@@ -52,6 +52,25 @@ function rampFrom(level, first, from, to) {
 	return Math.round(from + (to - from) * k)
 }
 
+// A level's size wobbles by one either way. The early band is
+// where the ramp barely moves, and eight levels of three
+// wheels in a row is the same board eight times with a
+// different code on it.
+function jitter(level) {
+	return (Math.imul(level, 2654435761) >>> 0) % 3 - 1
+}
+
+// Very long early and tight late, on a curve rather than a
+// line. A line spends its first twenty levels barely below its
+// starting value, which is exactly where a player needs the
+// time; squaring it gives away most of the clock in the second
+// half, where the board is big enough to need the pressure.
+function gutterFor(level) {
+	const k = (level - 1) / (LEVELS - 1)
+	const slack = (1 - k) * (1 - k)
+	return Math.round(9000 + 51000 * slack)
+}
+
 export function coloursFor(level) {
 	if (level <= 8) return 2
 	if (level <= 30) return 3
@@ -60,17 +79,33 @@ export function coloursFor(level) {
 
 export function tierFor(level) {
 	const n = Math.min(LEVELS, Math.max(1, level))
+	const wheels = Math.max(3, rampInt(n, 3, 12) + jitter(n))
 	return {
 		level: n,
-		wheels: rampInt(n, 3, 12),
+		wheels,
 		extraRuns: rampInt(n, 2, 0),
-		feeds: Math.max(2, rampInt(n, 3, 2)),
+		// Never more than half the wheels. Asking a three
+		// wheel board for three feeds means every wheel has
+		// to touch the gutter, which can only be done by
+		// putting them all in the top row — which is how the
+		// first eight levels came to be the same board eight
+		// times over.
+		feeds: Math.max(
+			2,
+			Math.min(
+				rampInt(n, 3, 2),
+				Math.ceil(wheels / 2))),
 		colours: coloursFor(n),
-		gutterMs: rampInt(n, 20000, 9000),
+		gutterMs: gutterFor(n),
 		crossings: rampFrom(n, FIRST_CROSSING, 1, 4),
 		booths: rampFrom(n, FIRST_BOOTH, 1, 3),
 		blocks: rampFrom(n, FIRST_BLOCK, 1, 4),
-		hasPattern: n >= FIRST_PATTERN,
+		// Not on a board of three. While the grid is lit
+		// nothing breaks on colour, so the player needs a
+		// wheel they can afford to empty and refill to the
+		// pattern; with twelve slots in total there is no
+		// such wheel.
+		hasPattern: n >= FIRST_PATTERN && wheels >= 4,
 		// How long the grid stays dark between lightings.
 		// It stays lit until a wheel matches it, so this is
 		// the only timing the pattern has.

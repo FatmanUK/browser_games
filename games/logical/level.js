@@ -30,10 +30,11 @@
 import { rng } from '../_shared/art.js'
 import {
 	COLS, ROWS, COLOURS, DX, DY, at, put, inside, newGrid,
-	newWheel, isVertical, accepts,
+	newWheel, isVertical, accepts, carries,
 } from './board.js'
 import {
-	labelSegments, allWheelsFed, noTraps, feedColumns,
+	labelSegments, allWheelsFed, noTraps, noDeadEnds,
+	feedColumns,
 } from './topology.js'
 import { tierFor } from './tiers.js'
 import { seedForLevel } from './progress.js'
@@ -77,6 +78,28 @@ function reach(rand) {
 	const k = rand()
 	if (k < 0.62) return 2
 	return k < 0.9 ? 3 : 4
+}
+
+// Direction weights, by shape: balanced, wide, tall. Picked
+// once per level. Without it the early levels, where the wheel
+// count barely moves, came out as eight boards of three wheels
+// in a row — the same board eight times with a different code
+// on it. A bias in where growth reaches changes the shape of a
+// board far more than one more wheel does.
+const SHAPES = [
+	[1, 1, 1, 1],
+	[1, 3, 1, 3],
+	[3, 1, 3, 1],
+]
+
+function pickDir(rand, shape) {
+	const w = SHAPES[shape]
+	let roll = rand() * (w[0] + w[1] + w[2] + w[3])
+	for (let d = 0; d < 4; d++) {
+		roll -= w[d]
+		if (roll < 0) return d
+	}
+	return 3
 }
 
 // The cells strictly between the two ends of a would-be run.
@@ -123,9 +146,9 @@ function addWheel(grid, wheels, c, r) {
 // buries it under pipe, and a generator that eats its own
 // wheel sites cannot build a dense board — which is what kept
 // the late levels down to three wheels and the easy fallback.
-function extend(grid, wheels, rand, cross) {
+function extend(grid, wheels, rand, cross, shape) {
 	const from = pick(rand, wheels)
-	const dir = (rand() * 4) | 0
+	const dir = pickDir(rand, shape)
 	const len = reach(rand)
 	const c = from.c + DX[dir] * len
 	const r = from.r + DY[dir] * len
@@ -147,7 +170,7 @@ function extend(grid, wheels, rand, cross) {
 // connected by the runs that placed them. Connectivity is a
 // property of how the board was built, not something checked
 // afterwards and hoped for.
-function growWheels(grid, rand, tier) {
+function growWheels(grid, rand, tier, shape) {
 	const wheels = []
 	const c0 = (rand() * COLS) | 0
 	const r0 = (rand() * ROWS) | 0
@@ -155,7 +178,7 @@ function growWheels(grid, rand, tier) {
 	const cross = tier.crossings > 0
 	let guard = GROW_GUARD
 	while (wheels.length < tier.wheels && guard-- > 0) {
-		extend(grid, wheels, rand, cross)
+		extend(grid, wheels, rand, cross, shape)
 	}
 	return wheels
 }
@@ -234,53 +257,51 @@ function lineBetween(a, b) {
 	return { dir, len }
 }
 
-// A spur: pipe off a wheel that stops at nothing. A marble
-// fired into one bounces off the far end and comes back, so it
-// is a siding to park marbles in — and, routed across an
-// existing run, it is where a crossing comes from on a board
-// too dense for two wheels to see each other past a third.
-function addSpur(grid, wheels, rand) {
-	const w = pick(rand, wheels)
-	const dir = (rand() * 4) | 0
-	const len = 2 + ((rand() * 3) | 0)
-	const n = crossingsOf(grid, w, dir, len + 1)
-	if (n < 1) return 0
-	if (!pathClear(grid, w.c, w.r, dir, len + 1, true)) {
-		return 0
+// Crossings come only from runs between two wheels that
+// happen to cut across an existing one. Spurs — pipe off a
+// wheel stopping at nothing — were built here on purpose
+// because they made crossings easily, and they are gone: a run
+// that ends at nothing reads as an unfinished board, and
+// topology.js now refuses any level that has one.
+// Every pair of wheels in line, not a few hundred random
+// ones. There are at most sixty-six pairs on a full board, so
+// the exhaustive answer is cheaper than the sampled one and,
+// unlike it, never misses the only crossing a layout had.
+function crossCandidates(grid, wheels) {
+	const out = []
+	for (let i = 0; i < wheels.length; i++) {
+		for (let j = i + 1; j < wheels.length; j++) {
+			const a = wheels[i]
+			const line = lineBetween(a, wheels[j])
+			if (!line) continue
+			const { dir, len } = line
+			const n = crossingsOf(grid, a, dir, len)
+			if (n > 0) out.push({ a, n, dir, len })
+		}
 	}
-	claimPath(grid, w.c, w.r, dir, len + 1)
-	return n
+	return out
 }
 
 function addCrossRuns(grid, wheels, rand, tier) {
 	let left = tier.crossings
-	for (let i = 0; i < 300 && left > 0; i++) {
-		left -= addSpur(grid, wheels, rand)
-	}
-	for (let i = 0; i < 300 && left > 0; i++) {
-		const a = pick(rand, wheels)
-		const b = pick(rand, wheels)
-		const line = lineBetween(a, b)
-		if (!line) continue
-		const { dir, len } = line
-		const n = crossingsOf(grid, a, dir, len)
-		if (n < 1) continue
-		const ok = pathClear(grid, a.c, a.r, dir, len, true)
-		if (!ok) continue
-		claimPath(grid, a.c, a.r, dir, len)
-		left -= n
+	const found = crossCandidates(grid, wheels)
+	for (const r of shuffled(rand, found)) {
+		if (left <= 0) break
+		const { dir, len } = r
+		if (!pathClear(grid, r.a.c, r.a.r, dir, len, true)) {
+			continue
+		}
+		claimPath(grid, r.a.c, r.a.r, dir, len)
+		left -= r.n
 	}
 }
 
-function pipeCells(grid, want) {
+function pipeCells(grid) {
 	const out = []
 	for (let r = 0; r < ROWS; r++) {
 		for (let c = 0; c < COLS; c++) {
 			const cell = at(grid, c, r)
 			if (!cell || cell.kind !== 'pipe') continue
-			if (want === 'cross' && !(cell.h && cell.v)) {
-				continue
-			}
 			out.push([c, r, cell])
 		}
 	}
@@ -288,7 +309,7 @@ function pipeCells(grid, want) {
 }
 
 function addBooths(grid, rand, tier, palette) {
-	const spots = shuffled(rand, pipeCells(grid, 'any'))
+	const spots = shuffled(rand, pipeCells(grid))
 	for (let i = 0; i < tier.booths && i < spots.length; i++) {
 		const [, , cell] = spots[i]
 		cell.kind = 'booth'
@@ -308,9 +329,20 @@ function addBooths(grid, rand, tier, palette) {
 // sent again for ever. Any block that cuts the board in two or
 // strands a marble in a loop with no wheel on it is put back:
 // easier than predicting which ones will.
-function blockDirs(grid, c, r) {
+// Only along an axis the cell already carries. A block that
+// could point anywhere was a run that was not there: a wheel
+// beside it could fire into it with no pipe between the two,
+// and a marble sent at a wall would bounce straight back in
+// and be sent again for ever.
+//
+// On a crossing that leaves all four directions open and the
+// block is a diverter. On a straight run it leaves two, and
+// the block is a one-way valve — which is the other half of
+// what the name means.
+function blockDirs(grid, c, r, cell) {
 	const out = []
 	for (let d = 0; d < 4; d++) {
+		if (!carries(cell, d)) continue
 		const res = accepts(grid, c, r, d)
 		if (res.act !== 'bounce') out.push(d)
 	}
@@ -318,17 +350,19 @@ function blockDirs(grid, c, r) {
 }
 
 function tryBlock(grid, wheels, rand, c, r, cell) {
-	const dirs = blockDirs(grid, c, r)
+	const dirs = blockDirs(grid, c, r, cell)
 	if (!dirs.length) return false
 	const dir = pick(rand, dirs)
-	put(grid, c, r, { kind: 'block', dir })
+	put(grid, c, r, {
+		kind: 'block', dir, h: cell.h, v: cell.v,
+	})
 	if (allWheelsFed(grid, wheels) && noTraps(grid)) return true
 	put(grid, c, r, cell)
 	return false
 }
 
 function addBlocks(grid, wheels, rand, tier) {
-	const spots = shuffled(rand, pipeCells(grid, 'any'))
+	const spots = shuffled(rand, pipeCells(grid))
 	let left = tier.blocks
 	for (const [c, r, cell] of spots) {
 		if (left <= 0) break
@@ -336,15 +370,29 @@ function addBlocks(grid, wheels, rand, tier) {
 	}
 }
 
+// A board has to be two-dimensional. Wheels in a line across
+// the top is a legal layout, a dull one, and the one the seed
+// walk reaches first, because it satisfies the feed count
+// without trying. Insisting on two rows and two columns costs
+// a few more seeds and buys every early level a shape.
+function spread(wheels) {
+	if (wheels.length < 3) return true
+	const rows = new Set(wheels.map((w) => w.r))
+	const cols = new Set(wheels.map((w) => w.c))
+	return rows.size >= 2 && cols.size >= 2
+}
+
 function tryBuild(seed, tier) {
 	const rand = rng(seed)
 	const grid = newGrid()
 	const palette = shuffled(rand, COLOURS)
 		.slice(0, tier.colours)
-	const wheels = growWheels(grid, rand, tier)
+	const shape = (rand() * SHAPES.length) | 0
+	const wheels = growWheels(grid, rand, tier, shape)
 	if (wheels.length < Math.max(3, tier.wheels - 1)) {
 		return null
 	}
+	if (!spread(wheels)) return null
 	if (addFeeds(grid, wheels, rand, tier) < tier.feeds) {
 		return null
 	}
@@ -353,6 +401,7 @@ function tryBuild(seed, tier) {
 	addBooths(grid, rand, tier, palette)
 	addBlocks(grid, wheels, rand, tier)
 	labelSegments(grid)
+	if (!noDeadEnds(grid)) return null
 	if (!allWheelsFed(grid, wheels)) return null
 	if (!noTraps(grid)) return null
 	return { grid, wheels, palette, feeds: feedColumns(grid) }

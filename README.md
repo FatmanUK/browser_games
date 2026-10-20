@@ -206,7 +206,11 @@ files in its own `music/` folder — see
   stays lit until some wheel matches it exactly, orientation
   and all; while it is lit the ordinary colour match works in
   no wheel on the board, so it is an emergency rather than a
-  nuisance. Levels are generated from the level number rather
+  nuisance. Drawn on a light board — the only one in the suite
+  that is — so the four marble colours and the brass of an
+  unbroken wheel read against the ground rather than glowing
+  out of it; the window's own title bar stays dark, since that
+  is shared with the other four. Levels are generated from the level number rather
   than committed, as Dash's tracks are, and progress is one
   number in `localStorage` — a code is a visit, not an unlock,
   so only finishing a level climbs the ladder. The first mouse
@@ -263,7 +267,8 @@ games/logical/          Wheelworks (board.js the cell model
                         pattern.js/world.js the rules,
                         code.js the access codes, input.js the
                         mouse, models.js + sprites.js the baked
-                        art, render.js + hud.js the drawing,
+                        art, theme.js the light palette,
+                        render.js + hud.js the drawing,
                         audio.js over music/*.mod)
 games/beltbreaker/      Belt Breaker (rocks.js/craft.js/
                         sprites.js pre-render the art over

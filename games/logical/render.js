@@ -4,7 +4,7 @@
 // fitBoard's transform, so the numbers here are the same ones
 // board.js and travel.js use. The meters are not: hud.js draws
 // those with the transform reset, as the rest of the suite
-// does.
+// does. Colours come from theme.js, which both files share.
 //
 // Draw order matters in one place. Marbles in flight go down
 // *before* the wheels, so a marble emerging from a throat
@@ -13,19 +13,17 @@
 // they are sitting in the near face of it.
 
 import {
-	BOARD_W, BOARD_H, CELL_H, CELL_W, COLS, GUTTER_H, DX, DY,
-	MARBLE_R, PIPE_R, ROWS, SLOT_R, WHEEL_R, accepts, at,
-	carries, centreX, centreY, isVertical,
+	BOARD_W, BOARD_H, COLS, GUTTER_H, DX, DY, MARBLE_R,
+	PIPE_R, ROWS, SLOT_R, WHEEL_R, accepts, at, carries,
+	centreX, centreY, step,
 } from './board.js'
 import { wheelFrame } from './sprites.js'
 import { slotPoint } from './travel.js'
 import { WIDTH, HEIGHT, fitBoard } from '../_shared/hud.js'
-
-const BG = '#02030a'
-const FRAME = 'rgba(120,214,255,0.22)'
-const PIPE_FILL = '#0b1a2b'
-const PIPE_EDGE = 'rgba(96,180,220,0.4)'
-const TROUGH = '#0a1724'
+import {
+	PAPER, TROUGH, PIPE, PIPE_EDGE, FRAME, POCKET,
+	BLOCK_FILL, BLOCK_EDGE,
+} from './theme.js'
 
 export const TOP_INSET = 46
 export const BOTTOM_INSET = 40
@@ -36,49 +34,50 @@ function marble(ctx, atlas, colour, x, y) {
 	ctx.drawImage(img, x - half, y - half)
 }
 
-function channel(ctx, c, r, vert) {
+// How far a pipe has to run from its own cell's middle to meet
+// whatever is next door. Into another pipe cell that is half a
+// cell and a shade over, so the two overlap and leave no seam;
+// into a wheel it is all the way to the rim, which is the
+// neighbour's middle less the wheel's radius. Stopping at the
+// cell boundary — the obvious thing — left every run floating
+// thirty units short of the wheel it joined.
+function armLength(grid, c, r, dir) {
+	const half = step(dir) / 2
+	const cell = at(grid, c + DX[dir], r + DY[dir])
+	if (cell && cell.kind === 'wheel') {
+		return half * 2 - WHEEL_R + 2
+	}
+	return half + 1
+}
+
+// Pipe from the cell's middle outward. The fill always starts
+// at the middle so a junction is solid; the two side walls
+// start `gap` out, which on a crossing leaves the junction
+// square open — what a crossing looks like — and on a straight
+// run gap is nought and the walls are continuous.
+function arm(ctx, grid, c, r, dir, gap) {
+	const len = armLength(grid, c, r, dir)
 	const x = centreX(c)
 	const y = centreY(r)
-	const hw = vert ? PIPE_R : CELL_W / 2 + 1
-	const hh = vert ? CELL_H / 2 + 1 : PIPE_R
-	ctx.fillStyle = PIPE_FILL
-	ctx.fillRect(x - hw, y - hh, hw * 2, hh * 2)
+	const ax = DX[dir]
+	const ay = DY[dir]
+	ctx.fillStyle = PIPE
+	ctx.fillRect(
+		Math.min(x, x + ax * len) - (ay ? PIPE_R : 0),
+		Math.min(y, y + ay * len) - (ax ? PIPE_R : 0),
+		ax ? len : PIPE_R * 2,
+		ay ? len : PIPE_R * 2)
+	if (gap >= len) return
 	ctx.strokeStyle = PIPE_EDGE
 	ctx.lineWidth = 1.5
 	ctx.beginPath()
-	if (vert) {
-		ctx.moveTo(x - PIPE_R, y - hh)
-		ctx.lineTo(x - PIPE_R, y + hh)
-		ctx.moveTo(x + PIPE_R, y - hh)
-		ctx.lineTo(x + PIPE_R, y + hh)
-	} else {
-		ctx.moveTo(x - hw, y - PIPE_R)
-		ctx.lineTo(x + hw, y - PIPE_R)
-		ctx.moveTo(x - hw, y + PIPE_R)
-		ctx.lineTo(x + hw, y + PIPE_R)
+	for (const side of [-1, 1]) {
+		const px = ay ? side * PIPE_R : 0
+		const py = ax ? side * PIPE_R : 0
+		ctx.moveTo(x + ax * gap + px, y + ay * gap + py)
+		ctx.lineTo(x + ax * len + px, y + ay * len + py)
 	}
 	ctx.stroke()
-}
-
-// A buffer across the end of a spur, so a run that stops at
-// nothing looks stopped rather than cut off by the edge of the
-// drawing.
-function stopEnd(ctx, c, r, dir) {
-	const x = centreX(c) + DX[dir] * (CELL_W / 2 - 3)
-	const y = centreY(r) + DY[dir] * (CELL_H / 2 - 3)
-	const vert = isVertical(dir)
-	ctx.fillStyle = PIPE_EDGE
-	if (vert) ctx.fillRect(x - PIPE_R, y - 3, PIPE_R * 2, 5)
-	else ctx.fillRect(x - 3, y - PIPE_R, 5, PIPE_R * 2)
-}
-
-function deadEnds(ctx, state, c, r, cell) {
-	for (let dir = 0; dir < 4; dir++) {
-		if (!carries(cell, dir)) continue
-		const res = accepts(state.grid, c, r, dir)
-		if (res.act !== 'bounce') continue
-		stopEnd(ctx, c, r, dir)
-	}
 }
 
 // Painted in the colour it paints: a booth has to say what it
@@ -88,13 +87,13 @@ function booth(ctx, atlas, c, r, cell) {
 	const x = centreX(c)
 	const y = centreY(r)
 	const w = PIPE_R + 11
-	ctx.fillStyle = 'rgba(255,255,255,0.05)'
+	ctx.fillStyle = 'rgba(255,255,255,0.55)'
 	ctx.fillRect(x - w, y - w, w * 2, w * 2)
 	ctx.lineWidth = 3
 	ctx.strokeStyle = atlas.inks[cell.colour]
 	ctx.strokeRect(x - w, y - w, w * 2, w * 2)
 	ctx.lineWidth = 1
-	ctx.strokeStyle = 'rgba(255,255,255,0.26)'
+	ctx.strokeStyle = FRAME
 	ctx.strokeRect(x - w + 4, y - w + 4, w * 2 - 8, w * 2 - 8)
 }
 
@@ -119,8 +118,8 @@ function block(ctx, c, r, cell) {
 	const x = centreX(c)
 	const y = centreY(r)
 	const w = PIPE_R + 9
-	ctx.fillStyle = '#1b2d1a'
-	ctx.strokeStyle = '#7de08a'
+	ctx.fillStyle = BLOCK_FILL
+	ctx.strokeStyle = BLOCK_EDGE
 	ctx.lineWidth = 2
 	ctx.beginPath()
 	ctx.moveTo(x - w, y)
@@ -139,14 +138,13 @@ function block(ctx, c, r, cell) {
 function drawCell(ctx, atlas, state, c, r) {
 	const cell = at(state.grid, c, r)
 	if (!cell || cell.kind === 'wheel') return
-	if (cell.kind === 'block') {
-		block(ctx, c, r, cell)
-		return
+	const cross = !!cell.h && !!cell.v
+	for (let dir = 0; dir < 4; dir++) {
+		if (!carries(cell, dir)) continue
+		arm(ctx, state.grid, c, r, dir, cross ? PIPE_R : 0)
 	}
-	if (cell.h) channel(ctx, c, r, false)
-	if (cell.v) channel(ctx, c, r, true)
-	deadEnds(ctx, state, c, r, cell)
 	if (cell.kind === 'booth') booth(ctx, atlas, c, r, cell)
+	if (cell.kind === 'block') block(ctx, c, r, cell)
 }
 
 function drawPipes(ctx, atlas, state) {
@@ -161,7 +159,7 @@ function drawPipes(ctx, atlas, state) {
 // the top is what makes it unmistakable at a glance across a
 // board of twelve.
 function brokenRing(ctx, x, y) {
-	ctx.strokeStyle = 'rgba(236,142,74,0.85)'
+	ctx.strokeStyle = 'rgba(176,86,30,0.9)'
 	ctx.lineWidth = 3
 	ctx.setLineDash([7, 8])
 	ctx.beginPath()
@@ -177,13 +175,10 @@ function brokenRing(ctx, x, y) {
 // from the rotation, never what it looks like.
 function pocket(ctx, wheel, k) {
 	const p = slotPoint(wheel, k, SLOT_R)
-	ctx.fillStyle = 'rgba(3,7,13,0.88)'
+	ctx.fillStyle = POCKET
 	ctx.beginPath()
 	ctx.arc(p.x, p.y, MARBLE_R + 4, 0, Math.PI * 2)
 	ctx.fill()
-	ctx.strokeStyle = 'rgba(0,0,0,0.55)'
-	ctx.lineWidth = 2.5
-	ctx.stroke()
 }
 
 function drawWheel(ctx, atlas, wheel) {
@@ -220,18 +215,18 @@ function drawTransit(ctx, atlas, state) {
 	}
 }
 
-// A funnel under every column the lane can actually let a
-// marble down, so where a marble can go is on the board rather
-// than in the player's head.
+// A funnel under every column the lane can let a marble down,
+// so where a marble can go is on the board rather than in the
+// player's head.
 function mouth(ctx, state, c) {
 	const res = accepts(state.grid, c, -1, 2)
 	if (res.act === 'bounce') return
 	const x = centreX(c)
 	const y = GUTTER_H
-	ctx.fillStyle = 'rgba(120,214,255,0.14)'
+	ctx.fillStyle = 'rgba(42,52,66,0.17)'
 	ctx.beginPath()
-	ctx.moveTo(x - PIPE_R - 9, y - 13)
-	ctx.lineTo(x + PIPE_R + 9, y - 13)
+	ctx.moveTo(x - PIPE_R - 9, y - 11)
+	ctx.lineTo(x + PIPE_R + 9, y - 11)
 	ctx.lineTo(x + PIPE_R, y + 2)
 	ctx.lineTo(x - PIPE_R, y + 2)
 	ctx.closePath()
@@ -262,7 +257,7 @@ function drawFrame(ctx) {
 
 export function drawBoard(ctx, atlas, state) {
 	ctx.setTransform(1, 0, 0, 1, 0, 0)
-	ctx.fillStyle = BG
+	ctx.fillStyle = PAPER
 	ctx.fillRect(0, 0, WIDTH, HEIGHT)
 	const fit = fitBoard(
 		ctx, BOARD_W, BOARD_H, TOP_INSET, BOTTOM_INSET)

@@ -117,12 +117,24 @@ function roll(state, dt, fx) {
 	return tryMouths(state, fromX, fx)
 }
 
-// A marble rolling back up a feed pipe rejoins the lane where
-// it came out, heading left — the same way the fresh ones go,
-// so there is only ever one kind of gutter marble.
-export function joinGutter(state, colour, x) {
-	state.gutter = { colour, x, dir: -1 }
+// The feed clock is reset here, where a marble is put into the
+// lane, and nowhere else. Resetting it when one was taken OUT
+// of the lane looked equivalent and was not: a marble bouncing
+// back up a feed pipe into the lane and straight back down it
+// counted as a delivery every round trip, so the clock never
+// ran out and the gutter stopped producing marbles for as long
+// as the bouncing lasted. The lane is one-way now (board.js)
+// and so is this.
+function feed(state, fx) {
+	state.gutter = {
+		colour: drawColour(state),
+		x: BOARD_W - MARBLE_R,
+		dir: -1,
+	}
 	state.gutterLeft = state.gutterMs
+	state.feedLeft = FEED_MS
+	state.marblesIn += 1
+	fx.feed()
 }
 
 // Returns true when the clock has run out, which is the only
@@ -132,16 +144,10 @@ export function stepGutter(state, dt, fx) {
 	if (!state.gutter) {
 		state.feedLeft -= dt * 1000
 		if (state.feedLeft > 0) return false
-		joinGutter(
-			state, drawColour(state), BOARD_W - MARBLE_R)
-		state.marblesIn += 1
-		fx.feed()
+		feed(state, fx)
 		return false
 	}
-	if (roll(state, dt, fx)) {
-		state.feedLeft = FEED_MS
-		return false
-	}
+	if (roll(state, dt, fx)) return false
 	state.gutterLeft -= dt * 1000
 	return state.gutterLeft <= 0
 }

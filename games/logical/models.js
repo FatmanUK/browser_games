@@ -25,16 +25,23 @@ import { model } from '../_shared/bake.js'
 // metal; the broken one keeps the geometry and loses the
 // polish, because a wheel that has been used up should read as
 // burnt iron at a glance and not as a wheel in another colour.
+// Lit for a light board. The first set of these was tuned
+// against a near-black ground, where a median face luminance
+// of 95 reads as metal; on paper at 238 the same wheel is a
+// dark blob with holes in it. Ambient does most of the lifting
+// — scaling the base alone keeps the dark faces dark — and the
+// speculars come down, because a hot highlight over a bright
+// diffuse clips to a white blob rather than reading as shine.
 const STEEL = {
-	base: [0.46, 0.52, 0.62], tint: [1, 1, 1],
-	sky: [0.26, 0.4, 0.62], amb: 0.06, fill: 0.17,
-	kd: 0.5, shine: 58, ks: 1.5, rim: 0.44,
+	base: [1, 1.12, 1.32], tint: [1, 1, 1],
+	sky: [0.3, 0.38, 0.5], amb: 0.5, fill: 0.3,
+	kd: 0.5, shine: 50, ks: 0.8, rim: 0.22,
 }
 
 const BRASS = {
-	base: [0.62, 0.45, 0.16], tint: [1, 0.84, 0.44],
-	sky: [0.36, 0.38, 0.48], amb: 0.07, fill: 0.14,
-	kd: 0.58, shine: 60, ks: 1.5, rim: 0.42,
+	base: [1.36, 0.99, 0.36], tint: [1, 0.86, 0.5],
+	sky: [0.4, 0.4, 0.42], amb: 0.5, fill: 0.3,
+	kd: 0.55, shine: 52, ks: 0.8, rim: 0.2,
 }
 
 // Cold against the brass, and matte against its shine: at
@@ -44,15 +51,15 @@ const BRASS = {
 // Enough slope is kept on both to shade — a broken wheel still
 // turns, and its heading still has to be readable.
 const BURNT = {
-	base: [0.2, 0.22, 0.26], tint: [0.6, 0.66, 0.76],
-	sky: [0.14, 0.19, 0.28], amb: 0.04, fill: 0.11,
-	kd: 0.8, shine: 12, ks: 0.2, rim: 0.08,
+	base: [0.72, 0.78, 0.9], tint: [0.7, 0.75, 0.85],
+	sky: [0.2, 0.26, 0.36], amb: 0.46, fill: 0.26,
+	kd: 0.6, shine: 12, ks: 0.16, rim: 0.06,
 }
 
 const ASH = {
-	base: [0.12, 0.14, 0.18], tint: [0.5, 0.56, 0.66],
-	sky: [0.12, 0.17, 0.26], amb: 0.04, fill: 0.1,
-	kd: 0.75, shine: 10, ks: 0.16, rim: 0.07,
+	base: [0.38, 0.45, 0.58], tint: [0.5, 0.56, 0.66],
+	sky: [0.18, 0.24, 0.34], amb: 0.42, fill: 0.3,
+	kd: 0.6, shine: 10, ks: 0.14, rim: 0.05,
 }
 
 // A bar lying in the X-Z plane along (ax, az). box() only
