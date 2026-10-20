@@ -76,7 +76,15 @@ export function nudge(wheel) {
 	return true
 }
 
+// How long the break flash lasts. Long enough to read across
+// a board of twelve, short enough not to still be lit when the
+// wheel takes its next marble.
+const FLASH_S = 0.45
+
 export function stepWheel(wheel, dt) {
+	if (wheel.flash > 0) {
+		wheel.flash = Math.max(0, wheel.flash - dt / FLASH_S)
+	}
 	if (!isTurning(wheel)) return false
 	wheel.turns = Math.min(
 		wheel.target, wheel.turns + ROT_RATE * dt)

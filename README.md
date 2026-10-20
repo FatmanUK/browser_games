@@ -218,8 +218,8 @@ files in its own `music/` folder — see
   is the only thing on screen that says how far up the ladder
   you have climbed without reading a number off it. The board
   under all of it is a grid of bolted plates, scored along
-  every cell boundary and riveted at the corners, so which
-  cell is which can be read at a glance. Levels are generated from the level number rather
+  every cell boundary and bolted down at the corners of each
+  plate, so which cell is which can be read at a glance. Levels are generated from the level number rather
   than committed, as Dash's tracks are, and progress is one
   number in `localStorage` — a code is a visit, not an unlock,
   so only finishing a level climbs the ladder. The first mouse

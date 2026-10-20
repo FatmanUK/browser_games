@@ -106,6 +106,11 @@ export function newWheel(id, c, r) {
 		turns: 0,
 		target: 0,
 		broken: false,
+		// 1 the instant it breaks, fading to 0. Breaking is
+		// the whole point of the game and used to happen in
+		// silence on screen: four marbles were simply not
+		// there any more.
+		flash: 0,
 	}
 }
 

@@ -22,7 +22,9 @@ import { setupSound } from './audio.js'
 import { getAtlas } from './sprites.js'
 import { newGame, update, readyForNext } from './world.js'
 import { drawBoard } from './render.js'
-import { drawHud, drawBanner, drawIntro } from './hud.js'
+import {
+	drawHud, drawBanner, drawIntro, drawAlert,
+} from './hud.js'
 import { fireSlot } from './travel.js'
 import { nudge } from './wheel.js'
 import { loadReached, nextLevel } from './progress.js'
@@ -142,6 +144,7 @@ function advance(ref, best, fx, dt) {
 function paint(ctx, atlas, ref, best) {
 	ref.fit = drawBoard(ctx, atlas, ref.state)
 	drawHud(ctx, atlas, ref.state, best)
+	drawAlert(ctx, ref.state)
 	drawBanner(ctx, ref.state)
 	if (ref.intro) drawIntro(ctx, ref.ui, ref.reached)
 }

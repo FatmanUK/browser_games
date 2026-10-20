@@ -47,6 +47,8 @@ export function newGame(level, score) {
 		darkLeft: 0,
 		score: score || 0,
 		clearLeft: 0,
+		clock: 0,
+		alertLeft: 0,
 		code: codeFor(level),
 		marblesIn: 0,
 		destroyed: 0,
@@ -57,6 +59,7 @@ export function newGame(level, score) {
 
 function breakWheel(state, wheel, fx) {
 	emptyWheel(wheel)
+	wheel.flash = 1
 	destroyed(state)
 	if (wheel.broken) {
 		state.score += REBREAK
@@ -86,6 +89,19 @@ function sweep(state, list, fx) {
 		}
 	}
 	return hit
+}
+
+// A pattern match puts the light out, and that turns the
+// ordinary colour match back on in every wheel on the board at
+// once — wheels that have been sitting full of four alike
+// through the whole lit spell, waiting for exactly this. So a
+// sweep that changes the light is always followed by another
+// over the whole board rather than over the handful of wheels
+// that happened to be touched this frame.
+function sweepAll(state, fx) {
+	if (sweep(state, state.wheels, fx)) {
+		sweep(state, state.wheels, fx)
+	}
 }
 
 function allBroken(state) {
@@ -134,12 +150,12 @@ export function update(state, dt, fx) {
 		return
 	}
 	if (state.phase !== 'play') return
+	state.clock += dt
+	if (state.alertLeft > 0) state.alertLeft -= dt * 1000
 	stepWheels(state, dt)
 	stepTransit(state, dt, fx)
-	if (stepPattern(state, dt, fx)) {
-		sweep(state, state.wheels, fx)
-	}
-	sweep(state, state.filled, fx)
+	if (stepPattern(state, dt, fx)) sweepAll(state, fx)
+	if (sweep(state, state.filled, fx)) sweepAll(state, fx)
 	state.filled.length = 0
 	if (AUDIT) audit(state)
 	if (allBroken(state)) {

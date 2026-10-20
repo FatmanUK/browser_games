@@ -17,6 +17,12 @@
 
 const SPREAD = 0.5
 
+// How long the lighting-up announcement stays on the board.
+// The light suspends colour matching everywhere, so a player
+// who misses the moment spends the next twenty seconds
+// wondering why four of a colour is doing nothing.
+const ALERT_MS = 2200
+
 function draw(state) {
 	const p = state.palette
 	const out = []
@@ -57,6 +63,7 @@ export function stepPattern(state, dt, fx) {
 	state.darkLeft -= dt * 1000
 	if (state.darkLeft > 0) return false
 	state.pattern = newPattern(state)
+	state.alertLeft = ALERT_MS
 	fx.patternOn()
 	return true
 }

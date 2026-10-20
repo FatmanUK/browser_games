@@ -41,7 +41,14 @@ function nextEvent(state, m) {
 	const cell = at(state.grid, m.c, m.r)
 	const half = step(m.dir) / 2
 	const a = along(m)
-	if (cell && cell.kind === 'wheel' && a < -WHEEL_R - EPS) {
+	// At the rim counts as before it. The guard is only here
+	// to stop the event firing again once it has been dealt
+	// with, and after a bounce the marble is a whole radius
+	// the other side of the middle, so there is no need to
+	// exclude the rim itself — and excluding it was how a
+	// marble that landed exactly on it sailed on through the
+	// wheel and out the far side.
+	if (cell && cell.kind === 'wheel' && a < -WHEEL_R + EPS) {
 		return { d: -WHEEL_R - a, kind: 'rim' }
 	}
 	const turns = cell
@@ -114,7 +121,14 @@ export function stepMarble(state, m, dt, fx) {
 	let guard = 64
 	while (left > EPS && guard-- > 0) {
 		const ev = nextEvent(state, m)
-		if (ev.d > left) {
+		// An event exactly a frame's travel away is dealt
+		// with, not stopped short of. Land on one without
+		// firing it and whether it is noticed at all comes
+		// down to which side of the boundary the arithmetic
+		// falls — which is a coin toss the player cannot see,
+		// and the marble walking through a wheel is what it
+		// looks like when it comes up tails.
+		if (ev.d > left + EPS) {
 			moveBy(m, left)
 			return
 		}

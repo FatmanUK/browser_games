@@ -179,6 +179,27 @@ function pocket(ctx, wheel, k) {
 	ctx.fill()
 }
 
+// The moment of breaking: a white wash over the face and a
+// ring thrown off it, both fading as the wheel's flash does.
+// Four marbles going out of existence in perfect silence was
+// the one thing on the board that happened without being seen
+// to happen.
+function flash(ctx, x, y, k) {
+	ctx.save()
+	ctx.globalAlpha = k
+	ctx.fillStyle = 'rgba(255,252,236,0.72)'
+	ctx.beginPath()
+	ctx.arc(x, y, WHEEL_R * 0.97, 0, Math.PI * 2)
+	ctx.fill()
+	ctx.strokeStyle = '#ffd86a'
+	ctx.lineWidth = 2 + k * 6
+	ctx.beginPath()
+	ctx.arc(
+		x, y, WHEEL_R * (1 + (1 - k) * 0.55), 0, Math.PI * 2)
+	ctx.stroke()
+	ctx.restore()
+}
+
 function drawWheel(ctx, atlas, wheel) {
 	const x = centreX(wheel.c)
 	const y = centreY(wheel.r)
@@ -187,6 +208,7 @@ function drawWheel(ctx, atlas, wheel) {
 	ctx.drawImage(img, x - half, y - half)
 	for (let k = 0; k < 4; k++) pocket(ctx, wheel, k)
 	if (wheel.broken) brokenRing(ctx, x, y)
+	if (wheel.flash > 0) flash(ctx, x, y, wheel.flash)
 }
 
 function drawSlots(ctx, atlas, wheel) {
@@ -256,9 +278,13 @@ function drawGutter(ctx, atlas, state, band) {
 // that order of the two reads as cut into the surface. The
 // other way round and the same two lines read as a ridge
 // standing proud of it.
-const GROOVE = 'rgba(42,52,66,0.13)'
-const GROOVE_LIT = 'rgba(255,255,255,0.5)'
-const GROOVE_OFF = 1.6
+// Three passes make a V rather than a line: the upper-left
+// face in shadow, the floor darkest, the lower-right face
+// catching the light. One dark line and one pale one read as a
+// scratch; this reads as something milled out of the plate.
+const GROOVE_SHADE = 'rgba(42,52,66,0.16)'
+const GROOVE_FLOOR = 'rgba(42,52,66,0.26)'
+const GROOVE_LIT = 'rgba(255,255,255,0.8)'
 
 function seams(ctx, colour, width, off) {
 	ctx.strokeStyle = colour
@@ -277,56 +303,95 @@ function seams(ctx, colour, width, off) {
 	ctx.stroke()
 }
 
-// A bolt at every corner of every cell, including the outer
-// ones, where they read as the plates being fastened to the
-// frame. Corners are the one place nothing else goes: a pipe
-// runs down the middle of a cell edge and a wheel sits in the
-// middle of a cell, so the nearest either comes to a corner is
-// forty-eight units.
-// Three discs, not two: a shadow cast down and right, a body
-// solid enough to be a thing rather than a stain, and a small
-// highlight up and to the left. Drawn as a translucent disc
-// with a highlight on it, a rivet reads as a pale ring — a
-// washer with a hole in it — because the highlight ends up
+// Four bolts per cell, set in diagonally from its corners,
+// which is how a plate is actually fastened down — a bolt
+// through the sheet, not a bolt through the seam. One at each
+// vertex read as a pin holding four plates together by their
+// corners, which is not a thing.
+//
+// Corners are the one place on a cell nothing else goes: the
+// pipe runs down the middle of a cell edge and a wheel sits in
+// the middle of a cell, so the nearest either comes to one of
+// these is thirty-three units.
+//
+// Three discs each, not two: a shadow cast down and right, a
+// body solid enough to be a thing rather than a stain, and a
+// small highlight up and to the left. Drawn as a translucent
+// disc with a highlight on it, a rivet reads as a pale ring —
+// a washer with a hole in it — because the highlight ends up
 // lighter than the body it is supposed to be sitting on.
 const RIVET_SHADE = 'rgba(42,52,66,0.26)'
 const RIVET_BODY = 'rgba(178,183,192,0.92)'
 const RIVET_LIT = 'rgba(255,255,255,0.82)'
-const RIVET_R = 4
+const RIVET_R = 3.6
+const RIVET_IN = 12
 
-function disc(ctx, x, y, r, colour) {
+let bolts = null
+
+function rivetSpots() {
+	if (bolts) return bolts
+	bolts = []
+	for (let r = 0; r < ROWS; r++) {
+		for (let c = 0; c < COLS; c++) {
+			const x0 = c * CELL_W
+			const y0 = GUTTER_H + r * CELL_H
+			const xs = [RIVET_IN, CELL_W - RIVET_IN]
+			const ys = [RIVET_IN, CELL_H - RIVET_IN]
+			for (const dx of xs) {
+				for (const dy of ys) {
+					bolts.push([x0 + dx, y0 + dy])
+				}
+			}
+		}
+	}
+	return bolts
+}
+
+// A hundred and sixty bolts of three discs each. Batched into
+// one path per pass, so the board costs three fills a frame
+// rather than four hundred and eighty.
+function rivetPass(ctx, dx, dy, r, colour) {
 	ctx.fillStyle = colour
 	ctx.beginPath()
-	ctx.arc(x, y, r, 0, Math.PI * 2)
+	for (const [x, y] of rivetSpots()) {
+		ctx.moveTo(x + dx + r, y + dy)
+		ctx.arc(x + dx, y + dy, r, 0, Math.PI * 2)
+	}
 	ctx.fill()
 }
 
-function rivet(ctx, x, y) {
-	disc(ctx, x + 0.9, y + 0.9, RIVET_R, RIVET_SHADE)
-	disc(ctx, x, y, RIVET_R, RIVET_BODY)
-	disc(ctx, x - 1.2, y - 1.2, RIVET_R * 0.34, RIVET_LIT)
-}
-
 function rivets(ctx) {
-	for (let c = 0; c <= COLS; c++) {
-		for (let r = 0; r <= ROWS; r++) {
-			rivet(ctx, c * CELL_W, GUTTER_H + r * CELL_H)
-		}
-	}
+	rivetPass(ctx, 0.8, 0.8, RIVET_R, RIVET_SHADE)
+	rivetPass(ctx, 0, 0, RIVET_R, RIVET_BODY)
+	rivetPass(ctx, -1, -1, RIVET_R * 0.36, RIVET_LIT)
 }
 
 // Wash, then the grid scored into it, then the bolts, then the
 // frame. Pipe goes down after all of it, because the runs lie
 // on the plates rather than being part of them.
-function drawFrame(ctx) {
+// While the pattern grid is lit, nothing on the board breaks
+// on colour. That is a rule change the player has to notice,
+// so the whole board is banded in amber for as long as it
+// lasts rather than only a panel off to one side.
+function litBorder(ctx, state) {
+	if (!state.pattern) return
+	const pulse = 0.5 + 0.5 * Math.sin(state.clock * 7)
+	ctx.strokeStyle = `rgba(206,132,16,${0.4 + 0.5 * pulse})`
+	ctx.lineWidth = 7
+	ctx.strokeRect(-6, -6, BOARD_W + 12, BOARD_H + 12)
+}
+
+function drawFrame(ctx, state) {
 	ctx.fillStyle = BOARD_WASH
 	ctx.fillRect(0, 0, BOARD_W, BOARD_H)
-	seams(ctx, GROOVE, 2, 0)
-	seams(ctx, GROOVE_LIT, 1.2, GROOVE_OFF)
+	seams(ctx, GROOVE_SHADE, 3, -0.6)
+	seams(ctx, GROOVE_FLOOR, 1.4, 0.6)
+	seams(ctx, GROOVE_LIT, 2.6, 2.6)
 	rivets(ctx)
 	ctx.strokeStyle = FRAME
 	ctx.lineWidth = 2
 	ctx.strokeRect(-1, -1, BOARD_W + 2, BOARD_H + 2)
+	litBorder(ctx, state)
 }
 
 // The ground is painted with the transform reset, so the
@@ -346,7 +411,7 @@ export function drawBoard(ctx, atlas, state) {
 	drawGround(ctx, band)
 	const fit = fitBoard(
 		ctx, BOARD_W, BOARD_H, TOP_INSET, BOTTOM_INSET)
-	drawFrame(ctx)
+	drawFrame(ctx, state)
 	drawGutter(ctx, atlas, state, band)
 	drawPipes(ctx, atlas, state, band)
 	drawTransit(ctx, atlas, state)

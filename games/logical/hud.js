@@ -136,10 +136,17 @@ function drawNext(ctx, atlas, state) {
 // left to right and top to bottom, and a wheel's slots are a
 // ring with a north on it. The N tick is the whole point when
 // the match is strict.
-function patternRing(ctx, atlas, x, y, pattern) {
+function patternRing(ctx, atlas, x, y, pattern, pulse) {
 	const r = 34
-	ctx.strokeStyle = FRAME
-	ctx.lineWidth = 1
+	if (pattern) {
+		const a = 0.2 + 0.3 * pulse
+		ctx.fillStyle = `rgba(230,160,40,${a})`
+		ctx.beginPath()
+		ctx.arc(x, y, r + 16, 0, Math.PI * 2)
+		ctx.fill()
+	}
+	ctx.strokeStyle = pattern ? WARN : FRAME
+	ctx.lineWidth = pattern ? 2 : 1
 	ctx.beginPath()
 	ctx.arc(x, y, r, 0, Math.PI * 2)
 	ctx.stroke()
@@ -164,8 +171,9 @@ function patternRing(ctx, atlas, x, y, pattern) {
 function drawPattern(ctx, atlas, state) {
 	if (!state.tier.hasPattern) return
 	const x = W - 118
+	const pulse = 0.5 + 0.5 * Math.sin(state.clock * 7)
 	label(ctx, x, 158, 'PATTERN GRID', 'center')
-	patternRing(ctx, atlas, x, 212, state.pattern)
+	patternRing(ctx, atlas, x, 212, state.pattern, pulse)
 	if (state.pattern) {
 		label(ctx, x, 266, 'LIT', 'center', WARN)
 		label(
@@ -221,6 +229,26 @@ export function drawHud(ctx, atlas, state, best) {
 		ctx, W - 30, H - 50,
 		'LEFT-CLICK A MARBLE TO FIRE · RIGHT-CLICK A WHEEL '
 			+ 'TO TURN', 'right')
+	ctx.restore()
+}
+
+// Said once, across the middle of the board, and then it gets
+// out of the way. The light stays on until a wheel matches it,
+// so the announcement does not have to — but a rule that turns
+// colour matching off everywhere cannot arrive quietly in a
+// panel at the edge of the screen.
+export function drawAlert(ctx, state) {
+	if (!state.pattern || state.alertLeft <= 0) return
+	const k = Math.min(1, state.alertLeft / 600)
+	ctx.save()
+	ctx.globalAlpha = k
+	ctx.fillStyle = 'rgba(206,132,16,0.16)'
+	ctx.fillRect(0, H / 2 - 74, W, 124)
+	banner(ctx, 'PATTERN GRID LIT', W / 2, H / 2 - 24, 54, WARN)
+	label(
+		ctx, W / 2, H / 2 + 12,
+		'COLOUR MATCH OFF — MATCH THE PATTERN TO CLEAR IT',
+		'center', INK)
 	ctx.restore()
 }
 
