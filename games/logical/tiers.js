@@ -52,12 +52,15 @@ function rampFrom(level, first, from, to) {
 	return Math.round(from + (to - from) * k)
 }
 
-// A level's size wobbles by one either way. The early band is
-// where the ramp barely moves, and eight levels of three
-// wheels in a row is the same board eight times with a
-// different code on it.
+// A level's size wobbles by one either way, off the level
+// number rather than off a hash of it. A hash scatters nicely
+// over a hundred levels and says nothing about any two in a
+// row, so it handed levels one and two the same three wheels —
+// and the first two boards a player ever sees are the two it
+// matters most to tell apart. Consecutive numbers cannot share
+// a remainder, so consecutive levels cannot share a wobble.
 function jitter(level) {
-	return (Math.imul(level, 2654435761) >>> 0) % 3 - 1
+	return (level + 2) % 3
 }
 
 // Very long early and tight late, on a curve rather than a
@@ -77,38 +80,62 @@ export function coloursFor(level) {
 	return 4
 }
 
-export function tierFor(level) {
-	const n = Math.min(LEVELS, Math.max(1, level))
-	const wheels = Math.max(3, rampInt(n, 3, 12) + jitter(n))
+// Never more than half the wheels. Asking a three wheel board
+// for three feeds means every wheel has to touch the gutter,
+// which can only be done by putting them all in the top row —
+// which is how the first eight levels came to be the same
+// board eight times over.
+function feedsFor(n, wheels) {
+	return Math.max(
+		2,
+		Math.min(rampInt(n, 3, 2), Math.ceil(wheels / 2)))
+}
+
+// The three extra pieces, and the pattern grid. The grid stays
+// off a board of three: while it is lit nothing breaks on
+// colour, so the player needs a wheel they can afford to empty
+// and refill to the pattern, and with twelve slots in total
+// there is no such wheel.
+function piecesFor(n, wheels) {
 	return {
-		level: n,
-		wheels,
-		extraRuns: rampInt(n, 2, 0),
-		// Never more than half the wheels. Asking a three
-		// wheel board for three feeds means every wheel has
-		// to touch the gutter, which can only be done by
-		// putting them all in the top row — which is how the
-		// first eight levels came to be the same board eight
-		// times over.
-		feeds: Math.max(
-			2,
-			Math.min(
-				rampInt(n, 3, 2),
-				Math.ceil(wheels / 2))),
-		colours: coloursFor(n),
-		gutterMs: gutterFor(n),
 		crossings: rampFrom(n, FIRST_CROSSING, 1, 4),
 		booths: rampFrom(n, FIRST_BOOTH, 1, 3),
 		blocks: rampFrom(n, FIRST_BLOCK, 1, 4),
-		// Not on a board of three. While the grid is lit
-		// nothing breaks on colour, so the player needs a
-		// wheel they can afford to empty and refill to the
-		// pattern; with twelve slots in total there is no
-		// such wheel.
 		hasPattern: n >= FIRST_PATTERN && wheels >= 4,
-		// How long the grid stays dark between lightings.
-		// It stays lit until a wheel matches it, so this is
-		// the only timing the pattern has.
+		// How long the grid stays dark between lightings. It
+		// stays lit until a wheel matches it, so this is the
+		// only timing the pattern has.
 		darkMs: rampInt(n, 45000, 16000),
+	}
+}
+
+// How far growth may reach for its next site. Two is
+// adjacent, and a board built entirely of twos is compact —
+// short runs, marbles that arrive while the player is still
+// looking at where they sent them. Longer reaches make
+// handsome sprawling boards that take four times as long to
+// clear, which is the wrong trade on the levels that have to
+// teach the rules.
+function reachFor(n) {
+	return n <= 10 ? 2 : 4
+}
+
+export function tierFor(level) {
+	const n = Math.min(LEVELS, Math.max(1, level))
+	// Nought, one or two added rather than one either way: a
+	// wobble that can go down has to be clamped at three, and
+	// the clamp is what puts two threes next to each other
+	// again. Adding only upward needs no clamp, so every
+	// consecutive pair really does differ.
+	const wheels = Math.min(13, rampInt(n, 3, 11) + jitter(n))
+	return {
+		level: n,
+		wheels,
+		reach: reachFor(n),
+		extraRuns: rampInt(n, 2, 0),
+		feeds: feedsFor(n, wheels),
+		colours: coloursFor(n),
+		gutterMs: gutterFor(n),
+		...piecesFor(n, wheels),
 	}
 }

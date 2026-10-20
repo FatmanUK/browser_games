@@ -74,10 +74,11 @@ function siteFree(grid, c, r) {
 	return true
 }
 
-function reach(rand) {
+function reach(rand, max) {
+	if (max <= 2) return 2
 	const k = rand()
 	if (k < 0.62) return 2
-	return k < 0.9 ? 3 : 4
+	return k < 0.9 ? 3 : max
 }
 
 // Direction weights, by shape: balanced, wide, tall. Picked
@@ -146,10 +147,10 @@ function addWheel(grid, wheels, c, r) {
 // buries it under pipe, and a generator that eats its own
 // wheel sites cannot build a dense board — which is what kept
 // the late levels down to three wheels and the easy fallback.
-function extend(grid, wheels, rand, cross, shape) {
+function extend(grid, wheels, rand, cross, shape, max) {
 	const from = pick(rand, wheels)
 	const dir = pickDir(rand, shape)
-	const len = reach(rand)
+	const len = reach(rand, max)
 	const c = from.c + DX[dir] * len
 	const r = from.r + DY[dir] * len
 	if (!siteFree(grid, c, r)) return false
@@ -178,7 +179,7 @@ function growWheels(grid, rand, tier, shape) {
 	const cross = tier.crossings > 0
 	let guard = GROW_GUARD
 	while (wheels.length < tier.wheels && guard-- > 0) {
-		extend(grid, wheels, rand, cross, shape)
+		extend(grid, wheels, rand, cross, shape, tier.reach)
 	}
 	return wheels
 }
@@ -387,7 +388,11 @@ function tryBuild(seed, tier) {
 	const grid = newGrid()
 	const palette = shuffled(rand, COLOURS)
 		.slice(0, tier.colours)
-	const shape = (rand() * SHAPES.length) | 0
+	// Off the level number, not the seed. Picked at random it
+	// came out the same two levels running often enough to
+	// matter; stepped, every three consecutive levels cover
+	// all three biases between them.
+	const shape = (tier.level - 1) % SHAPES.length
 	const wheels = growWheels(grid, rand, tier, shape)
 	if (wheels.length < Math.max(3, tier.wheels - 1)) {
 		return null
