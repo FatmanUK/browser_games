@@ -42,6 +42,13 @@ import { seedForLevel } from './progress.js'
 const TRIES = 240
 const GROW_GUARD = 1200
 
+// How many levels back a layout has to look unlike. Six is
+// enough that no two boards in view of each other repeat
+// without being so strict that the early levels, where there
+// are genuinely few ways to arrange three wheels, run out of
+// seeds.
+const LOOKBACK = 6
+
 function pick(rand, list) {
 	return list[(rand() * list.length) | 0]
 }
@@ -383,7 +390,42 @@ function spread(wheels) {
 	return rows.size >= 2 && cols.size >= 2
 }
 
-function tryBuild(seed, tier) {
+// What a board looks like, with where it sits taken out of
+// it: every occupied cell, shifted so the bounding box starts
+// at the origin, sorted. Level four turned out to be level one
+// moved four columns right — same wheels, same runs, same
+// feeds — and nothing in the generator noticed, because the
+// checks it had were on how many wheels there were and which
+// way growth leaned, and a translation changes neither.
+//
+// Mirror images are deliberately not folded together. The
+// gutter feeds from the right-hand end and rolls left, so a
+// board and its reflection do not play the same way.
+function mark(cell) {
+	if (cell.kind === 'wheel') return 'W'
+	if (cell.kind === 'block') return 'B' + cell.dir
+	const axes = cell.h && cell.v ? '+' : (cell.h ? '-' : '|')
+	return cell.kind === 'booth' ? 'P' + axes : axes
+}
+
+export function signature(grid) {
+	const cells = []
+	for (let r = 0; r < ROWS; r++) {
+		for (let c = 0; c < COLS; c++) {
+			const cell = at(grid, c, r)
+			if (cell) cells.push([c, r, mark(cell)])
+		}
+	}
+	if (!cells.length) return ''
+	const c0 = Math.min(...cells.map((x) => x[0]))
+	const r0 = Math.min(...cells.map((x) => x[1]))
+	return cells
+		.map(([c, r, m]) => `${c - c0},${r - r0}${m}`)
+		.sort()
+		.join(' ')
+}
+
+function tryBuild(seed, tier, avoid) {
 	const rand = rng(seed)
 	const grid = newGrid()
 	const palette = shuffled(rand, COLOURS)
@@ -406,6 +448,7 @@ function tryBuild(seed, tier) {
 	addBooths(grid, rand, tier, palette)
 	addBlocks(grid, wheels, rand, tier)
 	labelSegments(grid)
+	if (avoid.has(signature(grid))) return null
 	if (!noDeadEnds(grid)) return null
 	if (!allWheelsFed(grid, wheels)) return null
 	if (!noTraps(grid)) return null
@@ -415,24 +458,55 @@ function tryBuild(seed, tier) {
 // The seed walk. Dash does the same thing for the same reason:
 // most seeds are fine, a few are not, and stepping to the next
 // one is cheaper than a generator that can never fail.
-function walkSeeds(base, stride, tier, out) {
+function walkSeeds(base, stride, tier, out, avoid) {
 	for (let k = 0; k < TRIES; k++) {
 		const seed = (base + k * stride) >>> 0
-		const built = tryBuild(seed, tier)
+		const built = tryBuild(seed, tier, avoid)
 		if (!built) continue
 		return { ...built, tier: out, level: out.level }
 	}
 	return null
 }
 
+// Memoised, and the memo is what makes the lookback cheap:
+// asking for level fifty builds the forty-nine below it once
+// and then answers from the map. Building the chain is a few
+// tens of milliseconds the first time a far level is reached
+// by code, and nothing afterwards.
+const shapes = new Map()
+
+function shapeOf(level) {
+	if (!shapes.has(level)) buildLevel(level)
+	return shapes.get(level) || ''
+}
+
+function recentShapes(level) {
+	const out = new Set()
+	for (let k = 1; k <= LOOKBACK; k++) {
+		if (level - k < 1) break
+		out.add(shapeOf(level - k))
+	}
+	return out
+}
+
 export function buildLevel(level) {
 	const tier = tierFor(level)
 	const base = seedForLevel(tier.level)
-	const found = walkSeeds(base, 7919, tier, tier)
-	if (found) return found
-	// Nothing has needed this yet, but a level that cannot be
-	// built is a game that cannot start, so fall back to the
-	// smallest board the tier will accept rather than throw.
-	const easy = { ...tier, wheels: 3, extraRuns: 1, feeds: 2 }
-	return walkSeeds(base, 104729, easy, tier)
+	const avoid = recentShapes(tier.level)
+	const tried = [
+		[7919, tier, avoid],
+		// Rather a repeated shape than no level: three
+		// wheels on a short-reach lattice is a small enough
+		// space that a run of seeds can genuinely fail to
+		// find an unused arrangement.
+		[7919, tier, new Set()],
+		[104729, { ...tier, wheels: 3, feeds: 2 }, new Set()],
+	]
+	for (const [stride, t, skip] of tried) {
+		const got = walkSeeds(base, stride, t, tier, skip)
+		if (!got) continue
+		shapes.set(tier.level, signature(got.grid))
+		return got
+	}
+	return null
 }

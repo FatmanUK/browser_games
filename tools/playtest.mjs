@@ -15,6 +15,10 @@
 //
 //   layout      spurs ending at nothing, which made runs that
 //               stopped in mid-air
+//   shape       level four was level one moved four columns
+//               right, and nothing noticed: the checks were on
+//               wheel count and growth bias, and a translation
+//               changes neither
 //   conserved   marbles lost or duplicated in a handoff
 //   wrong side  a marble that landed exactly on a wheel's rim
 //               walked through the middle and out the far side
@@ -35,7 +39,9 @@
 // Exits non-zero if any check fails, so it can be wired to CI
 // later without changing anything here.
 
-import { buildLevel } from '../games/logical/level.js'
+import {
+	buildLevel, signature,
+} from '../games/logical/level.js'
 import { tierFor } from '../games/logical/tiers.js'
 import { codeFor } from '../games/logical/code.js'
 import { newGame, update } from '../games/logical/world.js'
@@ -188,6 +194,15 @@ function auditLayout(n, out) {
 	}
 	const ends = deadEnds(level)
 	if (ends) out.deadEnds.push(`L${n} (${codeFor(n)}): ${ends}`)
+	// Where it sits taken out of it, so a board repeated in a
+	// different part of the grid is still a repeat.
+	const shape = signature(level.grid)
+	const was = out.shapes.get(shape)
+	if (was !== undefined) {
+		out.repeats.push(`L${n} repeats L${was}`)
+	} else {
+		out.shapes.set(shape, n)
+	}
 	const tier = tierFor(n)
 	if (level.wheels.length < tier.wheels) out.shortOfTarget++
 	if (level.feeds.length < tier.feeds) {
@@ -201,6 +216,7 @@ function report(out, opt) {
 		`levels built           ${opt.levels}`,
 		`unbuildable            ${out.unbuildable.length}`,
 		`dead-end runs          ${out.deadEnds.length}`,
+		`repeated shapes        ${out.repeats.length}`,
 		`short of wheel target  ${out.shortOfTarget}`,
 		`short of feed target   ${out.shortOfFeeds.length}`,
 		`frames simulated       ${out.frames}`,
@@ -212,6 +228,7 @@ function report(out, opt) {
 	]
 	for (const line of lines) console.log(line)
 	for (const d of out.deadEnds.slice(0, 6)) console.log('  ', d)
+	for (const r of out.repeats.slice(0, 6)) console.log('  ', r)
 	for (const c of out.crashes.slice(0, 3)) console.log('  ', c)
 }
 
@@ -223,6 +240,7 @@ const LANE_LIMIT = 1.2
 function failed(out) {
 	return out.unbuildable.length > 0
 		|| out.deadEnds.length > 0
+		|| out.repeats.length > 0
 		|| out.lost > 0
 		|| out.wrongSide > 0
 		|| out.crashes.length > 0
@@ -466,6 +484,7 @@ function main() {
 	const opt = options(process.argv.slice(2))
 	const out = {
 		unbuildable: [], deadEnds: [], crashes: [],
+		repeats: [], shapes: new Map(),
 		shortOfFeeds: [], shortOfTarget: 0,
 		frames: 0, marbleFrames: 0, lost: 0, wrongSide: 0,
 		emptyLane: 0,

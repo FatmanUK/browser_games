@@ -52,7 +52,7 @@ function rampFrom(level, first, from, to) {
 	return Math.round(from + (to - from) * k)
 }
 
-// A level's size wobbles by one either way, off the level
+// A level's size wobbles by nought, one or two, off the level
 // number rather than off a hash of it. A hash scatters nicely
 // over a hundred levels and says nothing about any two in a
 // row, so it handed levels one and two the same three wheels —
@@ -61,6 +61,19 @@ function rampFrom(level, first, from, to) {
 // a remainder, so consecutive levels cannot share a wobble.
 function jitter(level) {
 	return (level + 2) % 3
+}
+
+// The first six are written out rather than ramped. Three
+// wheels on a short-reach lattice has only two distinct shapes
+// in it — a line and an elbow — so a board of three can be
+// shown once and never again without repeating itself, and the
+// ramp was handing one out every third level. One at the top,
+// then four upward, where there is room to be different.
+const EARLY = [3, 4, 5, 4, 5, 6]
+
+function wheelsFor(n) {
+	if (n <= EARLY.length) return EARLY[n - 1]
+	return Math.min(13, rampInt(n, 4, 11) + jitter(n))
 }
 
 // Very long early and tight late, on a curve rather than a
@@ -122,12 +135,7 @@ function reachFor(n) {
 
 export function tierFor(level) {
 	const n = Math.min(LEVELS, Math.max(1, level))
-	// Nought, one or two added rather than one either way: a
-	// wobble that can go down has to be clamped at three, and
-	// the clamp is what puts two threes next to each other
-	// again. Adding only upward needs no clamp, so every
-	// consecutive pair really does differ.
-	const wheels = Math.min(13, rampInt(n, 3, 11) + jitter(n))
+	const wheels = wheelsFor(n)
 	return {
 		level: n,
 		wheels,
