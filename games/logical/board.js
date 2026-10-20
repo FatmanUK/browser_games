@@ -22,7 +22,7 @@ export const ROWS = 5
 // width goes into the horizontal pipes, where it is wanted.
 export const CELL_W = 150
 export const CELL_H = 110
-export const GUTTER_H = 54
+export const GUTTER_H = 40
 
 export const BOARD_W = COLS * CELL_W
 export const BOARD_H = GUTTER_H + ROWS * CELL_H

@@ -20,10 +20,8 @@ import {
 import { wheelFrame } from './sprites.js'
 import { slotPoint } from './travel.js'
 import { WIDTH, HEIGHT, fitBoard } from '../_shared/hud.js'
-import {
-	PAPER, TROUGH, PIPE, PIPE_EDGE, FRAME, POCKET,
-	BLOCK_FILL, BLOCK_EDGE,
-} from './theme.js'
+import { FRAME, POCKET, BLOCK_FILL, BLOCK_EDGE } from './theme.js'
+import { BOARD_WASH, bandFor, bandPattern } from './bands.js'
 
 export const TOP_INSET = 46
 export const BOTTOM_INSET = 40
@@ -55,20 +53,20 @@ function armLength(grid, c, r, dir) {
 // start `gap` out, which on a crossing leaves the junction
 // square open — what a crossing looks like — and on a straight
 // run gap is nought and the walls are continuous.
-function arm(ctx, grid, c, r, dir, gap) {
+function arm(ctx, grid, c, r, dir, gap, band) {
 	const len = armLength(grid, c, r, dir)
 	const x = centreX(c)
 	const y = centreY(r)
 	const ax = DX[dir]
 	const ay = DY[dir]
-	ctx.fillStyle = PIPE
+	ctx.fillStyle = band.pipe
 	ctx.fillRect(
 		Math.min(x, x + ax * len) - (ay ? PIPE_R : 0),
 		Math.min(y, y + ay * len) - (ax ? PIPE_R : 0),
 		ax ? len : PIPE_R * 2,
 		ay ? len : PIPE_R * 2)
 	if (gap >= len) return
-	ctx.strokeStyle = PIPE_EDGE
+	ctx.strokeStyle = band.edge
 	ctx.lineWidth = 1.5
 	ctx.beginPath()
 	for (const side of [-1, 1]) {
@@ -135,22 +133,22 @@ function block(ctx, c, r, cell) {
 	ctx.lineCap = 'butt'
 }
 
-function drawCell(ctx, atlas, state, c, r) {
+function drawCell(ctx, atlas, state, c, r, band) {
 	const cell = at(state.grid, c, r)
 	if (!cell || cell.kind === 'wheel') return
-	const cross = !!cell.h && !!cell.v
+	const gap = cell.h && cell.v ? PIPE_R : 0
 	for (let dir = 0; dir < 4; dir++) {
 		if (!carries(cell, dir)) continue
-		arm(ctx, state.grid, c, r, dir, cross ? PIPE_R : 0)
+		arm(ctx, state.grid, c, r, dir, gap, band)
 	}
 	if (cell.kind === 'booth') booth(ctx, atlas, c, r, cell)
 	if (cell.kind === 'block') block(ctx, c, r, cell)
 }
 
-function drawPipes(ctx, atlas, state) {
+function drawPipes(ctx, atlas, state, band) {
 	for (let r = 0; r < ROWS; r++) {
 		for (let c = 0; c < COLS; c++) {
-			drawCell(ctx, atlas, state, c, r)
+			drawCell(ctx, atlas, state, c, r, band)
 		}
 	}
 }
@@ -233,8 +231,8 @@ function mouth(ctx, state, c) {
 	ctx.fill()
 }
 
-function drawGutter(ctx, atlas, state) {
-	ctx.fillStyle = TROUGH
+function drawGutter(ctx, atlas, state, band) {
+	ctx.fillStyle = band.trough
 	ctx.fillRect(0, 0, BOARD_W, GUTTER_H)
 	ctx.strokeStyle = FRAME
 	ctx.lineWidth = 1.5
@@ -250,20 +248,33 @@ function drawGutter(ctx, atlas, state) {
 }
 
 function drawFrame(ctx) {
+	ctx.fillStyle = BOARD_WASH
+	ctx.fillRect(0, 0, BOARD_W, BOARD_H)
 	ctx.strokeStyle = FRAME
 	ctx.lineWidth = 2
 	ctx.strokeRect(-1, -1, BOARD_W + 2, BOARD_H + 2)
 }
 
-export function drawBoard(ctx, atlas, state) {
-	ctx.setTransform(1, 0, 0, 1, 0, 0)
-	ctx.fillStyle = PAPER
+// The ground is painted with the transform reset, so the
+// texture is screen-aligned and the same size whatever the
+// board's scale works out to. Tiled through it, a tile is a
+// tile; drawn inside the fit it would be resampled.
+function drawGround(ctx, band) {
+	ctx.fillStyle = band.paper
 	ctx.fillRect(0, 0, WIDTH, HEIGHT)
+	ctx.fillStyle = bandPattern(ctx, band)
+	ctx.fillRect(0, 0, WIDTH, HEIGHT)
+}
+
+export function drawBoard(ctx, atlas, state) {
+	const band = bandFor(state.level)
+	ctx.setTransform(1, 0, 0, 1, 0, 0)
+	drawGround(ctx, band)
 	const fit = fitBoard(
 		ctx, BOARD_W, BOARD_H, TOP_INSET, BOTTOM_INSET)
 	drawFrame(ctx)
-	drawGutter(ctx, atlas, state)
-	drawPipes(ctx, atlas, state)
+	drawGutter(ctx, atlas, state, band)
+	drawPipes(ctx, atlas, state, band)
 	drawTransit(ctx, atlas, state)
 	drawWheels(ctx, atlas, state)
 	ctx.setTransform(1, 0, 0, 1, 0, 0)

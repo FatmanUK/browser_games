@@ -17,10 +17,12 @@
 
 import { FONT } from '../_shared/hud.js'
 
+// The ground, the trough and the pipe are not here: they
+// change every ten levels and live in bands.js. What is left
+// is the furniture that must not change, because a label that
+// shifts colour with the level is a label you have to read
+// twice.
 export const PAPER = '#eceef2'
-export const TROUGH = '#dbe0e8'
-export const PIPE = '#c2cbd8'
-export const PIPE_EDGE = 'rgba(42,52,66,0.34)'
 export const FRAME = 'rgba(42,52,66,0.28)'
 
 export const INK = '#1f2733'

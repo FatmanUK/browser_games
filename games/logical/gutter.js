@@ -31,7 +31,18 @@ const ROLL_SPEED = 280
 // time they are charged for.
 const FEED_MS = 500
 
-function refill(state) {
+// How far ahead the predictor can see. The bag is topped up
+// whenever it falls to this, rather than when it empties:
+// which marbles come out does not change, only where the join
+// between one bag and the next falls, and in exchange the next
+// three are always known.
+export const PREVIEW = 3
+
+// Marbles are drawn off the end, so a fresh bag goes on the
+// front and is reached only once the remainder is gone.
+function topUp(state) {
+	if (!state.bag) state.bag = []
+	if (state.bag.length > PREVIEW) return
 	const bag = []
 	for (const colour of state.palette) {
 		for (let i = 0; i < 4; i++) bag.push(colour)
@@ -42,12 +53,27 @@ function refill(state) {
 		bag[i] = bag[j]
 		bag[j] = t
 	}
-	state.bag = bag
+	state.bag = bag.concat(state.bag)
 }
 
 export function drawColour(state) {
-	if (!state.bag || !state.bag.length) refill(state)
-	return state.bag.pop()
+	topUp(state)
+	const out = state.bag.pop()
+	topUp(state)
+	return out
+}
+
+// Soonest first. The predictor is the one thing that makes a
+// wheel worth turning before a marble arrives rather than
+// after it, which is the difference between playing the gutter
+// and reacting to it.
+export function peekNext(state, n) {
+	topUp(state)
+	const out = []
+	for (let i = 0; i < n; i++) {
+		out.push(state.bag[state.bag.length - 1 - i])
+	}
+	return out
 }
 
 // Can this column take a marble out of the lane right now? A

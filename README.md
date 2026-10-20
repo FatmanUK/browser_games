@@ -210,7 +210,13 @@ files in its own `music/` folder — see
   that is — so the four marble colours and the brass of an
   unbroken wheel read against the ground rather than glowing
   out of it; the window's own title bar stays dark, since that
-  is shared with the other four. Levels are generated from the level number rather
+  is shared with the other four. The next three marbles out of
+  the gutter are shown before they arrive, which is what makes
+  a wheel worth turning in advance rather than in response. And
+  the ground under the board changes every ten levels — graph
+  paper, a workshop, bubbles, a foundry, ice and so on — which
+  is the only thing on screen that says how far up the ladder
+  you have climbed without reading a number off it. Levels are generated from the level number rather
   than committed, as Dash's tracks are, and progress is one
   number in `localStorage` — a code is a visit, not an unlock,
   so only finishing a level climbs the ladder. The first mouse
@@ -267,7 +273,8 @@ games/logical/          Wheelworks (board.js the cell model
                         pattern.js/world.js the rules,
                         code.js the access codes, input.js the
                         mouse, models.js + sprites.js the baked
-                        art, theme.js the light palette,
+                        art, theme.js the light palette and
+                        bands.js the look per ten levels,
                         render.js + hud.js the drawing,
                         audio.js over music/*.mod)
 games/beltbreaker/      Belt Breaker (rocks.js/craft.js/

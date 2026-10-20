@@ -16,6 +16,7 @@ import {
 	SCRIM, WARN, banner, brackets, label, readout,
 } from './theme.js'
 import { ALPHABET } from './code.js'
+import { peekNext, PREVIEW } from './gutter.js'
 import { wheelsLeft } from './world.js'
 
 const KEY_W = 50
@@ -104,6 +105,33 @@ export function drawIntro(ctx, ui, reached) {
 		'TYPE OR CLICK A CODE · ENTER TO PLAY', 'center')
 }
 
+// What is coming out of the gutter next, soonest first and
+// biggest. The gutter feeds from the right-hand end of the
+// lane, so this sits on the right-hand side of the window:
+// marbles arrive from the direction the panel is on.
+//
+// It is the one thing that makes a wheel worth turning before
+// a marble lands rather than after it, which is the difference
+// between playing the gutter and chasing it.
+function drawNext(ctx, atlas, state) {
+	const x = W - 118
+	label(ctx, x, 68, 'NEXT', 'center')
+	const next = peekNext(state, PREVIEW)
+	const spots = [
+		{ dx: -32, scale: 1.5 },
+		{ dx: 10, scale: 1 },
+		{ dx: 38, scale: 1 },
+	]
+	next.forEach((colour, i) => {
+		const spot = spots[i]
+		if (!spot || !colour) return
+		const img = atlas.marbles[colour]
+		const w = img.width * spot.scale
+		ctx.drawImage(
+			img, x + spot.dx - w / 2, 92 - w / 2, w, w)
+	})
+}
+
 // A ring, not a two-by-two square: a square invites reading it
 // left to right and top to bottom, and a wheel's slots are a
 // ring with a north on it. The N tick is the whole point when
@@ -136,18 +164,18 @@ function patternRing(ctx, atlas, x, y, pattern) {
 function drawPattern(ctx, atlas, state) {
 	if (!state.tier.hasPattern) return
 	const x = W - 118
-	label(ctx, x, 96, 'PATTERN GRID', 'center')
-	patternRing(ctx, atlas, x, 150, state.pattern)
+	label(ctx, x, 158, 'PATTERN GRID', 'center')
+	patternRing(ctx, atlas, x, 212, state.pattern)
 	if (state.pattern) {
-		label(ctx, x, 204, 'LIT', 'center', WARN)
+		label(ctx, x, 266, 'LIT', 'center', WARN)
 		label(
-			ctx, x, 222,
+			ctx, x, 284,
 			'COLOUR MATCH OFF', 'center', WARN)
-		label(ctx, x, 240, 'MATCH IT TO CLEAR', 'center')
+		label(ctx, x, 302, 'MATCH IT TO CLEAR', 'center')
 		return
 	}
-	label(ctx, x, 204, 'DARK', 'center')
-	label(ctx, x, 222, 'COLOUR MATCH ON', 'center')
+	label(ctx, x, 266, 'DARK', 'center')
+	label(ctx, x, 284, 'COLOUR MATCH ON', 'center')
 }
 
 // A bar across the foot of the window rather than a number in
@@ -186,6 +214,7 @@ export function drawHud(ctx, atlas, state, best) {
 	readout(ctx, 30, 250, 'ACCESS CODE', state.code, 26)
 	readout(
 		ctx, 30, 322, 'WHEELS LEFT', wheelsLeft(state), 22)
+	drawNext(ctx, atlas, state)
 	drawPattern(ctx, atlas, state)
 	gutterBar(ctx, state)
 	label(
