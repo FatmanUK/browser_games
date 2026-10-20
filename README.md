@@ -237,6 +237,9 @@ Containerfile           image for the container (make pod-build)
 tools/dev_server.py     static server: local dev and the container
 tools/generate_mod.py   generates each game's music/*.mod
                         and its music-data.js fallback
+tools/playtest.mjs      plays all 100 Wheelworks levels
+                        headless and checks the rules hold
+                        (make playtest; needs node)
 index.html              launcher page (game-select grid + viewport)
 css/style.css           styling
 js/app.js               launcher logic: render grid, mount/unmount

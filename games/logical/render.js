@@ -20,6 +20,7 @@ import {
 import { wheelFrame } from './sprites.js'
 import { slotPoint } from './travel.js'
 import { WIDTH, HEIGHT, fitBoard } from '../_shared/hud.js'
+import { lumpPath, makeLumps, rng } from '../_shared/art.js'
 import { FRAME, POCKET, BLOCK_FILL, BLOCK_EDGE } from './theme.js'
 import { BOARD_WASH, bandFor, bandPattern } from './bands.js'
 
@@ -78,17 +79,75 @@ function arm(ctx, grid, c, r, dir, gap, band) {
 	ctx.stroke()
 }
 
-// Painted in the colour it paints: a booth has to say what it
-// will do to a marble before one is sent through it, or it is
-// a trap rather than a tool.
+// A booth has to say what it will do to a marble before one
+// is sent through it, or it is a trap rather than a tool. A
+// coloured outline round a pale box does not: at fifty pixels
+// the colour of a two-pixel line is a guess, and the first
+// booth a player meets is one they have to send a marble
+// through to find out about. So it is painted in the colour it
+// paints — a splat, with the spots thrown off it.
+//
+// The shape is seeded off the cell, so a given booth keeps its
+// splat from frame to frame and level to level rather than
+// boiling.
+const SPLAT_R = 28
+const splats = new Map()
+
+// makeLumps is tuned for rocks, where the point is a solid
+// that is irregular but still reads as one lump. Thrown paint
+// is not that, so the harmonics are pushed half as far again:
+// at the stock amplitude the outline came out a rounded square
+// sitting inside a square frame, which reads as a swatch.
+function splatFor(c, r) {
+	const key = c * 97 + r
+	if (!splats.has(key)) {
+		const lumps = makeLumps(rng(key + 7), 5)
+		for (const l of lumps) l.amp *= 1.5
+		splats.set(key, lumps)
+	}
+	return splats.get(key)
+}
+
+function spots(ctx, c, r) {
+	const rand = rng(c * 131 + r * 17 + 3)
+	for (let i = 0; i < 5; i++) {
+		const a = rand() * Math.PI * 2
+		const d = SPLAT_R * (1.05 + rand() * 0.42)
+		ctx.beginPath()
+		ctx.arc(
+			Math.cos(a) * d, Math.sin(a) * d,
+			1.6 + rand() * 2.8, 0, Math.PI * 2)
+		ctx.fill()
+	}
+}
+
+// Over the pipe, not under it. Under it the pipe covered all
+// but a crescent top and bottom — the booth was still a guess,
+// which was the whole complaint. Over it at four fifths, the
+// run shows through as a darker band and the colour is the
+// first thing about the cell. Marbles are drawn later still,
+// so one is never lost against the paint.
+function splat(ctx, atlas, c, r, cell) {
+	ctx.save()
+	ctx.globalAlpha = 0.8
+	ctx.translate(centreX(c), centreY(r))
+	ctx.fillStyle = atlas.inks[cell.colour]
+	lumpPath(ctx, SPLAT_R, splatFor(c, r), 0)
+	ctx.fill()
+	ctx.strokeStyle = atlas.deeps[cell.colour]
+	ctx.lineWidth = 1.5
+	ctx.stroke()
+	ctx.globalAlpha = 1
+	spots(ctx, c, r)
+	ctx.restore()
+}
+
 function booth(ctx, atlas, c, r, cell) {
 	const x = centreX(c)
 	const y = centreY(r)
 	const w = PIPE_R + 11
-	ctx.fillStyle = 'rgba(255,255,255,0.55)'
-	ctx.fillRect(x - w, y - w, w * 2, w * 2)
 	ctx.lineWidth = 3
-	ctx.strokeStyle = atlas.inks[cell.colour]
+	ctx.strokeStyle = atlas.deeps[cell.colour]
 	ctx.strokeRect(x - w, y - w, w * 2, w * 2)
 	ctx.lineWidth = 1
 	ctx.strokeStyle = FRAME
@@ -141,7 +200,10 @@ function drawCell(ctx, atlas, state, c, r, band) {
 		if (!carries(cell, dir)) continue
 		arm(ctx, state.grid, c, r, dir, gap, band)
 	}
-	if (cell.kind === 'booth') booth(ctx, atlas, c, r, cell)
+	if (cell.kind === 'booth') {
+		splat(ctx, atlas, c, r, cell)
+		booth(ctx, atlas, c, r, cell)
+	}
 	if (cell.kind === 'block') block(ctx, c, r, cell)
 }
 

@@ -88,12 +88,17 @@ export function getAtlas() {
 		marbles[colour] = bakeMarble(colour)
 	}
 	const inks = {}
-	for (const colour of COLOURS) inks[colour] = INK[colour][1]
+	const deeps = {}
+	for (const colour of COLOURS) {
+		inks[colour] = INK[colour][1]
+		deeps[colour] = INK[colour][2]
+	}
 	atlas = {
 		intact: quarterOf(intactWheel()),
 		broken: quarterOf(brokenWheel()),
 		marbles,
 		inks,
+		deeps,
 		span: WHEEL_PX * 2 + 6,
 	}
 	return atlas
