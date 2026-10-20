@@ -26,7 +26,7 @@ import { MOD_BASE64 } from './music-data.js'
 // never heard.
 const SILENT = [null]
 
-export const TRACKS = ['wheelworks.mod']
+export const TRACKS = ['signal_lost.mod']
 
 const MUSIC = {
 	baseUrl: new URL('music/', import.meta.url),
