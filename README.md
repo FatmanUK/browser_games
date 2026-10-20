@@ -238,7 +238,9 @@ tools/dev_server.py     static server: local dev and the container
 tools/generate_mod.py   generates each game's music/*.mod
                         and its music-data.js fallback
 tools/playtest.mjs      plays all 100 Wheelworks levels
-                        headless and checks the rules hold
+                        headless and checks the rules hold;
+                        --solve N also plays the first N to
+                        win, as a balance baseline
                         (make playtest; needs node)
 index.html              launcher page (game-select grid + viewport)
 css/style.css           styling

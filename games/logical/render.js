@@ -90,33 +90,37 @@ function arm(ctx, grid, c, r, dir, gap, band) {
 // The shape is seeded off the cell, so a given booth keeps its
 // splat from frame to frame and level to level rather than
 // boiling.
-const SPLAT_R = 28
+const SPLAT_R = 27
 const splats = new Map()
 
-// makeLumps is tuned for rocks, where the point is a solid
-// that is irregular but still reads as one lump. Thrown paint
-// is not that, so the harmonics are pushed half as far again:
-// at the stock amplitude the outline came out a rounded square
-// sitting inside a square frame, which reads as a swatch.
+// Three harmonics, lifted a fifth above what makeLumps gives.
+// Five at half again was a splat in the sense of a thing flung
+// at a wall — all spikes and pinches, and a different mess in
+// every cell. Three settles into a few soft lobes: still
+// plainly poured rather than drawn with a compass, but the
+// same kind of shape each time, which is what stops a board of
+// three booths looking like three accidents.
 function splatFor(c, r) {
 	const key = c * 97 + r
 	if (!splats.has(key)) {
-		const lumps = makeLumps(rng(key + 7), 5)
-		for (const l of lumps) l.amp *= 1.5
+		const lumps = makeLumps(rng(key + 7), 3)
+		for (const l of lumps) l.amp *= 1.2
 		splats.set(key, lumps)
 	}
 	return splats.get(key)
 }
 
+// Three, close in. Five flung wide read as dirt on the board
+// rather than as paint off the booth.
 function spots(ctx, c, r) {
 	const rand = rng(c * 131 + r * 17 + 3)
-	for (let i = 0; i < 5; i++) {
+	for (let i = 0; i < 3; i++) {
 		const a = rand() * Math.PI * 2
-		const d = SPLAT_R * (1.05 + rand() * 0.42)
+		const d = SPLAT_R * (1.04 + rand() * 0.22)
 		ctx.beginPath()
 		ctx.arc(
 			Math.cos(a) * d, Math.sin(a) * d,
-			1.6 + rand() * 2.8, 0, Math.PI * 2)
+			1.4 + rand() * 1.9, 0, Math.PI * 2)
 		ctx.fill()
 	}
 }
@@ -142,16 +146,19 @@ function splat(ctx, atlas, c, r, cell) {
 	ctx.restore()
 }
 
-function booth(ctx, atlas, c, r, cell) {
+// One hairline, and a neutral one. The booth's own frame used
+// to be three pixels of the paint colour with a second rect
+// inside it, which fought the splat for the same job — saying
+// what colour this is — and won, so the cell read as a bordered
+// label with something in it. The splat says the colour; the
+// frame only has to say that the cell is a device.
+function booth(ctx, c, r) {
 	const x = centreX(c)
 	const y = centreY(r)
 	const w = PIPE_R + 11
-	ctx.lineWidth = 3
-	ctx.strokeStyle = atlas.deeps[cell.colour]
+	ctx.lineWidth = 1.5
+	ctx.strokeStyle = 'rgba(42,52,66,0.3)'
 	ctx.strokeRect(x - w, y - w, w * 2, w * 2)
-	ctx.lineWidth = 1
-	ctx.strokeStyle = FRAME
-	ctx.strokeRect(x - w + 4, y - w + 4, w * 2 - 8, w * 2 - 8)
 }
 
 function arrow(ctx, x, y, dir, len) {
@@ -202,7 +209,7 @@ function drawCell(ctx, atlas, state, c, r, band) {
 	}
 	if (cell.kind === 'booth') {
 		splat(ctx, atlas, c, r, cell)
-		booth(ctx, atlas, c, r, cell)
+		booth(ctx, c, r)
 	}
 	if (cell.kind === 'block') block(ctx, c, r, cell)
 }

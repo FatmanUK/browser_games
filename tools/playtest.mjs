@@ -21,7 +21,16 @@
 //   gutter      a marble bouncing back up a feed pipe reset the
 //               feed clock, so the gutter stopped producing
 //
+// --solve N additionally plays the first N levels with a
+// player that is trying to win rather than to rattle the
+// board, and reports how many it clears and how near the
+// gutter clock ever came. That is the balance question, and it
+// is a baseline rather than a verdict: this player is greedy
+// and plans one wheel ahead, so levels it cannot finish are
+// not thereby proved too hard.
+//
 //   tools/playtest.mjs [--levels N] [--seeds N] [--seconds N]
+//                      [--solve N]
 //
 // Exits non-zero if any check fails, so it can be wired to CI
 // later without changing anything here.
@@ -30,10 +39,15 @@ import { buildLevel } from '../games/logical/level.js'
 import { tierFor } from '../games/logical/tiers.js'
 import { codeFor } from '../games/logical/code.js'
 import { newGame, update } from '../games/logical/world.js'
-import { canFire, fireSlot } from '../games/logical/travel.js'
-import { nudge } from '../games/logical/wheel.js'
 import {
-	COLS, ROWS, WHEEL_R, accepts, along, at, carries,
+	canFire, fireSlot, slotDir,
+} from '../games/logical/travel.js'
+import {
+	alignedSlot, isTurning, nudge,
+} from '../games/logical/wheel.js'
+import {
+	COLS, ROWS, WHEEL_R, accepts, along, at, back, carries,
+	wheelAt,
 } from '../games/logical/board.js'
 
 const FX = [
@@ -45,11 +59,12 @@ const FX = [
 const DT = 1 / 60
 
 function options(argv) {
-	const opt = { levels: 100, seeds: 2, seconds: 60 }
+	const opt = { levels: 100, seeds: 2, seconds: 60, solve: 0 }
 	for (let i = 0; i < argv.length; i += 2) {
 		const key = argv[i].replace(/^--/, '')
 		if (!(key in opt)) continue
-		opt[key] = Math.max(1, parseInt(argv[i + 1], 10) || 1)
+		const n = parseInt(argv[i + 1], 10)
+		opt[key] = Number.isFinite(n) ? Math.max(0, n) : 1
 	}
 	return opt
 }
@@ -214,6 +229,223 @@ function failed(out) {
 		|| out.emptyLane > LANE_LIMIT
 }
 
+// ---- a player that is trying to win -------------------------
+
+// Where a marble fired from this wheel in this direction ends
+// up, bounces included.
+function destOf(st, w, dir) {
+	let c = w.c
+	let r = w.r
+	let d = dir
+	for (let guard = 0; guard < 90; guard++) {
+		const res = accepts(st.grid, c, r, d)
+		if (res.act === 'wheel') return res.id
+		if (res.act === 'bounce') {
+			d = back(d)
+			continue
+		}
+		c = res.c
+		r = res.r
+		d = res.dir
+	}
+	return -1
+}
+
+function graphOf(st) {
+	return st.wheels.map((w) => {
+		const out = {}
+		for (let d = 0; d < 4; d++) {
+			const res = accepts(st.grid, w.c, w.r, d)
+			if (res.act === 'bounce') continue
+			const id = destOf(st, w, d)
+			if (id >= 0) out[d] = id
+		}
+		return out
+	})
+}
+
+function relax(graph, dist, i) {
+	for (const d of Object.keys(graph[i])) {
+		const j = graph[i][d]
+		if (dist[j] + 1 < dist[i]) dist[i] = dist[j] + 1
+	}
+}
+
+function distTo(st, graph, target) {
+	const dist = st.wheels.map(() => 99)
+	dist[target] = 0
+	for (let pass = 0; pass < st.wheels.length; pass++) {
+		for (let i = 0; i < st.wheels.length; i++) {
+			relax(graph, dist, i)
+		}
+	}
+	return dist
+}
+
+// The wheel nearest a full set, and of which colour. Broken
+// wheels count at a penalty — they are the only sink there is.
+// Full ones are penalised harder: a full wheel cannot be
+// finished from the gutter, and aiming at one is how a board
+// locks up with three of a colour and nowhere to put a fourth.
+function countHeld(w) {
+	const held = {}
+	for (const s of w.slots) {
+		if (s) held[s] = (held[s] || 0) + 1
+	}
+	return held
+}
+
+function scoreFor(w, held, colour) {
+	const full = w.slots.every((x) => x !== null)
+	return (held[colour] || 0) * 10
+		- (w.broken ? 15 : 0)
+		- (full ? 25 : 0)
+}
+
+function aimAt(st) {
+	let best = null
+	for (const w of st.wheels) {
+		const held = countHeld(w)
+		for (const colour of st.palette) {
+			const score = scoreFor(w, held, colour)
+			if (!best || score > best.score) {
+				best = { wheel: w, colour, score }
+			}
+		}
+	}
+	return best
+}
+
+// Point a feed wheel at the lane. The wheel being filled takes
+// a marble only if it is the colour wanted; below a third of
+// the clock that choosiness stops, because anywhere beats a
+// jammed gutter. Returns the wheel committed to, so nothing
+// else turns it back out of position.
+function tendGutter(st, aim) {
+	if (!st.gutter) return null
+	const urgent = st.gutterLeft < st.gutterMs * 0.35
+	for (const c of st.feeds) {
+		const res = accepts(st.grid, c, -1, 2)
+		if (res.act !== 'wheel') continue
+		const w = wheelAt(st, c, 0)
+		if (!w.slots.some((s) => s === null)) continue
+		const picky = w === aim.wheel
+			&& st.gutter.colour !== aim.colour
+		if (!urgent && picky) continue
+		if (isTurning(w)) return w
+		const k = alignedSlot(w, 0)
+		if (k < 0 || w.slots[k] !== null) nudge(w)
+		return w
+	}
+	return null
+}
+
+// 'fired', or the wheel holding a marble it wants to send but
+// pointing the wrong way, or null.
+function route(st, aim, graph, dist, fx) {
+	let wants = null
+	for (const w of st.wheels) {
+		if (isTurning(w)) continue
+		for (let k = 0; k < 4; k++) {
+			const s = w.slots[k]
+			if (s === null) continue
+			const mine = w === aim.wheel
+			if (mine === (s === aim.colour)) continue
+			const d = slotDir(w, k)
+			const to = d < 0 ? undefined : graph[w.id][d]
+			const ok = to !== undefined
+				&& (mine || dist[to] < dist[w.id])
+			if (ok && canFire(st, w, k)) {
+				fireSlot(st, w, k, fx)
+				return 'fired'
+			}
+			if (!wants) wants = w
+		}
+	}
+	return wants
+}
+
+function jammed(w, busy) {
+	if (w === busy || isTurning(w)) return false
+	return w.slots.some(
+		(s, k) => s !== null && slotDir(w, k) < 0)
+}
+
+function unstick(st, aim, rand, busy) {
+	const stuck = st.wheels.filter((w) => jammed(w, busy))
+	if (stuck.length) {
+		nudge(stuck[(rand() * stuck.length) | 0])
+		return
+	}
+	const w = aim.wheel
+	if (w === busy || isTurning(w)) return
+	if (w.slots.some((s) => s === null)) nudge(w)
+}
+
+function solveStep(st, rand, fx) {
+	const aim = aimAt(st)
+	if (!aim) return
+	const busy = tendGutter(st, aim)
+	const graph = graphOf(st)
+	const dist = distTo(st, graph, aim.wheel.id)
+	const got = route(st, aim, graph, dist, fx)
+	if (got === 'fired') return
+	if (got && got !== busy && !isTurning(got)) {
+		nudge(got)
+		return
+	}
+	unstick(st, aim, rand, busy)
+}
+
+function solveOne(level, seed, seconds) {
+	const fx = stubFx()
+	const st = newGame(level, 0)
+	const rand = rngOf(seed)
+	let acc = 0
+	let t = 0
+	let worst = st.gutterMs
+	for (let i = 0; i < seconds * 60; i++) {
+		if (st.phase !== 'play') break
+		update(st, DT, fx)
+		t += DT
+		if (st.gutter) worst = Math.min(worst, st.gutterLeft)
+		acc += DT
+		if (acc > 0.1) {
+			acc = 0
+			solveStep(st, rand, fx)
+		}
+	}
+	return {
+		ok: st.phase === 'clear', t,
+		head: worst / st.gutterMs,
+	}
+}
+
+function solveLine(n, r) {
+	const how = r.ok
+		? `cleared in ${r.t.toFixed(0)}s`
+		: 'not cleared'
+	const pct = (r.head * 100).toFixed(0)
+	console.log(
+		`  L${String(n).padStart(3)}  ${how}` +
+		`   clock low-water ${pct}%`)
+}
+
+function solveReport(opt) {
+	console.log('')
+	console.log(`played to win, levels 1-${opt.solve}:`)
+	let won = 0
+	let head = 1
+	for (let n = 1; n <= opt.solve; n++) {
+		const r = solveOne(n, 0x1234 + n * 7919, 300)
+		if (r.ok) won++
+		head = Math.min(head, r.head)
+		if (opt.solve <= 12) solveLine(n, r)
+	}
+	console.log(`  cleared ${won}/${opt.solve}, ` +
+		`clock never below ${(head * 100).toFixed(0)}%`)
+}
+
 function main() {
 	const opt = options(process.argv.slice(2))
 	const out = {
@@ -235,6 +467,7 @@ function main() {
 		}
 	}
 	report(out, opt)
+	if (opt.solve) solveReport(opt)
 	const bad = failed(out)
 	console.log(bad ? 'FAIL' : 'ok')
 	process.exit(bad ? 1 : 0)
